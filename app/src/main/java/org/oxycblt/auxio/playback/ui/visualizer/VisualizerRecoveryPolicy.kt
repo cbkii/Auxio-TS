@@ -35,7 +35,9 @@ internal object VisualizerRecoveryPolicy {
     fun captureModeForAttempt(consecutiveRetries: Int): VisualizerCaptureMode =
         if (consecutiveRetries <= 0) VisualizerCaptureMode.FFT else VisualizerCaptureMode.WAVEFORM
 
-    /** Delay for a transient construction/enable retry, or null once the bounded budget is spent. */
+    /**
+     * Delay for a transient construction/enable retry, or null once the bounded budget is spent.
+     */
     fun startRetryDelayMs(attempt: Int): Long? =
         START_RETRY_DELAYS_MS.getOrNull(attempt.coerceAtLeast(0))
 

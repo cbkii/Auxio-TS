@@ -832,10 +832,7 @@ class ExoPlaybackStateHolder(
                                 "[prepared=$key current=$currentKey]"
                         )
                         if (pendingPrimitivePromotionActions.isNotEmpty()) {
-                            primitivePromotionGate.requestBoundary(
-                                currentKey,
-                                libraryReady = true,
-                            )
+                            primitivePromotionGate.requestBoundary(currentKey, libraryReady = true)
                         }
                         preparePrimitivePromotion(library, force = true)
                         return@withContext
@@ -927,8 +924,7 @@ class ExoPlaybackStateHolder(
         if (prepared.key != key || !primitivePromotionGate.isPrepared(key)) return false
 
         val logicalPosition = active.descriptor.currentLogicalPosition
-        val heapIndex =
-            prepared.layout.heapIndexForLogicalPosition(logicalPosition) ?: return false
+        val heapIndex = prepared.layout.heapIndexForLogicalPosition(logicalPosition) ?: return false
         val currentSong = prepared.songsByCanonicalPosition.getOrNull(heapIndex) ?: return false
         val currentPositionMs =
             player.currentPosition.coerceAtLeast(0L).let { position ->
@@ -1350,9 +1346,7 @@ class ExoPlaybackStateHolder(
 
     override fun playNext(songs: List<Song>, ack: StateAck.PlayNext) {
         cancelActiveRestore("play-next")
-        if (
-            deferPrimitiveQueueInteractionUntilPromotion("play-next") { playNext(songs, ack) }
-        ) {
+        if (deferPrimitiveQueueInteractionUntilPromotion("play-next") { playNext(songs, ack) }) {
             return
         }
         activePrimitiveWindow?.let { window ->
@@ -1387,9 +1381,7 @@ class ExoPlaybackStateHolder(
     override fun addToQueue(songs: List<Song>, ack: StateAck.AddToQueue) {
         cancelActiveRestore("add-to-queue")
         if (
-            deferPrimitiveQueueInteractionUntilPromotion("add-to-queue") {
-                addToQueue(songs, ack)
-            }
+            deferPrimitiveQueueInteractionUntilPromotion("add-to-queue") { addToQueue(songs, ack) }
         ) {
             return
         }
@@ -1607,7 +1599,8 @@ class ExoPlaybackStateHolder(
             deferSave()
             maybePrefetchPrimitiveWindow()
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-                // Avoid re-entrant playlist replacement from inside ExoPlayer's transition callback.
+                // Avoid re-entrant playlist replacement from inside ExoPlayer's transition
+                // callback.
                 // The posted boundary still runs at the start of the newly selected track.
                 mainHandler.post { requestPrimitivePromotionBoundary("auto-transition") }
             }
