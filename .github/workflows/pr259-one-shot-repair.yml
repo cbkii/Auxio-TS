@@ -1,0 +1,76 @@
+name: PR 259 one-shot handoff repair
+
+on:
+  push:
+    branches:
+      - fix/fast-resume-seamless-canonical-handoff
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/fast-resume-seamless-canonical-handoff
+          fetch-depth: 0
+
+      - name: Repair post-mutation handoff authority
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt")
+          text = path.read_text()
+          old = '''        val currentUriAfter = player.currentMediaItem?.localConfiguration?.uri
+          if (player.currentMediaItemIndex != currentHeapIndex || currentUriAfter != sourceUri) {
+              L.e(
+                  "Canonical handoff did not preserve the current source " +
+                      "[expectedIndex=$currentHeapIndex actualIndex=${player.currentMediaItemIndex} " +
+                      "uriStable=${currentUriAfter == sourceUri}]"
+              )
+              return false
+          }
+          '''
+          new = '''        val currentUriAfter = player.currentMediaItem?.localConfiguration?.uri
+          if (player.currentMediaItemIndex != currentHeapIndex || currentUriAfter != sourceUri) {
+              // Every failure before this point is detected before mutating the playlist. Once the
+              // non-current edits have been applied, returning to primitive authority would leave
+              // its queue model out of sync with the player. Do not reset/re-seek the current
+              // source just to roll back: complete canonical authority and retain the diagnostics
+              // needed to prove whether Media3 preserved the source on the physical TS18.
+              L.e(
+                  "Canonical handoff current-source invariant changed after playlist edits; " +
+                      "continuing canonical authority without a destructive rollback " +
+                      "[expectedIndex=$currentHeapIndex actualIndex=${player.currentMediaItemIndex} " +
+                      "uriStable=${currentUriAfter == sourceUri}]"
+              )
+              if (player.currentMediaItem?.song != null) {
+                  canonicalCurrentSourceLease = null
+              }
+          }
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected exactly one handoff validation block, found {text.count(old)}")
+          path.write_text(text.replace(old, new))
+          PY
+          git diff --check
+
+      - name: Commit repair
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No repair required"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt
+          git commit -m "fix(playback): keep handoff authority consistent"
+          git push origin HEAD:fix/fast-resume-seamless-canonical-handoff
