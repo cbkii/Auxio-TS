@@ -43,6 +43,17 @@ internal object PrimitiveQueuePromotionPolicy {
             }
     }
 
+    /**
+     * Compacted canonical topology after library hydration. Missing non-current items are dropped,
+     * while a missing current item fails open so playback can never jump to unrelated media.
+     */
+    data class HydratedLayout(
+        val keptHeapIndices: List<Int>,
+        val shuffledMapping: List<Int>,
+        val currentHeapIndex: Int,
+        val droppedCount: Int,
+    )
+
     fun layout(descriptor: QueueDescriptor, items: List<QueueItemRef>): Layout? {
         if (!descriptor.hasCurrentItem || items.size != descriptor.totalCount) return null
         if (items.map { it.logicalPosition } != (0 until descriptor.totalCount).toList()) {
@@ -50,8 +61,7 @@ internal object PrimitiveQueuePromotionPolicy {
         }
 
         // Always validate canonical positions so corrupt/ambiguous persistence fails open instead
-        // of
-        // risking a jump to unrelated media. Only shuffled playback needs that order as the heap.
+        // of risking a jump to unrelated media. Only shuffled playback needs that order as the heap.
         val byCanonical = arrayOfNulls<QueueItemRef>(descriptor.totalCount)
         for (item in items) {
             val canonical = item.canonicalPosition
@@ -67,8 +77,7 @@ internal object PrimitiveQueuePromotionPolicy {
             }
         val canonicalItems =
             if (mapping.isEmpty()) {
-                // With shuffle off, logical playback order is the new canonical heap. This
-                // preserves
+                // With shuffle off, logical playback order is the new canonical heap. This preserves
                 // queue edits made while the hydrated library was unavailable.
                 items
             } else {
@@ -79,5 +88,41 @@ internal object PrimitiveQueuePromotionPolicy {
             else mapping.getOrNull(descriptor.currentLogicalPosition) ?: return null
         if (currentHeapIndex !in canonicalItems.indices) return null
         return Layout(canonicalItems, mapping)
+    }
+
+    fun hydratedLayout(
+        layout: Layout,
+        currentLogicalPosition: Int,
+        resolvedHeapIndices: Set<Int>,
+    ): HydratedLayout? {
+        if (layout.itemsByCanonicalPosition.isEmpty()) return null
+        val currentOldHeapIndex =
+            layout.heapIndexForLogicalPosition(currentLogicalPosition) ?: return null
+        if (currentOldHeapIndex !in resolvedHeapIndices) return null
+
+        val kept =
+            layout.itemsByCanonicalPosition.indices.filter { it in resolvedHeapIndices }
+        if (kept.isEmpty()) return null
+        val oldToNew = IntArray(layout.itemsByCanonicalPosition.size) { -1 }
+        kept.forEachIndexed { newIndex, oldIndex -> oldToNew[oldIndex] = newIndex }
+
+        val mapping =
+            if (layout.shuffledMapping.isEmpty()) {
+                emptyList()
+            } else {
+                layout.shuffledMapping.mapNotNull { oldHeapIndex ->
+                    oldToNew.getOrNull(oldHeapIndex)?.takeIf { it >= 0 }
+                }
+            }
+        if (mapping.isNotEmpty() && mapping.size != kept.size) return null
+
+        val currentHeapIndex = oldToNew[currentOldHeapIndex]
+        if (currentHeapIndex < 0) return null
+        return HydratedLayout(
+            keptHeapIndices = kept,
+            shuffledMapping = mapping,
+            currentHeapIndex = currentHeapIndex,
+            droppedCount = layout.itemsByCanonicalPosition.size - kept.size,
+        )
     }
 }
