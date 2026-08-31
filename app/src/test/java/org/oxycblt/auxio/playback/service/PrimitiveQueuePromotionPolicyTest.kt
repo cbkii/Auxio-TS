@@ -97,6 +97,75 @@ class PrimitiveQueuePromotionPolicyTest {
         )
     }
 
+    @Test
+    fun unshuffledHydrationDropsMissingNonCurrentItemsAndRemapsCurrent() {
+        val layout =
+            requireNotNull(
+                PrimitiveQueuePromotionPolicy.layout(
+                    descriptor(shuffleScope = ShuffleScope.OFF),
+                    listOf(item(0, 0), item(1, 1), item(2, 2)),
+                )
+            )
+
+        val hydrated =
+            requireNotNull(
+                PrimitiveQueuePromotionPolicy.hydratedLayout(
+                    layout = layout,
+                    currentLogicalPosition = 1,
+                    resolvedHeapIndices = setOf(1, 2),
+                )
+            )
+
+        assertEquals(listOf(1, 2), hydrated.keptHeapIndices)
+        assertEquals(emptyList(), hydrated.shuffledMapping)
+        assertEquals(0, hydrated.currentHeapIndex)
+        assertEquals(1, hydrated.droppedCount)
+    }
+
+    @Test
+    fun shuffledHydrationCompactsPersistedMappingAroundCurrentSong() {
+        val layout =
+            requireNotNull(
+                PrimitiveQueuePromotionPolicy.layout(
+                    descriptor(shuffleScope = ShuffleScope.ALL),
+                    listOf(item(0, 2), item(1, 0), item(2, 1)),
+                )
+            )
+
+        val hydrated =
+            requireNotNull(
+                PrimitiveQueuePromotionPolicy.hydratedLayout(
+                    layout = layout,
+                    currentLogicalPosition = 1,
+                    resolvedHeapIndices = setOf(0, 2),
+                )
+            )
+
+        assertEquals(listOf(0, 2), hydrated.keptHeapIndices)
+        assertEquals(listOf(1, 0), hydrated.shuffledMapping)
+        assertEquals(0, hydrated.currentHeapIndex)
+        assertEquals(1, hydrated.droppedCount)
+    }
+
+    @Test
+    fun missingCurrentSongFailsOpenInsteadOfJumpingToAnotherItem() {
+        val layout =
+            requireNotNull(
+                PrimitiveQueuePromotionPolicy.layout(
+                    descriptor(shuffleScope = ShuffleScope.ALL),
+                    listOf(item(0, 2), item(1, 0), item(2, 1)),
+                )
+            )
+
+        assertNull(
+            PrimitiveQueuePromotionPolicy.hydratedLayout(
+                layout = layout,
+                currentLogicalPosition = 1,
+                resolvedHeapIndices = setOf(1, 2),
+            )
+        )
+    }
+
     private fun descriptor(shuffleScope: ShuffleScope) =
         QueueDescriptor(
             sessionId = 11L,
