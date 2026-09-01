@@ -1060,7 +1060,11 @@ class ExoPlaybackStateHolder(
                     "[expectedIndex=$currentHeapIndex actualIndex=${player.currentMediaItemIndex} " +
                     "uriStable=${currentUriAfter == sourceUri}]"
             )
-            return false
+            // Playlist edits have already committed. Returning to primitive authority here would
+            // desynchronise logical queue state from ExoPlayer; do not reset or re-seek live audio.
+            if (player.currentMediaItem?.song != null) {
+                canonicalCurrentSourceLease = null
+            }
         }
 
         if (shuffleModeEnabled) {
