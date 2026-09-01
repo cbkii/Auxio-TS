@@ -76,6 +76,22 @@ class SeamlessQueueHandoffPolicyTest {
     }
 
     @Test
+    fun singleItemCanonicalQueueKeepsOnlyCurrentSource() {
+        val plan =
+            requireNotNull(
+                SeamlessQueueHandoffPolicy.plan(
+                    originalItemCount = 1,
+                    originalCurrentIndex = 0,
+                    canonicalItemCount = 1,
+                    targetCurrentIndex = 0,
+                )
+            )
+
+        assertEquals(0, plan.prependCount)
+        assertEquals(0, plan.appendCount)
+    }
+
+    @Test
     fun invalidPlayerOrCanonicalBoundsFailClosed() {
         assertNull(
             SeamlessQueueHandoffPolicy.plan(
@@ -88,9 +104,25 @@ class SeamlessQueueHandoffPolicyTest {
         assertNull(
             SeamlessQueueHandoffPolicy.plan(
                 originalItemCount = 2,
+                originalCurrentIndex = -1,
+                canonicalItemCount = 1,
+                targetCurrentIndex = 0,
+            )
+        )
+        assertNull(
+            SeamlessQueueHandoffPolicy.plan(
+                originalItemCount = 2,
                 originalCurrentIndex = 2,
                 canonicalItemCount = 1,
                 targetCurrentIndex = 0,
+            )
+        )
+        assertNull(
+            SeamlessQueueHandoffPolicy.plan(
+                originalItemCount = 1,
+                originalCurrentIndex = 0,
+                canonicalItemCount = 2,
+                targetCurrentIndex = -1,
             )
         )
         assertNull(
