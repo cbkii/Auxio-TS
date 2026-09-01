@@ -576,10 +576,12 @@ class ExoPlaybackStateHolder(
         playbackManager.ack(this, StateAck.ProgressionChanged)
         deferSave()
         maybePrefetchPrimitiveWindow()
-        musicRepository.library?.takeIf { !it.empty() }?.let { library ->
-            primitiveHandoffGate.onLibraryChanged(activePrimitiveWindow!!.promotionKey())
-            preparePrimitivePromotion(library, force = true)
-        }
+        musicRepository.library
+            ?.takeIf { !it.empty() }
+            ?.let { library ->
+                primitiveHandoffGate.onLibraryChanged(activePrimitiveWindow!!.promotionKey())
+                preparePrimitivePromotion(library, force = true)
+            }
     }
 
     private fun QueueItemRef.buildPrimitiveMediaItemOrNull(): MediaItem? {
@@ -848,9 +850,9 @@ class ExoPlaybackStateHolder(
                         }
                     }
                 val resolvedHeapIndices =
-                    songsByCanonicalPosition.mapIndexedNotNull { index, song ->
-                        index.takeIf { song != null }
-                    }.toSet()
+                    songsByCanonicalPosition
+                        .mapIndexedNotNull { index, song -> index.takeIf { song != null } }
+                        .toSet()
                 val hydrated =
                     layout?.let {
                         PrimitiveQueuePromotionPolicy.hydratedLayout(
@@ -1050,7 +1052,9 @@ class ExoPlaybackStateHolder(
             player.addMediaItems(0, songs.subList(0, currentHeapIndex).map { it.buildMediaItem() })
         }
         if (plan.appendCount > 0) {
-            player.addMediaItems(songs.subList(currentHeapIndex + 1, songs.size).map { it.buildMediaItem() })
+            player.addMediaItems(
+                songs.subList(currentHeapIndex + 1, songs.size).map { it.buildMediaItem() }
+            )
         }
 
         val currentUriAfter = player.currentMediaItem?.localConfiguration?.uri
@@ -1686,9 +1690,11 @@ class ExoPlaybackStateHolder(
             playbackManager.ack(this, StateAck.QueueWindowChanged)
             deferSave()
             maybePrefetchPrimitiveWindow()
-            musicRepository.library?.takeIf { !it.empty() }?.let { library ->
-                mainHandler.post { preparePrimitivePromotion(library, force = true) }
-            }
+            musicRepository.library
+                ?.takeIf { !it.empty() }
+                ?.let { library ->
+                    mainHandler.post { preparePrimitivePromotion(library, force = true) }
+                }
         } else {
             if (canonicalCurrentSourceLease != null && mediaItem?.song != null) {
                 L.i("Canonical current-source lease completed on media transition")
@@ -1989,7 +1995,8 @@ class ExoPlaybackStateHolder(
     }
 
     private fun findSongForRawFastResume(raw: RawFastResumeItem, library: Library): Song? {
-        PrimitiveQueuePromotionIdentityIndex.uniqueBy(library.songs) { it.uri.toString() }[raw.uriString]
+        PrimitiveQueuePromotionIdentityIndex.uniqueBy(library.songs) { it.uri.toString() }[
+                raw.uriString]
             ?.let {
                 return it
             }
@@ -1997,12 +2004,12 @@ class ExoPlaybackStateHolder(
         if (rawPath != null) {
             val appContext = context.applicationContext
             PrimitiveQueuePromotionIdentityIndex.uniqueBy(library.songs) { song ->
-                try {
-                    song.path.resolve(appContext)
-                } catch (e: Exception) {
-                    ""
-                }
-            }[rawPath]
+                    try {
+                        song.path.resolve(appContext)
+                    } catch (e: Exception) {
+                        ""
+                    }
+                }[rawPath]
                 ?.let {
                     return it
                 }

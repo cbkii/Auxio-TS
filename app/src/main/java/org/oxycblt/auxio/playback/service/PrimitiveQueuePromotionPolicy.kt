@@ -61,7 +61,8 @@ internal object PrimitiveQueuePromotionPolicy {
         }
 
         // Always validate canonical positions so corrupt/ambiguous persistence fails open instead
-        // of risking a jump to unrelated media. Only shuffled playback needs that order as the heap.
+        // of risking a jump to unrelated media. Only shuffled playback needs that order as the
+        // heap.
         val byCanonical = arrayOfNulls<QueueItemRef>(descriptor.totalCount)
         for (item in items) {
             val canonical = item.canonicalPosition
@@ -77,7 +78,8 @@ internal object PrimitiveQueuePromotionPolicy {
             }
         val canonicalItems =
             if (mapping.isEmpty()) {
-                // With shuffle off, logical playback order is the new canonical heap. This preserves
+                // With shuffle off, logical playback order is the new canonical heap. This
+                // preserves
                 // queue edits made while the hydrated library was unavailable.
                 items
             } else {
@@ -100,8 +102,7 @@ internal object PrimitiveQueuePromotionPolicy {
             layout.heapIndexForLogicalPosition(currentLogicalPosition) ?: return null
         if (currentOldHeapIndex !in resolvedHeapIndices) return null
 
-        val kept =
-            layout.itemsByCanonicalPosition.indices.filter { it in resolvedHeapIndices }
+        val kept = layout.itemsByCanonicalPosition.indices.filter { it in resolvedHeapIndices }
         if (kept.isEmpty()) return null
         val oldToNew = IntArray(layout.itemsByCanonicalPosition.size) { -1 }
         kept.forEachIndexed { newIndex, oldIndex -> oldToNew[oldIndex] = newIndex }
