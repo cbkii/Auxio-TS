@@ -179,8 +179,8 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
 
     private fun tickerOnlyWidthPx(percent: Int): Int {
         val requested =
-            (rowWidthPx.toLong() * percent.coerceIn(MIN_TICKER_WIDTH_PERCENT, MAX_TICKER_WIDTH_PERCENT) /
-                    100L)
+            (rowWidthPx.toLong() *
+                    percent.coerceIn(MIN_TICKER_WIDTH_PERCENT, MAX_TICKER_WIDTH_PERCENT) / 100L)
                 .coerceAtMost(Int.MAX_VALUE.toLong())
                 .toInt()
         val displayWidth = context.resources.displayMetrics.widthPixels.takeIf { it > 0 }

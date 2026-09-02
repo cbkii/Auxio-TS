@@ -55,7 +55,10 @@ class CarOverlayPrefsTest {
 
     @Test
     fun displayModeDefaultsToControls() {
-        assertEquals(CarOverlayPrefs.DisplayMode.CONTROLS, CarOverlayPrefs.from(context).displayMode)
+        assertEquals(
+            CarOverlayPrefs.DisplayMode.CONTROLS,
+            CarOverlayPrefs.from(context).displayMode,
+        )
     }
 
     @Test
@@ -78,7 +81,10 @@ class CarOverlayPrefsTest {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         prefs.edit().putBoolean("car_overlay_show_track_ticker", false).commit()
 
-        assertEquals(CarOverlayPrefs.DisplayMode.CONTROLS, CarOverlayPrefs.from(context).displayMode)
+        assertEquals(
+            CarOverlayPrefs.DisplayMode.CONTROLS,
+            CarOverlayPrefs.from(context).displayMode,
+        )
         assertFalse(prefs.contains("car_overlay_show_track_ticker"))
     }
 

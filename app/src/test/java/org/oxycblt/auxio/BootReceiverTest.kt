@@ -52,10 +52,7 @@ class BootReceiverTest {
     @Test
     fun `headless floating startup requires both boot and floating-only preferences`() {
         assertTrue(
-            FloatingOnlyStartupCoordinator.isConfigured(
-                autostartOnBoot = true,
-                floatingOnly = true,
-            )
+            FloatingOnlyStartupCoordinator.isConfigured(autostartOnBoot = true, floatingOnly = true)
         )
         assertFalse(
             FloatingOnlyStartupCoordinator.isConfigured(

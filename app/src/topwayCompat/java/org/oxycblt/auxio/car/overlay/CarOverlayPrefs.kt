@@ -38,8 +38,7 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
     ) {
         CONTROLS("controls", showsControls = true, showsTicker = false),
         CONTROLS_AND_TICKER("controls_ticker", showsControls = true, showsTicker = true),
-        TICKER_ONLY("ticker_only", showsControls = false, showsTicker = true),
-        ;
+        TICKER_ONLY("ticker_only", showsControls = false, showsTicker = true);
 
         companion object {
             fun fromStorage(value: String?): DisplayMode =
@@ -102,8 +101,7 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
         }
         set(value) {
             val normalized =
-                if (value in ALLOWED_TICKER_WIDTH_PERCENTS) value
-                else DEFAULT_TICKER_WIDTH_PERCENT
+                if (value in ALLOWED_TICKER_WIDTH_PERCENTS) value else DEFAULT_TICKER_WIDTH_PERCENT
             prefs.edit { putInt(KEY_TICKER_WIDTH_PERCENT, normalized) }
         }
 

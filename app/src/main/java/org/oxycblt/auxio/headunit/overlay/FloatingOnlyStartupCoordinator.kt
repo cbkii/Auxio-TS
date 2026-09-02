@@ -82,15 +82,14 @@ object FloatingOnlyStartupCoordinator {
         val startId =
             if (restorePlayback) IntegerTable.START_ID_BOOT else IntegerTable.START_ID_ACTIVITY
         return try {
-            val serviceClass = TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
+            val serviceClass =
+                TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
             val serviceIntent =
                 Intent(context, serviceClass)
                     .setAction(AuxioService.ACTION_START)
                     .putExtra(AuxioService.INTENT_KEY_START_ID, startId)
             ForegroundServiceStartContract.start(context, serviceIntent)
-            L.i(
-                "Requested headless Auxio service start [$reason] restorePlayback=$restorePlayback"
-            )
+            L.i("Requested headless Auxio service start [$reason] restorePlayback=$restorePlayback")
             PlaybackStartResult.StartRequested
         } catch (e: SecurityException) {
             L.w(e, "Headless Auxio service start denied [$reason]")
@@ -110,10 +109,7 @@ object FloatingOnlyStartupCoordinator {
             autostartOnBoot =
                 prefs.getBoolean(context.getString(R.string.set_key_autostart_on_boot), false),
             floatingOnly =
-                prefs.getBoolean(
-                    context.getString(R.string.set_key_autostart_floating_only),
-                    false,
-                ),
+                prefs.getBoolean(context.getString(R.string.set_key_autostart_floating_only), false),
         )
     }
 
