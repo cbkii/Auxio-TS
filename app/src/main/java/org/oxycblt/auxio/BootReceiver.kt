@@ -110,7 +110,7 @@ class BootReceiver : BroadcastReceiver() {
         // it is on. MainActivity below is presentation-only because Android 10+ may block background
         // activity starts. Android 15+ also restricts starting mediaPlayback foreground services
         // from BOOT_COMPLETED for apps targeting API 35+, so this remains fail-open.
-        if (BootLaunchPolicy.shouldStartCanonicalService(launchRoute)) {
+        if (BootLaunchPolicy.shouldStartCanonicalServiceDirectly(launchRoute)) {
             journal.log(
                 DiagnosticJournal.CAT_BOOT,
                 "Playback restore path",
@@ -163,4 +163,7 @@ internal object BootLaunchPolicy {
 
     /** Whether this boot route requires Auxio's existing canonical service/library authority. */
     fun shouldStartCanonicalService(route: Route): Boolean = route != Route.DISABLED
+
+    /** Whether BootReceiver itself owns the canonical service start for this route. */
+    fun shouldStartCanonicalServiceDirectly(route: Route): Boolean = route == Route.FULL_PLAYER
 }
