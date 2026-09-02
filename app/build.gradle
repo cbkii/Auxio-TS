@@ -321,8 +321,10 @@ tasks.register("verifyCriticalDependencyResolution") {
     }
 }
 
-tasks.named("preReleaseBuild").configure {
-    dependsOn tasks.named("verifyCriticalDependencyResolution")
+afterEvaluate {
+    tasks.named("preReleaseBuild").configure {
+        dependsOn tasks.named("verifyCriticalDependencyResolution")
+    }
 }
 
 baselineProfile {
