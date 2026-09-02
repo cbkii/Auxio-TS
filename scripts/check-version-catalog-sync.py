@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that gradle/libs.versions.toml mirrors every authoritative Groovy version."""
+"""Verify each curated catalogue version against its authoritative Groovy declaration(s)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import re
 import sys
 import tomllib
 from pathlib import Path
+from typing import Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "gradle" / "libs.versions.toml"
@@ -59,6 +60,19 @@ def coordinate(file_name: str, group_artifact: str) -> str:
     )
 
 
+def coordinate_consistent(file_names: Iterable[str], group_artifact: str) -> str:
+    declarations = {
+        file_name: coordinate(file_name, group_artifact) for file_name in file_names
+    }
+    versions = set(declarations.values())
+    if len(versions) != 1:
+        detail = ", ".join(
+            f"{file_name}={version}" for file_name, version in declarations.items()
+        )
+        fail(f"{group_artifact}: authoritative module declarations disagree: {detail}")
+    return next(iter(versions))
+
+
 def plugin(plugin_id: str) -> str:
     return one(
         rf'id\s+["\']{re.escape(plugin_id)}["\']\s+version\s+["\']([^"\']+)["\']',
@@ -106,13 +120,17 @@ def authoritative_versions() -> dict[str, str]:
         "speedDial": coordinate("app", "com.leinardi.android:speed-dial"),
         "taskerPluginLibrary": coordinate("app", "com.joaomgcd:taskerpluginlibrary"),
         "commonsText": coordinate("app", "org.apache.commons:commons-text"),
-        "junit4": coordinate("app", "junit:junit"),
+        "junit4": coordinate_consistent(("app", "musikr"), "junit:junit"),
         "robolectricApp": coordinate("app", "org.robolectric:robolectric"),
         "robolectricMusikr": coordinate("musikr", "org.robolectric:robolectric"),
         "androidxTestCore": coordinate("app", "androidx.test:core"),
-        "androidxTestCoreKtx": coordinate("app", "androidx.test:core-ktx"),
+        "androidxTestCoreKtx": coordinate_consistent(
+            ("app", "musikr"), "androidx.test:core-ktx"
+        ),
         "mockk": coordinate("musikr", "io.mockk:mockk"),
-        "androidxTestJunit": coordinate("app", "androidx.test.ext:junit"),
+        "androidxTestJunit": coordinate_consistent(
+            ("app", "musikr"), "androidx.test.ext:junit"
+        ),
         "espresso": coordinate("musikr", "androidx.test.espresso:espresso-core"),
     }
 
@@ -152,7 +170,9 @@ def main() -> int:
             print(f"::error::CATALOG_SYNC: {error}", file=sys.stderr)
         return 1
 
-    print(f"READY: all {len(expected)} catalogue versions match maintained Groovy declarations.")
+    print(
+        f"READY: all {len(expected)} curated catalogue versions match their maintained Groovy declarations."
+    )
     return 0
 
 
