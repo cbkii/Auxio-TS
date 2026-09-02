@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Auxio Project
- * PrimitiveQueuePromotionGate.kt is part of Auxio.
+ * PrimitiveQueueHandoffGate.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,29 +19,28 @@
 package org.oxycblt.auxio.playback.service
 
 /**
- * Small state machine for promoting the pre-library primitive queue to its hydrated canonical
- * representation.
+ * Arbitration state for the short interval between Fast Resume playback and automatic canonical
+ * queue takeover.
  *
- * Library readiness alone never requests promotion. A natural track boundary or playback-semantic
- * interaction does. Queue mutations may be deferred while preparation is still in flight; simple
- * play/seek/repeat state changes can execute immediately and let the caller carry their resulting
- * state into the eventual promotion.
+ * Library readiness itself owns the normal handoff trigger. This gate only tells a racing
+ * queue-affecting user interaction whether it can run immediately, should wait for the in-flight
+ * canonical preparation, or must fail open to primitive behaviour because this exact queue revision
+ * could not be hydrated safely.
  */
-internal class PrimitiveQueuePromotionGate {
+internal class PrimitiveQueueHandoffGate {
     data class Key(val sessionId: Long, val revision: Long)
 
     enum class Decision {
-        /** No canonical promotion is currently possible; keep the primitive path fail-open. */
+        /** Canonical takeover is not currently safe; keep the primitive path fail-open. */
         BYPASS,
-        /** Canonical data is not prepared yet; remember this boundary and prepare it. */
+        /** Canonical data is not prepared yet; wait for preparation and replay exactly once. */
         PREPARE,
-        /** Canonical data is prepared for this exact queue authority; promote now. */
+        /** Canonical data is prepared for this exact queue authority; commit before the action. */
         PROMOTE,
     }
 
     private var preparedKey: Key? = null
     private var failedKey: Key? = null
-    private var boundaryKey: Key? = null
 
     /** A newly committed library generation may make a previously unresolved queue hydratable. */
     fun onLibraryChanged(key: Key) {
@@ -49,10 +48,9 @@ internal class PrimitiveQueuePromotionGate {
         if (failedKey == key) failedKey = null
     }
 
-    fun onPrepared(key: Key): Boolean {
+    fun onPrepared(key: Key) {
         preparedKey = key
         if (failedKey == key) failedKey = null
-        return boundaryKey == key
     }
 
     fun onFailed(key: Key) {
@@ -60,21 +58,15 @@ internal class PrimitiveQueuePromotionGate {
         failedKey = key
     }
 
-    fun requestBoundary(key: Key, libraryReady: Boolean): Decision {
+    fun requestHandoff(key: Key, libraryReady: Boolean): Decision {
         if (!libraryReady || failedKey == key) return Decision.BYPASS
-        boundaryKey = key
         return if (preparedKey == key) Decision.PROMOTE else Decision.PREPARE
     }
 
     fun isPrepared(key: Key): Boolean = preparedKey == key
 
-    fun clearBoundary(key: Key) {
-        if (boundaryKey == key) boundaryKey = null
-    }
-
     fun clear() {
         preparedKey = null
         failedKey = null
-        boundaryKey = null
     }
 }
