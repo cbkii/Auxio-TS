@@ -25,6 +25,8 @@ REQUIRED = {
 }
 ALIAS = "com.tw.music.MusicActivity"
 TARGET = "org.oxycblt.auxio.MainActivity"
+FLOATING_ALIAS = "org.oxycblt.auxio.car.overlay.FloatingControlsLauncher"
+FLOATING_TARGET = "org.oxycblt.auxio.car.overlay.CarOverlayActivity"
 failures = []
 
 def normalise(name, package):
@@ -55,6 +57,8 @@ classes, aliases = parse(manifest)
 missing = REQUIRED - classes
 if missing: failures.append(f"main manifest lacks required classes: {sorted(missing)}")
 if aliases.get(ALIAS) != TARGET: failures.append(f"{ALIAS} must target {TARGET}")
+if aliases.get(FLOATING_ALIAS) != FLOATING_TARGET:
+    failures.append(f"{FLOATING_ALIAS} must target {FLOATING_TARGET}")
 for cls in sorted(REQUIRED):
     rel = Path(*cls.split("."))
     if not any((base / rel.with_suffix(ext)).is_file() for base in SOURCE_ROOTS for ext in (".kt", ".java")):
@@ -67,6 +71,8 @@ for build_type, expected in (("debug", "com.tw.media.debug"), ("release", "com.t
         out_classes, out_aliases = parse(path, expected)
         if REQUIRED - out_classes: failures.append(f"{build_type} merged manifest lacks {sorted(REQUIRED - out_classes)}")
         if out_aliases.get(ALIAS) != TARGET: failures.append(f"{build_type} merged manifest alias mismatch")
+        if out_aliases.get(FLOATING_ALIAS) != FLOATING_TARGET:
+            failures.append(f"{build_type} merged manifest floating alias mismatch")
 
     apk_dir = ROOT / "app/build/outputs/apk" / build_type
     apks = sorted(p for p in apk_dir.glob("*.apk") if "unsigned" not in p.name) if apk_dir.is_dir() else []
