@@ -10,6 +10,7 @@ cd -- "$repo_root" || exit 1
 fail() { printf 'startup-performance contract: %s\n' "$*" >&2; exit 1; }
 require_file() { [[ -s $1 ]] || fail "required non-empty file is missing: $1"; }
 require_contains() { grep -Fq -- "$2" "$1" || fail "$1 does not contain required contract: $2"; }
+require_regex() { grep -Eq -- "$2" "$1" || fail "$1 does not match required startup contract regex: $2"; }
 require_absent() { grep -Fq -- "$2" "$1" && fail "$1 contains forbidden startup contract: $2" || true; }
 require_absent_regex() { grep -Eq -- "$2" "$1" && fail "$1 contains forbidden startup regex: $2" || true; }
 
@@ -52,7 +53,10 @@ done
 
 [[ ! -e app/src/main/startup-prof.txt ]] || fail 'obsolete Startup Profile path remains'
 require_contains settings.gradle "include ':startup-benchmark'"
-require_contains build.gradle 'id "androidx.baselineprofile" version "1.5.0-rc01" apply false'
+# Exact plugin drift is owned by the version-catalogue guard. This structural check only requires
+# the AGP-9-compatible Baseline Profile 1.5 line so RC/stable maintenance updates do not trip a
+# stale hard-coded patch contract.
+require_regex build.gradle 'id "androidx\.baselineprofile" version "1\.5\.0([^" ]*)" apply false'
 require_contains app/build.gradle 'id "androidx.baselineprofile"'
 require_contains app/build.gradle 'minifyEnabled false'
 require_contains app/build.gradle 'baselineProfile project(":startup-benchmark")'
