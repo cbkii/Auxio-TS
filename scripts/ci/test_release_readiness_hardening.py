@@ -268,6 +268,24 @@ def test_published_asset_planning(root: Path) -> None:
     check("already published" in published_replace.stderr, "published complete replacement was not rejected")
 
 
+def upload_env(case: Path, fakebin: Path, uploads: Path, replace: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fakebin}:{env.get('PATH', '')}",
+            "RUNNER_TEMP": str(case),
+            "GITHUB_REPOSITORY": "cbkii/Auxio-TS",
+            "GH_TOKEN": "network-free-test-token",
+            "RELEASE_TAG": "v6.6.0",
+            "RELEASE_ID": "101",
+            "UPLOAD_TSV": str(uploads),
+            "REPLACE_NAMES_FILE": str(replace),
+            "REPLACE": "false",
+        }
+    )
+    return env
+
+
 def test_published_upload_guard(root: Path) -> None:
     case = root / "upload-guard"
     case.mkdir()
@@ -304,23 +322,107 @@ def test_published_upload_guard(root: Path) -> None:
     replace = case / "replace.txt"
     replace.write_text("", encoding="utf-8")
 
-    env = os.environ.copy()
-    env.update(
-        {
-            "PATH": f"{fakebin}:{env.get('PATH', '')}",
-            "RUNNER_TEMP": str(case),
-            "GITHUB_REPOSITORY": "cbkii/Auxio-TS",
-            "GH_TOKEN": "network-free-test-token",
-            "RELEASE_TAG": "v6.6.0",
-            "RELEASE_ID": "101",
-            "UPLOAD_TSV": str(uploads),
-            "REPLACE_NAMES_FILE": str(replace),
-            "REPLACE": "false",
-        }
+    result = run(
+        ["bash", str(UPLOAD)],
+        cwd=REPO,
+        env=upload_env(case, fakebin, uploads, replace),
+        should_pass=False,
     )
-    result = run(["bash", str(UPLOAD)], cwd=REPO, env=env, should_pass=False)
     check("Refusing to add, delete or replace release assets" in result.stderr, "published uploader guard did not explain rejection")
     check(not marker.exists(), "published release guard executed curl before rejecting mutation")
+
+
+def test_publication_transition_upload_guard(root: Path) -> None:
+    case = root / "upload-transition-guard"
+    case.mkdir()
+    fakebin = case / "fakebin"
+    fakebin.mkdir()
+    counter = case / "gh-count"
+    marker = case / "curl-called"
+
+    gh = fakebin / "gh"
+    gh.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, os\n"
+        "from pathlib import Path\n"
+        f"counter = Path({str(counter)!r})\n"
+        "count = int(counter.read_text() if counter.exists() else '0')\n"
+        "counter.write_text(str(count + 1))\n"
+        "draft = count < 2\n"
+        "release = {'id': 101, 'tag_name': 'v6.6.0', 'draft': draft, "
+        "'upload_url': 'https://uploads.github.test/repos/cbkii/Auxio-TS/releases/101/assets{?name,label}', 'assets': []}\n"
+        "print(json.dumps(release))\n",
+        encoding="utf-8",
+    )
+    gh.chmod(0o755)
+    curl = fakebin / "curl"
+    curl.write_text(
+        f"#!/usr/bin/env bash\nprintf called > {marker!s}\nexit 99\n",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+
+    staged = case / "artifact.apk"
+    staged.write_bytes(b"policy-test")
+    uploads = case / "upload.tsv"
+    uploads.write_text(f"artifact.apk\t{staged}\n", encoding="utf-8")
+    replace = case / "replace.txt"
+    replace.write_text("", encoding="utf-8")
+
+    result = run(
+        ["bash", str(UPLOAD)],
+        cwd=REPO,
+        env=upload_env(case, fakebin, uploads, replace),
+        should_pass=False,
+    )
+    check("already published before uploading artifact.apk" in result.stderr, "publication transition before upload was not rejected at the mutation boundary")
+    check(not marker.exists(), "publication transition guard executed curl after the release became published")
+
+
+def test_publication_transition_delete_guard(root: Path) -> None:
+    case = root / "delete-transition-guard"
+    case.mkdir()
+    fakebin = case / "fakebin"
+    fakebin.mkdir()
+    counter = case / "gh-count"
+    delete_marker = case / "delete-called"
+
+    gh = fakebin / "gh"
+    gh.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, sys\n"
+        "from pathlib import Path\n"
+        f"counter = Path({str(counter)!r})\n"
+        f"delete_marker = Path({str(delete_marker)!r})\n"
+        "if '--method' in sys.argv and 'DELETE' in sys.argv:\n"
+        "    delete_marker.write_text('called')\n"
+        "    raise SystemExit(91)\n"
+        "count = int(counter.read_text() if counter.exists() else '0')\n"
+        "counter.write_text(str(count + 1))\n"
+        "draft = count < 2\n"
+        "release = {'id': 101, 'tag_name': 'v6.6.0', 'draft': draft, "
+        "'upload_url': 'https://uploads.github.test/repos/cbkii/Auxio-TS/releases/101/assets{?name,label}', "
+        "'assets': [{'id': 909, 'name': 'artifact.apk', 'state': 'uploaded'}]}\n"
+        "print(json.dumps(release))\n",
+        encoding="utf-8",
+    )
+    gh.chmod(0o755)
+    curl = fakebin / "curl"
+    curl.write_text("#!/usr/bin/env bash\nexit 99\n", encoding="utf-8")
+    curl.chmod(0o755)
+
+    staged = case / "artifact.apk"
+    staged.write_bytes(b"policy-test")
+    uploads = case / "upload.tsv"
+    uploads.write_text(f"artifact.apk\t{staged}\n", encoding="utf-8")
+    replace = case / "replace.txt"
+    replace.write_text("artifact.apk\n", encoding="utf-8")
+    env = upload_env(case, fakebin, uploads, replace)
+    env["REPLACE"] = "true"
+
+    result = run(["bash", str(UPLOAD)], cwd=REPO, env=env, should_pass=False)
+    check("already published before deleting artifact.apk" in result.stderr, "publication transition before delete was not rejected at the mutation boundary")
+    check(not delete_marker.exists(), "publication transition guard issued DELETE after the release became published")
 
 
 def main() -> int:
@@ -336,6 +438,8 @@ def main() -> int:
         test_release_source_authority(root)
         test_published_asset_planning(root)
         test_published_upload_guard(root)
+        test_publication_transition_upload_guard(root)
+        test_publication_transition_delete_guard(root)
 
     print("release-readiness hardening contracts: PASS")
     return 0
