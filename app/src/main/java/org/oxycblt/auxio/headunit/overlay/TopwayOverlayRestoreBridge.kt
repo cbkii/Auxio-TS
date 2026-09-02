@@ -31,7 +31,10 @@ import timber.log.Timber as L
 object TopwayOverlayRestoreBridge {
     private const val SERVICE_CLASS = "org.oxycblt.auxio.car.overlay.CarFloatingControlsService"
 
-    fun requestOverlayRestore(context: Context): CarOverlayContract.OverlayRestoreResult {
+    fun requestOverlayRestore(
+        context: Context,
+        reason: String = "boot_autostart",
+    ): CarOverlayContract.OverlayRestoreResult {
         if (!BuildConfig.TOPWAY_COMPAT_ENABLED)
             return CarOverlayContract.OverlayRestoreResult.UnsupportedBuild
 
@@ -47,7 +50,6 @@ object TopwayOverlayRestoreBridge {
             return CarOverlayContract.OverlayRestoreResult.PermissionMissing
         }
 
-        val reason = "boot_autostart"
         return tryStartOverlayService(context, reason)
     }
 
