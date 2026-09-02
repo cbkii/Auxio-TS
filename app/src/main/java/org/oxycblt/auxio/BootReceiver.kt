@@ -24,7 +24,7 @@ import android.content.Intent
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
-import org.oxycblt.auxio.headunit.overlay.TopwayOverlayRestoreBridge
+import org.oxycblt.auxio.headunit.overlay.FloatingOnlyStartupCoordinator
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.service.ForegroundServiceStartContract
@@ -69,25 +69,53 @@ class BootReceiver : BroadcastReceiver() {
             "parallel_magisk_late_start",
         )
 
-        // When autoplay is enabled, start the playback service first so that music can begin
-        // even if the background activity start is blocked. ForegroundServiceStartContract marks
-        // the request so AuxioService publishes its lightweight startup notification before
-        // playback restoration can wait on the player/library. On Android 14+ a mediaPlayback
-        // foreground service started from BOOT_COMPLETED is rejected, so the start is wrapped to
-        // degrade gracefully instead of crashing the receiver.
+        // Floating-only is a real headless Auxio launch, not an overlay-only shortcut. Start the
+        // canonical playback/library service regardless of autoplay, then request the overlay and
+        // return without ever creating MainActivity. START_ID_BOOT keeps autoplay semantics aligned
+        // with a normal boot launch while the service still hydrates the canonical library when
+        // autoplay is disabled.
+        if (launchRoute == BootLaunchPolicy.Route.FLOATING_CONTROLS_ONLY) {
+            journal.log(
+                DiagnosticJournal.CAT_BOOT,
+                "Floating-only autostart",
+                "starting canonical service and overlay",
+            )
+            val result =
+                FloatingOnlyStartupCoordinator.start(
+                    context,
+                    reason = "boot_receiver",
+                    restorePlayback = true,
+                )
+            journal.log(
+                DiagnosticJournal.CAT_BOOT,
+                "Floating-only startup result",
+                "playback=${result.playback} overlay=${result.overlay}",
+            )
+            if (
+                result.overlay is
+                    org.oxycblt.auxio.headunit.overlay.CarOverlayContract.OverlayRestoreResult.StartRequested ||
+                    result.overlay is
+                        org.oxycblt.auxio.headunit.overlay.CarOverlayContract.OverlayRestoreResult.AlreadyVisible
+            ) {
+                L.d("Floating-only boot requested canonical Auxio state and Topway overlay")
+            } else {
+                L.w("Floating-only boot could not display the overlay: ${result.overlay}")
+            }
+            return
+        }
+
+        // Full-player boot retains the existing optimisation: when autoplay is enabled, start the
+        // playback service first so that music can begin even if the background activity start is
+        // blocked. ForegroundServiceStartContract marks the request so AuxioService publishes its
+        // lightweight startup notification before playback restoration can wait on the player or
+        // library. On Android 14+ a mediaPlayback foreground service started from BOOT_COMPLETED is
+        // rejected, so the start is wrapped to degrade gracefully instead of crashing the receiver.
         val shouldStartPlaybackService = playbackSettings.autoplayOnLaunch
         journal.log(
             DiagnosticJournal.CAT_BOOT,
             "Playback restore path",
-            "service=$shouldStartPlaybackService autoplay=${playbackSettings.autoplayOnLaunch} floatingOnly=${playbackSettings.autostartFloatingOnly}",
+            "service=$shouldStartPlaybackService autoplay=${playbackSettings.autoplayOnLaunch} floatingOnly=false",
         )
-        if (playbackSettings.autostartFloatingOnly && !playbackSettings.autoplayOnLaunch) {
-            journal.log(
-                DiagnosticJournal.CAT_BOOT,
-                "Playback restore skipped",
-                "floating_only_without_autoplay",
-            )
-        }
         if (shouldStartPlaybackService) {
             try {
                 val serviceClass =
@@ -98,40 +126,12 @@ class BootReceiver : BroadcastReceiver() {
                         .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BOOT)
                 ForegroundServiceStartContract.start(context, serviceIntent)
                 L.d(
-                    "Started AuxioService from boot [autoplay=${playbackSettings.autoplayOnLaunch}, floatingOnly=${playbackSettings.autostartFloatingOnly}]"
+                    "Started AuxioService from boot [autoplay=${playbackSettings.autoplayOnLaunch}, floatingOnly=false]"
                 )
             } catch (e: Exception) {
                 L.w("Cannot start AuxioService from boot: $e")
                 journal.log(DiagnosticJournal.CAT_BOOT, "Playback restore failed", e.toString())
             }
-        }
-
-        // Floating-only is an explicit request not to launch the full UI. Return after every
-        // typed restore outcome, including disabled/permission/rejected results.
-        if (launchRoute == BootLaunchPolicy.Route.FLOATING_CONTROLS_ONLY) {
-            journal.log(
-                DiagnosticJournal.CAT_BOOT,
-                "Floating-only autostart",
-                "requesting overlay restore",
-            )
-            val result = TopwayOverlayRestoreBridge.requestOverlayRestore(context)
-            if (
-                result is
-                    org.oxycblt.auxio.headunit.overlay.CarOverlayContract.OverlayRestoreResult.StartRequested ||
-                    result is
-                        org.oxycblt.auxio.headunit.overlay.CarOverlayContract.OverlayRestoreResult.AlreadyVisible
-            ) {
-                L.d("Launch Floating Controls only is enabled, requesting Topway overlay restore")
-                journal.log(
-                    DiagnosticJournal.CAT_BOOT,
-                    "Overlay restore requested",
-                    "topway_bridge",
-                )
-            } else {
-                L.w("Launch Floating Controls only could not start the overlay: $result")
-                journal.log(DiagnosticJournal.CAT_BOOT, "Floating-only skipped", result.toString())
-            }
-            return
         }
 
         // Attempt to show the activity UI for head-unit use. Background activity starts may be
