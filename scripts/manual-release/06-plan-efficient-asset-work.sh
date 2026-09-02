@@ -2,7 +2,7 @@
 set -euo pipefail
 
 [[ -f "${TARGET_RELEASE_FILE}" ]] || {
-  echo "::error::Target release state file is missing: ${TARGET_RELEASE_FILE}"
+  echo "::error::Target release state file is missing: ${TARGET_RELEASE_FILE}" >&2
   exit 1
 }
 
@@ -20,7 +20,7 @@ target_exists="$(jq -r 'has("id")' "${TARGET_RELEASE_FILE}")"
 target_draft="$(jq -r 'if has("id") then .draft else true end' "${TARGET_RELEASE_FILE}")"
 upload_count="$(jq '.upload_names | length' "${plan_file}")"
 if [[ "${target_exists}" == true && "${target_draft}" != true && "${upload_count}" -gt 0 ]]; then
-  echo "::error::Release ${RELEASE_TAG} is already published. Published APK/checksum/metadata assets are immutable in Manual Release; create a new patch release instead."
+  echo "::error::Release ${RELEASE_TAG} is already published. Published APK/checksum/metadata assets are immutable in Manual Release; create a new patch release instead." >&2
   exit 1
 fi
 
