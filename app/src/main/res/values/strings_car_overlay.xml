@@ -17,7 +17,7 @@
     <string name="car_overlay_display_mode_title" translatable="false">Floating display</string>
     <string name="car_overlay_display_mode_summary" translatable="false">Choose controls, controls with the current-track ticker, or ticker only</string>
     <string name="car_overlay_ticker_width_title" translatable="false">Ticker-only width</string>
-    <string name="car_overlay_ticker_width_summary" translatable="false">Width relative to the standard 100% floating row; capped to the display width</string>
+    <string name="car_overlay_ticker_width_summary" translatable="false">Width relative to the standard floating-row width; capped to the display width</string>
     <string name="car_overlay_track_ticker_idle" translatable="false">Nothing playing</string>
     <string name="car_overlay_track_ticker_content_description" translatable="false">Currently playing: %1$s</string>
     <string name="car_overlay_reset_position" translatable="false">Reset overlay position</string>
