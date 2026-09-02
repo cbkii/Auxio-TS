@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version_tag:
-        description: Optional version. Blank resumes unfinished work or creates the next patch; an existing tag repairs it.
+        description: Optional version. Blank resumes unfinished current-dev work or creates the next patch; an existing tag explicitly repairs it.
         required: false
         type: string
       draft:
@@ -38,7 +38,7 @@ on:
         default: false
         type: boolean
       replace_existing_assets:
-        description: When repairing, replace complete existing APK/checksum/metadata sets
+        description: When repairing a draft release, replace complete existing APK/checksum/metadata sets
         required: true
         default: false
         type: boolean
@@ -105,6 +105,7 @@ jobs:
           SELECTED_FILE: ${{ steps.selection.outputs.selected_file }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
           EXISTING_ASSETS_FILE: ${{ steps.plan.outputs.existing_assets_file }}
+          TARGET_RELEASE_FILE: ${{ steps.plan.outputs.target_release_file }}
           REPLACE: ${{ inputs.replace_existing_assets }}
         run: bash scripts/manual-release/06-plan-efficient-asset-work.sh
 
@@ -291,6 +292,8 @@ jobs:
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
           RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
+          SELECTED_TAG_SHA: ${{ steps.plan.outputs.selected_tag_sha }}
+          SELECTED_TAG_RELATION: ${{ steps.plan.outputs.selected_tag_relation }}
           SELECTED: ${{ steps.selection.outputs.selected_summary }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
           VERIFY_NAMES_FILE: ${{ steps.asset_plan.outputs.verify_names_file }}

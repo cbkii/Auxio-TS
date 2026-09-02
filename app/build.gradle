@@ -172,6 +172,12 @@ kotlin {
     }
 }
 
+// ViewPager2 1.1.0 contains the fixes required for RecyclerView 1.3.1-rc01 and newer.
+// Use the smallest stable RecyclerView line above that compatibility boundary. Queue-sheet
+// behaviour is guarded by app tests and exact-TS18 validation rather than an incompatible pin.
+def recyclerViewVersion = "1.3.2"
+def viewPager2Version = "1.1.0"
+
 dependencies {
     // Kotlin
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
@@ -196,15 +202,9 @@ dependencies {
     implementation "androidx.fragment:fragment-ktx:1.8.9"
 
     // Components
-    // Deliberately kept on 1.2.1 to prevent a bug where the queue sheet will not collapse on
-    // certain upwards scrolling events
-    // TODO: Report this issue and hope for a timely fix
-    // noinspection GradleDependency
-    implementation "androidx.recyclerview:recyclerview:1.2.1"
+    implementation "androidx.recyclerview:recyclerview:$recyclerViewVersion"
     implementation "androidx.constraintlayout:constraintlayout:2.2.2"
-    // 1.1.0 upgrades recyclerview to 1.3.0, keep it on 1.0.0
-    //noinspection GradleDependency
-    implementation "androidx.viewpager2:viewpager2:1.1.0"
+    implementation "androidx.viewpager2:viewpager2:$viewPager2Version"
 
     // Lifecycle
     def lifecycle_version = "2.10.0"
@@ -295,6 +295,34 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:1.3.0"
     androidTestImplementation "androidx.test:runner:1.7.0"
     androidTestImplementation "androidx.test:rules:1.7.0"
+}
+
+tasks.register("verifyCriticalDependencyResolution") {
+    group = "verification"
+    description = "Verify behaviour-sensitive AndroidX runtime dependency versions."
+    doLast {
+        def expected = [
+            "androidx.recyclerview:recyclerview": recyclerViewVersion,
+            "androidx.viewpager2:viewpager2": viewPager2Version,
+        ]
+        def resolved = configurations.releaseRuntimeClasspath.resolvedConfiguration.resolvedArtifacts
+            .collectEntries { artifact ->
+                ["${artifact.moduleVersion.id.group}:${artifact.name}", artifact.moduleVersion.id.version]
+            }
+        expected.each { coordinate, expectedVersion ->
+            def actualVersion = resolved[coordinate]
+            if (actualVersion != expectedVersion) {
+                throw new GradleException(
+                    "Critical dependency drift: ${coordinate} expected ${expectedVersion}, resolved ${actualVersion ?: 'missing'}"
+                )
+            }
+            println "Critical dependency OK: ${coordinate}:${actualVersion}"
+        }
+    }
+}
+
+tasks.named("preReleaseBuild").configure {
+    dependsOn tasks.named("verifyCriticalDependencyResolution")
 }
 
 baselineProfile {

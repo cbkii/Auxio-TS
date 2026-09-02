@@ -44,6 +44,10 @@ jq -e --arg tag "${RELEASE_TAG}" --arg id "${RELEASE_ID}" \
     echo "::error::Upload release ID ${RELEASE_ID} does not match ${RELEASE_TAG}."
     exit 1
   }
+jq -e '.draft == true' "${remote_json}" >/dev/null || {
+  echo "::error::Release ${RELEASE_TAG} is already published. Refusing to add, delete or replace release assets; create a new patch release instead."
+  exit 1
+}
 upload_template="$(jq -r .upload_url "${remote_json}")"
 upload_base="${upload_template%%{*}"
 [[ "${upload_base}" == https://* && "${upload_base}" == */releases/${RELEASE_ID}/assets ]] || {

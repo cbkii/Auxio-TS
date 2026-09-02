@@ -9,6 +9,10 @@
   echo "- Tag: ${RELEASE_TAG:-not computed}"
   echo "- Starting dev SHA: ${SOURCE_SHA:-not resolved}"
   echo "- Release/tag SHA: ${RELEASE_SHA:-not resolved}"
+  if [[ -n "${SELECTED_TAG_SHA:-}" ]]; then
+    echo "- Pre-existing selected tag SHA: ${SELECTED_TAG_SHA}"
+    echo "- Selected tag relation to starting dev: ${SELECTED_TAG_RELATION:-unknown}"
+  fi
   echo "- Maintained assets: ${SELECTED:-not selected}"
   echo "- Debug destination: ${DEBUG_DESTINATION:-not selected}"
   echo "- Release created in this run: ${RELEASE_CREATED:-false}"
@@ -45,7 +49,8 @@
   fi
   echo
   echo '- Each required variant was built at most once.'
-  echo '- Existing complete triplets were reused; interrupted partial triplets were rebuilt and repaired automatically.'
+  echo '- Existing complete triplets were reused; interrupted draft triplets can be rebuilt and repaired.'
+  echo '- Published release assets are never added, deleted or replaced by Manual Release; corrections require a new patch release.'
   echo '- Auxio-TS (com.tw.media) is the maintained product APK.'
   echo '- The API 100 LSPosed bridge remains static-scoped only to genuine stock com.tw.music.'
   echo '- The exact-package topwayTwMusic Magisk release lane remains retired.'

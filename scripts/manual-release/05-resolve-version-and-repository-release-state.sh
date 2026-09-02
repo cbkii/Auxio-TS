@@ -34,6 +34,12 @@ api_read() {
   return "${rc}"
 }
 
+source_sha="$(git rev-parse HEAD)"
+[[ "${source_sha}" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "::error::Current release source did not resolve to a full commit SHA."
+  exit 1
+}
+
 git tag --list > "${git_tags}"
 release_index="${RUNNER_TEMP}/github-releases.tsv"
 draft_release_tags="${RUNNER_TEMP}/github-draft-release-tags.txt"
@@ -55,6 +61,41 @@ python3 "${TOOL}" resolve \
   --output "${preliminary}"
 
 release_tag="$(jq -r .release_tag "${preliminary}")"
+preliminary_mode="$(jq -r .effective_mode "${preliminary}")"
+preliminary_reason="$(jq -r .resolution_reason "${preliminary}")"
+selected_tag_sha=""
+selected_tag_relation="not_existing"
+
+if [[ "${preliminary_mode}" == repair_existing_release ]]; then
+  selected_tag_sha="$(git rev-parse "${release_tag}^{commit}")"
+  [[ "${selected_tag_sha}" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "::error::Repair tag ${release_tag} did not resolve to a commit."
+    exit 1
+  }
+  if [[ "${selected_tag_sha}" == "${source_sha}" ]]; then
+    selected_tag_relation="source_head"
+  else
+    selected_parent="$(git rev-parse "${selected_tag_sha}^" 2>/dev/null || true)"
+    if [[ "${selected_parent}" == "${source_sha}" ]]; then
+      # A create transaction may have produced a release-metadata commit and pushed its tag
+      # before the final dev fast-forward. This is the only behind-dev automatic-resume shape
+      # that is safe to recognise without explicit user intent.
+      selected_tag_relation="source_parent"
+    else
+      selected_tag_relation="stale"
+    fi
+  fi
+
+  case "${preliminary_reason}" in
+    resume_latest_tag_without_release|resume_latest_draft_release)
+      if [[ "${selected_tag_relation}" == stale ]]; then
+        echo "::error::Automatic release resume selected ${release_tag} at ${selected_tag_sha}, but current dev is ${source_sha}. Refusing to publish stale source. Explicitly choose ${release_tag} to repair that historical transaction, or leave it untouched and create a newer release from current dev."
+        exit 1
+      fi
+      ;;
+  esac
+fi
+
 release_ids="${RUNNER_TEMP}/target-release-ids.txt"
 awk -F '\t' -v tag="${release_tag}" '$2 == tag { print $1 }' \
   "${release_index}" > "${release_ids}"
@@ -94,6 +135,15 @@ python3 "${TOOL}" resolve \
   --target-release-json "${target_release}" \
   --output "${final_plan}"
 
+[[ "$(jq -r .release_tag "${final_plan}")" == "${release_tag}" ]] || {
+  echo "::error::Release plan changed target between repository-state reads."
+  exit 1
+}
+[[ "$(jq -r .effective_mode "${final_plan}")" == "${preliminary_mode}" ]] || {
+  echo "::error::Release plan changed mode between repository-state reads."
+  exit 1
+}
+
 existing_assets="${RUNNER_TEMP}/existing-release-assets.txt"
 jq -r '.assets[]?.name' "${target_release}" > "${existing_assets}"
 {
@@ -112,4 +162,8 @@ jq -r '.assets[]?.name' "${target_release}" > "${existing_assets}"
   echo "unresolved_tag_only_versions=$(jq -r '.unresolved_tag_only_versions | join(",")' "${final_plan}")"
   echo "metadata_change_required=$(jq -r .metadata_change_required "${final_plan}")"
   echo "existing_release_url=$(jq -r .target_release_url "${final_plan}")"
+  echo "source_sha=${source_sha}"
+  echo "selected_tag_sha=${selected_tag_sha}"
+  echo "selected_tag_relation=${selected_tag_relation}"
+  echo "target_release_draft=$(jq -r 'if has("id") then .draft else true end' "${target_release}")"
 } >> "${GITHUB_OUTPUT}"
