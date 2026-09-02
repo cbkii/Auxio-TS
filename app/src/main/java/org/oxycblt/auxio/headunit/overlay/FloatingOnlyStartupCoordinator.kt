@@ -20,6 +20,7 @@ package org.oxycblt.auxio.headunit.overlay
 
 import android.content.Context
 import android.content.Intent
+import android.provider.Settings
 import androidx.preference.PreferenceManager
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.BuildConfig
@@ -52,6 +53,17 @@ object FloatingOnlyStartupCoordinator {
     )
 
     fun start(context: Context, reason: String, restorePlayback: Boolean): StartResult {
+        // Selecting floating-only startup is itself durable intent to show the overlay. If the user
+        // previously dismissed the runtime but the overlay permission still exists, re-enable the
+        // overlay at the next configured startup boundary rather than silently starting headless
+        // playback with no visible controls.
+        if (isConfigured(context) && Settings.canDrawOverlays(context)) {
+            PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
+                .edit()
+                .putBoolean(CarOverlayContract.KEY_ENABLED, true)
+                .apply()
+        }
+
         val playback = startPlayback(context, reason, restorePlayback)
         val overlay = TopwayOverlayRestoreBridge.requestOverlayRestore(context, reason)
         L.i(
