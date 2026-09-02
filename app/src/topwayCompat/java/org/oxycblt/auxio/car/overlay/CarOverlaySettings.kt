@@ -36,10 +36,14 @@ object CarOverlaySettings {
      * Enables or disables the car floating controls. When enabling, checks overlay permission and
      * launches the permission activity if not granted. When disabling, stops the overlay service.
      *
+     * [startRuntime] can be false when a caller is about to hand startup to the headless
+     * floating-only coordinator; persistence and permission policy still apply, but the coordinator
+     * remains the single owner of the service start request.
+     *
      * @return true if the operation completed immediately (enable succeeded or disable completed),
      *   false if permission is needed (activity launched, switch should revert to unchecked)
      */
-    fun setEnabled(context: Context, enabled: Boolean): Boolean {
+    fun setEnabled(context: Context, enabled: Boolean, startRuntime: Boolean = true): Boolean {
         val prefs = CarOverlayPrefs.from(context)
         val result =
             CarOverlaySettingsPolicy.setEnabledDecision(
@@ -53,7 +57,7 @@ object CarOverlaySettings {
         if (result.launchPermissionFlow) {
             context.startActivity(CarOverlayPermissionActivity.intent(context))
         }
-        if (result.startService) {
+        if (result.startService && startRuntime) {
             CarFloatingControlsService.start(context)
         }
         if (result.stopService) {
