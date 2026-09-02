@@ -21,6 +21,7 @@ package org.oxycblt.auxio.car.overlay
 import android.content.Context
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -53,13 +54,57 @@ class CarOverlayPrefsTest {
     }
 
     @Test
-    fun trackTickerIsOptionalAndDisabledByDefault() {
+    fun displayModeDefaultsToControls() {
+        assertEquals(
+            CarOverlayPrefs.DisplayMode.CONTROLS,
+            CarOverlayPrefs.from(context).displayMode,
+        )
+    }
+
+    @Test
+    fun legacyTickerEnabledMigratesToControlsAndTicker() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        prefs.edit().putBoolean("car_overlay_show_track_ticker", true).commit()
+
         val overlayPrefs = CarOverlayPrefs.from(context)
 
-        assertFalse(overlayPrefs.showTrackTicker)
+        assertEquals(CarOverlayPrefs.DisplayMode.CONTROLS_AND_TICKER, overlayPrefs.displayMode)
+        assertFalse(prefs.contains("car_overlay_show_track_ticker"))
+        assertEquals(
+            CarOverlayPrefs.DisplayMode.CONTROLS_AND_TICKER.storageValue,
+            prefs.getString(CarOverlayPrefs.KEY_DISPLAY_MODE, null),
+        )
+    }
 
-        overlayPrefs.showTrackTicker = true
+    @Test
+    fun legacyTickerDisabledMigratesToControls() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        prefs.edit().putBoolean("car_overlay_show_track_ticker", false).commit()
 
-        assertTrue(CarOverlayPrefs.from(context).showTrackTicker)
+        assertEquals(
+            CarOverlayPrefs.DisplayMode.CONTROLS,
+            CarOverlayPrefs.from(context).displayMode,
+        )
+        assertFalse(prefs.contains("car_overlay_show_track_ticker"))
+    }
+
+    @Test
+    fun tickerOnlyModeAndWidthPersist() {
+        val overlayPrefs = CarOverlayPrefs.from(context)
+
+        overlayPrefs.displayMode = CarOverlayPrefs.DisplayMode.TICKER_ONLY
+        overlayPrefs.tickerWidthPercent = 250
+
+        val restored = CarOverlayPrefs.from(context)
+        assertEquals(CarOverlayPrefs.DisplayMode.TICKER_ONLY, restored.displayMode)
+        assertEquals(250, restored.tickerWidthPercent)
+    }
+
+    @Test
+    fun invalidTickerWidthFallsBackToOneHundredPercent() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        prefs.edit().putInt(CarOverlayPrefs.KEY_TICKER_WIDTH_PERCENT, 175).commit()
+
+        assertEquals(100, CarOverlayPrefs.from(context).tickerWidthPercent)
     }
 }

@@ -109,7 +109,6 @@
             </intent-filter>
         </activity-alias>
 
-
         <!--
         Service handling music playback, system components, and state saving.
         -->
@@ -242,6 +241,26 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <!--
+        Separate launcher-selectable entry retained specifically for head-unit auto-start pickers.
+        It targets the no-display floating entry and never changes the stock-compatible
+        com.tw.music.MusicActivity -> MainActivity routing used by DoFun and the normal app icon.
+        -->
+        <activity-alias
+            android:name="org.oxycblt.auxio.car.overlay.FloatingControlsLauncher"
+            android:targetActivity="org.oxycblt.auxio.car.overlay.CarOverlayActivity"
+            android:exported="true"
+            android:enabled="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher"
+            android:label="@string/car_overlay_launcher_title">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <activity
             android:name="org.oxycblt.auxio.car.overlay.CarOverlayPermissionActivity"

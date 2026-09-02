@@ -19,7 +19,10 @@
 package org.oxycblt.auxio
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.headunit.overlay.FloatingOnlyStartupCoordinator
 
 class BootReceiverTest {
     @Test
@@ -43,6 +46,25 @@ class BootReceiverTest {
         assertEquals(
             BootLaunchPolicy.Route.FULL_PLAYER,
             BootLaunchPolicy.route(autostartOnBoot = true, floatingOnly = false),
+        )
+    }
+
+    @Test
+    fun `headless floating startup requires both boot and floating-only preferences`() {
+        assertTrue(
+            FloatingOnlyStartupCoordinator.isConfigured(autostartOnBoot = true, floatingOnly = true)
+        )
+        assertFalse(
+            FloatingOnlyStartupCoordinator.isConfigured(
+                autostartOnBoot = true,
+                floatingOnly = false,
+            )
+        )
+        assertFalse(
+            FloatingOnlyStartupCoordinator.isConfigured(
+                autostartOnBoot = false,
+                floatingOnly = true,
+            )
         )
     }
 }

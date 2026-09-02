@@ -62,9 +62,11 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
 
     private val preferences =
         PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
+    private val overlayPrefs = CarOverlayPrefs.from(context)
     private val buttonSizePx: Int
     private val rowWidthPx: Int
     private val rowHeightPx: Int
+    private val rowGapPx: Int
     private val controlsRow: LinearLayout
     private var tickerView: TextView? = null
     private var dragStartX = 0f
@@ -81,6 +83,7 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
         val density = context.resources.displayMetrics.density
         buttonSizePx = (BUTTON_SIZE_DP * density).toInt()
         val paddingPx = (PADDING_DP * density).toInt()
+        rowGapPx = (ROW_GAP_DP * density).toInt()
         rowWidthPx = buttonSizePx * CONTROL_COUNT + paddingPx * 2
         rowHeightPx = buttonSizePx + paddingPx * 2
 
@@ -109,9 +112,8 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
                 addView(createButton(context, LABEL_NEXT, DESC_NEXT) { callbacks.onNext() })
                 addView(createButton(context, LABEL_OPEN, DESC_OPEN) { callbacks.onOpenAuxio() })
             }
-        addView(controlsRow)
 
-        updateTickerVisibility(CarOverlayPrefs.from(context).showTrackTicker)
+        applyDisplayMode(overlayPrefs.displayMode)
     }
 
     override fun onAttachedToWindow() {
@@ -129,37 +131,66 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
-        if (key != CarOverlayPrefs.KEY_SHOW_TRACK_TICKER) return
-        post {
-            updateTickerVisibility(
-                sharedPreferences.getBoolean(CarOverlayPrefs.KEY_SHOW_TRACK_TICKER, false)
-            )
+        if (
+            key != CarOverlayPrefs.KEY_DISPLAY_MODE &&
+                key != CarOverlayPrefs.KEY_TICKER_WIDTH_PERCENT
+        ) {
+            return
         }
+        post { applyDisplayMode(overlayPrefs.displayMode) }
     }
 
     fun applyOpacity(percent: Int) {
         alpha = percent.coerceIn(CarOverlayPrefs.MIN_OPACITY, CarOverlayPrefs.MAX_OPACITY) / 100f
     }
 
-    private fun updateTickerVisibility(enabled: Boolean) {
-        if (enabled) {
-            if (tickerView != null) return
-            val ticker = createTicker(context)
-            tickerView = ticker
-            addView(ticker, 0)
+    private fun applyDisplayMode(mode: CarOverlayPrefs.DisplayMode) {
+        removeAllViews()
+
+        if (mode.showsTicker) {
+            val ticker = tickerView ?: createTicker(context).also { tickerView = it }
+            updateTickerLayout(ticker, mode)
+            addView(ticker)
             updateTrackTicker(FloatingTrackMetadataBus.current)
+            ticker.isSelected = true
         } else {
-            val ticker = tickerView ?: return
-            ticker.isSelected = false
-            removeView(ticker)
+            tickerView?.isSelected = false
             tickerView = null
         }
+
+        if (mode.showsControls) {
+            addView(controlsRow)
+        }
+        requestLayout()
+    }
+
+    private fun updateTickerLayout(ticker: TextView, mode: CarOverlayPrefs.DisplayMode) {
+        val width =
+            if (mode == CarOverlayPrefs.DisplayMode.TICKER_ONLY) {
+                tickerOnlyWidthPx(overlayPrefs.tickerWidthPercent)
+            } else {
+                rowWidthPx
+            }
+        ticker.layoutParams =
+            LayoutParams(width, rowHeightPx).apply {
+                bottomMargin = if (mode.showsControls) rowGapPx else 0
+            }
+    }
+
+    private fun tickerOnlyWidthPx(percent: Int): Int {
+        val requested =
+            (rowWidthPx.toLong() *
+                    percent.coerceIn(MIN_TICKER_WIDTH_PERCENT, MAX_TICKER_WIDTH_PERCENT) / 100L)
+                .coerceAtMost(Int.MAX_VALUE.toLong())
+                .toInt()
+        val displayWidth = context.resources.displayMetrics.widthPixels.takeIf { it > 0 }
+        return if (displayWidth != null) requested.coerceAtMost(displayWidth).coerceAtLeast(1)
+        else requested.coerceAtLeast(1)
     }
 
     private fun createTicker(context: Context): TextView {
         val density = context.resources.displayMetrics.density
         val horizontalPadding = (TICKER_HORIZONTAL_PADDING_DP * density).toInt()
-        val gap = (ROW_GAP_DP * density).toInt()
         return TextView(context).apply {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, TICKER_TEXT_SP)
             setTextColor(Color.WHITE)
@@ -171,11 +202,11 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
             setHorizontallyScrolling(true)
             setPadding(horizontalPadding, 0, horizontalPadding, 0)
             background = createBackground(density)
-            layoutParams = LayoutParams(rowWidthPx, rowHeightPx).apply { bottomMargin = gap }
             text = context.getString(R.string.car_overlay_track_ticker_idle)
             contentDescription =
                 context.getString(R.string.car_overlay_track_ticker_content_description, text)
             isSelected = true
+            installDragSurface(this)
         }
     }
 
@@ -203,7 +234,6 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
             cornerRadius = CORNER_RADIUS_DP * density
         }
 
-    @SuppressLint("ClickableViewAccessibility")
     private fun createDragHandle(context: Context): View {
         val tv = TextView(context)
         tv.text = LABEL_DRAG
@@ -213,13 +243,16 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
         tv.setTextColor(Color.WHITE)
         tv.layoutParams = LayoutParams(buttonSizePx, buttonSizePx)
         tv.contentDescription = DESC_DRAG
-        tv.isFocusable = true
-        tv.isClickable = true
+        installDragSurface(tv)
+        return tv
+    }
 
-        // Normal click path for accessibility/keyboard users — same triple-tap behaviour.
-        tv.setOnClickListener { handleDragHandleTap() }
-
-        tv.setOnTouchListener { v, event ->
+    @SuppressLint("ClickableViewAccessibility")
+    private fun installDragSurface(view: View) {
+        view.isFocusable = true
+        view.isClickable = true
+        view.setOnClickListener { handleDragSurfaceTap() }
+        view.setOnTouchListener { v, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     dragStartX = event.rawX
@@ -244,7 +277,7 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
                 MotionEvent.ACTION_CANCEL -> {
                     if (dragging) {
                         callbacks.onDragFinished(event.rawX.toInt(), event.rawY.toInt())
-                    } else {
+                    } else if (event.actionMasked == MotionEvent.ACTION_UP) {
                         // Trigger accessibility click which routes to setOnClickListener above.
                         v.performClick()
                     }
@@ -254,10 +287,9 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
                 else -> false
             }
         }
-        return tv
     }
 
-    private fun handleDragHandleTap() {
+    private fun handleDragSurfaceTap() {
         val now = System.currentTimeMillis()
         if (now - lastTapTime < TRIPLE_TAP_WINDOW_MS) {
             tapCount++
@@ -303,6 +335,8 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
         const val BG_COLOR = 0xCC1B1B1B.toInt()
         const val TRIPLE_TAP_WINDOW_MS = 600L
         const val TRIPLE_TAP_COUNT = 3
+        const val MIN_TICKER_WIDTH_PERCENT = 100
+        const val MAX_TICKER_WIDTH_PERCENT = 300
 
         const val LABEL_DRAG = "\u2807" // Braille pattern dots-123
         const val LABEL_PREV = "\u23EE"

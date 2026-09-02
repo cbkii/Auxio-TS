@@ -22,12 +22,18 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import org.oxycblt.auxio.headunit.overlay.CarOverlayContract
+import org.oxycblt.auxio.headunit.overlay.FloatingOnlyStartupCoordinator
 import timber.log.Timber as L
 
 /**
  * Restores the car floating controls overlay after public Android lifecycle broadcasts that are
  * commonly observed around TS18 boot, user unlock, package replacement, quick boot, and user
  * return. This remains Topway-compatible flavour only and uses the normal foreground-service path.
+ *
+ * When floating-only startup is configured, post-boot lifecycle reassertions also ensure Auxio's
+ * canonical playback/library service exists without issuing another playback restore. QUICKBOOT is
+ * treated as a true startup boundary because the normal [org.oxycblt.auxio.BootReceiver] does not
+ * receive that vendor-compatible action.
  *
  * Requires TS18 device validation: ACC sleep/wake may be exposed as screen/user-present only on
  * some firmware builds; vendor-private wake actions are intentionally not declared here.
@@ -38,7 +44,34 @@ class CarOverlayBootReceiver : BroadcastReceiver() {
         if (action !in RESTORE_ACTIONS) return
 
         L.d("Car overlay restore broadcast: $action")
-        CarFloatingControlsService.restoreIfEnabled(context, "receiver:$action")
+        if (!FloatingOnlyStartupCoordinator.isConfigured(context)) {
+            CarFloatingControlsService.restoreIfEnabled(context, "receiver:$action")
+            return
+        }
+
+        when (action) {
+            Intent.ACTION_BOOT_COMPLETED -> {
+                // BootReceiver owns canonical playback restoration for the standard Android boot
+                // action. Keep this receiver focused on rapid overlay reattachment to avoid issuing
+                // a duplicate RestoreState command into the one playback authority.
+                CarFloatingControlsService.restoreIfEnabled(context, "receiver:$action")
+            }
+            ACTION_QUICKBOOT_POWERON,
+            ACTION_HTC_QUICKBOOT_POWERON -> {
+                FloatingOnlyStartupCoordinator.start(
+                    context,
+                    reason = "receiver:$action",
+                    restorePlayback = true,
+                )
+            }
+            else -> {
+                FloatingOnlyStartupCoordinator.start(
+                    context,
+                    reason = "receiver:$action",
+                    restorePlayback = false,
+                )
+            }
+        }
     }
 
     companion object {

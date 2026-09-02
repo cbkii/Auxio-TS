@@ -25,16 +25,42 @@ import androidx.preference.PreferenceManager
 
 /**
  * SharedPreferences wrapper for car floating controls overlay configuration. Manages enablement,
- * position, opacity, visibility, and the optional current-track ticker.
+ * position, opacity, visibility, display mode, and ticker width.
  *
- * Uses [PreferenceManager.getDefaultSharedPreferences] so that the `car_overlay_enabled` key is
- * shared with the AndroidX `SwitchPreferenceCompat` declared in `preferences_car.xml`. This avoids
- * split-brain between the preference UI and runtime state.
+ * Uses [PreferenceManager.getDefaultSharedPreferences] so runtime state and the AndroidX preference
+ * UI share one source of truth.
  */
 class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) {
+    enum class DisplayMode(
+        val storageValue: String,
+        val showsControls: Boolean,
+        val showsTicker: Boolean,
+    ) {
+        CONTROLS("controls", showsControls = true, showsTicker = false),
+        CONTROLS_AND_TICKER("controls_ticker", showsControls = true, showsTicker = true),
+        TICKER_ONLY("ticker_only", showsControls = false, showsTicker = true);
+
+        companion object {
+            fun fromStorage(value: String?): DisplayMode =
+                entries.firstOrNull { it.storageValue == value } ?: CONTROLS
+        }
+    }
+
     init {
         if (prefs.contains("car_overlay_suppressed_auxio_fg")) {
             prefs.edit().remove("car_overlay_suppressed_auxio_fg").apply()
+        }
+        if (!prefs.contains(KEY_DISPLAY_MODE) && prefs.contains(LEGACY_KEY_SHOW_TRACK_TICKER)) {
+            val migratedMode =
+                if (prefs.getBoolean(LEGACY_KEY_SHOW_TRACK_TICKER, false)) {
+                    DisplayMode.CONTROLS_AND_TICKER
+                } else {
+                    DisplayMode.CONTROLS
+                }
+            prefs.edit {
+                putString(KEY_DISPLAY_MODE, migratedMode.storageValue)
+                remove(LEGACY_KEY_SHOW_TRACK_TICKER)
+            }
         }
         if (!prefs.getBoolean(KEY_PERSISTENCE_DEFAULT_MIGRATED, false)) {
             // Persistent controls are the safety-first default. Clear the old default-on hide
@@ -59,10 +85,25 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
         get() = prefs.getBoolean(KEY_HIDE_WHILE_AUXIO_FG, false)
         set(value) = prefs.edit { putBoolean(KEY_HIDE_WHILE_AUXIO_FG, value) }
 
-    /** Whether the current-track ticker row is shown above the unchanged controls row. */
-    var showTrackTicker: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_TRACK_TICKER, false)
-        set(value) = prefs.edit { putBoolean(KEY_SHOW_TRACK_TICKER, value) }
+    var displayMode: DisplayMode
+        get() = DisplayMode.fromStorage(prefs.getString(KEY_DISPLAY_MODE, null))
+        set(value) = prefs.edit { putString(KEY_DISPLAY_MODE, value.storageValue) }
+
+    /** Width of ticker-only mode relative to the existing 100% controls/ticker row width. */
+    var tickerWidthPercent: Int
+        get() {
+            val stored = prefs.getInt(KEY_TICKER_WIDTH_PERCENT, DEFAULT_TICKER_WIDTH_PERCENT)
+            return if (stored in ALLOWED_TICKER_WIDTH_PERCENTS) {
+                stored
+            } else {
+                DEFAULT_TICKER_WIDTH_PERCENT
+            }
+        }
+        set(value) {
+            val normalized =
+                if (value in ALLOWED_TICKER_WIDTH_PERCENTS) value else DEFAULT_TICKER_WIDTH_PERCENT
+            prefs.edit { putInt(KEY_TICKER_WIDTH_PERCENT, normalized) }
+        }
 
     var positionX: Int
         get() = prefs.getInt(KEY_POSITION_X, DEFAULT_X)
@@ -99,7 +140,9 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
 
     companion object {
         const val KEY_ENABLED = "car_overlay_enabled"
-        const val KEY_SHOW_TRACK_TICKER = "car_overlay_show_track_ticker"
+        const val KEY_DISPLAY_MODE = "car_overlay_display_mode"
+        const val KEY_TICKER_WIDTH_PERCENT = "car_overlay_ticker_width_percent"
+        private const val LEGACY_KEY_SHOW_TRACK_TICKER = "car_overlay_show_track_ticker"
         private const val KEY_PENDING_ENABLE = "car_overlay_pending_enable"
         private const val KEY_HIDE_WHILE_AUXIO_FG = "car_overlay_hide_auxio_fg"
         private const val KEY_PERSISTENCE_DEFAULT_MIGRATED =
@@ -113,11 +156,13 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
         // available, but these constants keep first-read/default static behaviour top-edge safe.
         const val DEFAULT_X = 465
         const val DEFAULT_Y = 0
-        private const val OLD_DEFAULT_X = 437
-        private const val OLD_DEFAULT_Y = 55
         const val DEFAULT_OPACITY = 90
         const val MIN_OPACITY = 30
         const val MAX_OPACITY = 100
+        const val DEFAULT_TICKER_WIDTH_PERCENT = 100
+        private const val OLD_DEFAULT_X = 437
+        private const val OLD_DEFAULT_Y = 55
+        private val ALLOWED_TICKER_WIDTH_PERCENTS = setOf(100, 150, 200, 250, 300)
 
         fun from(context: Context): CarOverlayPrefs {
             val prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)

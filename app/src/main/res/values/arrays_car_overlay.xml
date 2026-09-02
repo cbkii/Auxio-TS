@@ -15,4 +15,32 @@
         <item>90%</item>
         <item>100%</item>
     </string-array>
+
+    <string-array name="entries_car_overlay_display_mode">
+        <item>Controls</item>
+        <item>Controls + ticker</item>
+        <item>Ticker only</item>
+    </string-array>
+
+    <string-array name="values_car_overlay_display_mode" translatable="false">
+        <item>controls</item>
+        <item>controls_ticker</item>
+        <item>ticker_only</item>
+    </string-array>
+
+    <integer-array name="values_car_overlay_ticker_width">
+        <item>100</item>
+        <item>150</item>
+        <item>200</item>
+        <item>250</item>
+        <item>300</item>
+    </integer-array>
+
+    <string-array name="entries_car_overlay_ticker_width">
+        <item>100%</item>
+        <item>150%</item>
+        <item>200%</item>
+        <item>250%</item>
+        <item>300%</item>
+    </string-array>
 </resources>
