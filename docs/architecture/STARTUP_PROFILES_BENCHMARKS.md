@@ -23,7 +23,7 @@ No percentage or latency improvement is claimed without captured with-profile an
 
 ### Dedicated module and production separation
 
-`startup-benchmark` is a dedicated `com.android.test` module using AndroidX Macrobenchmark 1.5.0-rc01 and the AndroidX Baseline Profile plugin. It targets the one maintained Auxio-TS application (`com.tw.media`). The former `standard` flavour is retired, and the former exact-package `topwayTwMusic` application is retained only as historical context; neither may be recreated as a benchmark or release target.
+`startup-benchmark` is a dedicated `com.android.test` module using AndroidX Macrobenchmark 1.5.0-rc02 and the AndroidX Baseline Profile plugin. It targets the one maintained Auxio-TS application (`com.tw.media`). The former `standard` flavour is retired, and the former exact-package `topwayTwMusic` application is retained only as historical context; neither may be recreated as a benchmark or release target.
 
 The app keeps a separate, unminified `benchmark` target for profile collection. Release remains minified and consumes the checked-in human-readable Baseline and Startup Profile rules. The app also applies the Baseline Profile plugin with automatic build-time generation disabled, so profile regeneration is an explicit, reproducible operation rather than a hidden release side effect.
 
