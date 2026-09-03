@@ -8,8 +8,9 @@ api_read() {
     if timeout 60s gh api "$@" > "${output}.tmp"; then
       mv "${output}.tmp" "${output}"
       return 0
+    else
+      rc=$?
     fi
-    rc=$?
     rm -f -- "${output}.tmp"
     ((attempt < 3)) && sleep $((attempt * 4))
   done
@@ -39,7 +40,11 @@ cut -f1 "${UPLOAD_TSV}" | awk 'NF' | sort | uniq -d > "${duplicate_names}"
 remote_json="${RUNNER_TEMP}/upload-release.json"
 refresh_draft_release() {
   local phase=$1
-  api_read "${remote_json}" "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}"
+  RELEASE_REFRESH_PHASE="${phase}" api_read \
+    "${remote_json}" "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" || {
+      echo "::error::GitHub release-state read failed before ${phase}." >&2
+      return 1
+    }
   jq -e --arg tag "${RELEASE_TAG}" --arg id "${RELEASE_ID}" \
     '(.id == ($id | tonumber)) and (.tag_name == $tag)' \
     "${remote_json}" >/dev/null || {
@@ -89,7 +94,8 @@ ensure_asset_absent() {
       "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}"; then
       echo "::warning::Asset delete did not return success; checking the remote postcondition for ${name}." >&2
     fi
-    api_read "${after_delete}" "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}"
+    RELEASE_REFRESH_PHASE="post-delete ${name}" api_read \
+      "${after_delete}" "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}"
     jq -e '.draft == true' "${after_delete}" >/dev/null || {
       echo "::error::Release ${RELEASE_TAG} became published while deleting ${name}; aborting all further asset mutation." >&2
       return 1
@@ -158,7 +164,8 @@ while IFS=$'\t' read -r name path; do
   if ! upload_once > "${response}"; then
     echo "::warning::Asset upload did not return success; checking the remote postcondition for ${name}." >&2
     after_upload="${RUNNER_TEMP}/post-upload-${encoded_name}.json"
-    api_read "${after_upload}" "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}"
+    RELEASE_REFRESH_PHASE="post-upload ${name}" api_read \
+      "${after_upload}" "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}"
     jq -e '.draft == true' "${after_upload}" >/dev/null || {
       echo "::error::Release ${RELEASE_TAG} became published while uploading ${name}; aborting all further asset mutation." >&2
       exit 1
