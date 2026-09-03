@@ -56,7 +56,7 @@ require_contains settings.gradle "include ':startup-benchmark'"
 # Exact plugin drift is owned by the version-catalogue guard. This structural check only requires
 # the AGP-9-compatible Baseline Profile 1.5 line so RC/stable maintenance updates do not trip a
 # stale hard-coded patch contract.
-require_regex build.gradle 'id "androidx\.baselineprofile" version "1\.5\.0([.-][^"[:space:]]+)?" apply false'
+require_regex build.gradle 'id "androidx\.baselineprofile" version "1\.5\.[0-9]+([.-][^"[:space:]]+)?" apply false'
 require_contains app/build.gradle 'id "androidx.baselineprofile"'
 require_contains app/build.gradle 'minifyEnabled false'
 require_contains app/build.gradle 'baselineProfile project(":startup-benchmark")'
