@@ -305,13 +305,13 @@ tasks.register("verifyCriticalDependencyResolution") {
             "androidx.recyclerview:recyclerview": recyclerViewVersion,
             "androidx.viewpager2:viewpager2": viewPager2Version,
         ]
-        // Both contracts are direct releaseRuntimeClasspath dependencies. Validate the selected
-        // component on each first-level dependency edge: this observes conflict/force/substitution
-        // results without resolving local-project artifacts or relying on nullable component
-        // metadata from AGP's variant graph.
-        def resolved = [:]
+        // Android/AGP may represent these implementation dependencies below the synthetic release
+        // runtime root. Inspect every dependency edge and validate the selected external component,
+        // which reflects conflict resolution, force rules and substitutions without resolving local
+        // Android project artifacts.
+        def resolved = [:].withDefault { new LinkedHashSet() }
         def observedCriticalEdges = []
-        configurations.releaseRuntimeClasspath.incoming.resolutionResult.root.dependencies.each { dependency ->
+        configurations.releaseRuntimeClasspath.incoming.resolutionResult.allDependencies.each { dependency ->
             if (dependency instanceof org.gradle.api.artifacts.result.ResolvedDependencyResult &&
                 dependency.requested instanceof org.gradle.api.artifacts.component.ModuleComponentSelector) {
                 def requested = dependency.requested
@@ -321,20 +321,21 @@ tasks.register("verifyCriticalDependencyResolution") {
                     observedCriticalEdges <<
                         "${requested.displayName} -> ${selectedId.displayName} (${selectedId.class.simpleName})"
                     if (selectedId instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier) {
-                        resolved[coordinate] = selectedId.version
+                        resolved[coordinate].add(selectedId.version)
                     }
                 }
             }
         }
         expected.each { coordinate, expectedVersion ->
-            def actualVersion = resolved[coordinate]
-            if (actualVersion != expectedVersion) {
+            def actualVersions = resolved[coordinate]
+            if (actualVersions != ([expectedVersion] as Set)) {
+                def actual = actualVersions ? actualVersions.join(", ") : "missing"
                 def observed = observedCriticalEdges ? observedCriticalEdges.join("; ") : "none"
                 throw new GradleException(
-                    "Critical dependency drift: ${coordinate} expected ${expectedVersion}, resolved ${actualVersion ?: 'missing'}; observed critical root edges: ${observed}"
+                    "Critical dependency drift: ${coordinate} expected ${expectedVersion}, resolved ${actual}; observed critical edges: ${observed}"
                 )
             }
-            println "Critical dependency OK: ${coordinate}:${actualVersion}"
+            println "Critical dependency OK: ${coordinate}:${expectedVersion}"
         }
     }
 }
