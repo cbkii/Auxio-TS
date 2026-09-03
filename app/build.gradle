@@ -305,24 +305,29 @@ tasks.register("verifyCriticalDependencyResolution") {
             "androidx.recyclerview:recyclerview": recyclerViewVersion,
             "androidx.viewpager2:viewpager2": viewPager2Version,
         ]
-        // Use Gradle's graph API directly. getAllComponents() avoids artifact selection entirely,
-        // so local Android projects with multiple published artifact types cannot make this guard
-        // ambiguous; moduleVersion identifies only external module components.
-        def resolved = configurations.releaseRuntimeClasspath.incoming.resolutionResult
-            .getAllComponents()
-            .findAll { component -> component.getModuleVersion() != null }
-            .collectEntries { component ->
-                def moduleVersion = component.getModuleVersion()
-                ["${moduleVersion.group}:${moduleVersion.name}", moduleVersion.version]
+        // Resolve only the two external AndroidX components under test. Filtering by component
+        // keeps local Android projects out of artifact selection, avoiding AGP's multiple-artifact
+        // ambiguity while still validating the versions actually selected for release runtime.
+        def criticalArtifacts = configurations.releaseRuntimeClasspath.incoming.artifactView {
+            componentFilter { id ->
+                id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier &&
+                    expected.containsKey("${id.group}:${id.module}")
             }
+        }.artifacts.artifacts
+        def resolved = [:].withDefault { new LinkedHashSet() }
+        criticalArtifacts.each { artifact ->
+            def id = artifact.id.componentIdentifier
+            resolved["${id.group}:${id.module}"].add(id.version)
+        }
         expected.each { coordinate, expectedVersion ->
-            def actualVersion = resolved[coordinate]
-            if (actualVersion != expectedVersion) {
+            def actualVersions = resolved[coordinate]
+            if (actualVersions != ([expectedVersion] as Set)) {
+                def actual = actualVersions ? actualVersions.join(", ") : "missing"
                 throw new GradleException(
-                    "Critical dependency drift: ${coordinate} expected ${expectedVersion}, resolved ${actualVersion ?: 'missing'}"
+                    "Critical dependency drift: ${coordinate} expected ${expectedVersion}, resolved ${actual}"
                 )
             }
-            println "Critical dependency OK: ${coordinate}:${actualVersion}"
+            println "Critical dependency OK: ${coordinate}:${expectedVersion}"
         }
     }
 }
