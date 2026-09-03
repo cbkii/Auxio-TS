@@ -53,6 +53,7 @@ def main() -> int:
                         "release": {
                             "id": 101,
                             "tag_name": "v6.6.0",
+                            "draft": True,
                             "upload_url": "https://uploads.invalid/repos/cbkii/Auxio-TS/releases/101/assets{?name,label}",
                             "assets": [
                                 {"id": 777, "name": "artifact.apk", "state": "uploaded"}

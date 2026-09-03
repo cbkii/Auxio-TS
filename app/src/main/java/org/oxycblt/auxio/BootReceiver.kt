@@ -104,19 +104,18 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
 
-        // Full-player boot retains the existing optimisation: when autoplay is enabled, start the
-        // playback service first so that music can begin even if the background activity start is
-        // blocked. ForegroundServiceStartContract marks the request so AuxioService publishes its
-        // lightweight startup notification before playback restoration can wait on the player or
-        // library. On Android 14+ a mediaPlayback foreground service started from BOOT_COMPLETED is
-        // rejected, so the start is wrapped to degrade gracefully instead of crashing the receiver.
-        val shouldStartPlaybackService = playbackSettings.autoplayOnLaunch
-        journal.log(
-            DiagnosticJournal.CAT_BOOT,
-            "Playback restore path",
-            "service=$shouldStartPlaybackService autoplay=${playbackSettings.autoplayOnLaunch} floatingOnly=false",
-        )
-        if (shouldStartPlaybackService) {
+        // Full-player boot must initialise the one canonical playback/library service even when
+        // autoplay is disabled. START_ID_BOOT keeps initialisation separate from playback policy.
+        // It restores paused when autoplay is off and may restore playback when it is on.
+        // MainActivity below is presentation-only because Android 10+ may block background starts.
+        // Android 15+ also restricts starting mediaPlayback foreground services from BOOT_COMPLETED
+        // for apps targeting API 35+, so this remains fail-open.
+        if (BootLaunchPolicy.shouldStartCanonicalServiceDirectly(launchRoute)) {
+            journal.log(
+                DiagnosticJournal.CAT_BOOT,
+                "Playback restore path",
+                "service=true autoplay=${playbackSettings.autoplayOnLaunch} floatingOnly=false",
+            )
             try {
                 val serviceClass =
                     TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
@@ -135,7 +134,7 @@ class BootReceiver : BroadcastReceiver() {
         }
 
         // Attempt to show the activity UI for head-unit use. Background activity starts may be
-        // silently blocked on Android 10+ without throwing, so this is best-effort only.
+        // silently blocked on Android 10+ without throwing, so this is best-effort presentation.
         try {
             val activityIntent =
                 Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -161,4 +160,10 @@ internal object BootLaunchPolicy {
             floatingOnly -> Route.FLOATING_CONTROLS_ONLY
             else -> Route.FULL_PLAYER
         }
+
+    /** Whether this boot route requires Auxio's existing canonical service/library authority. */
+    fun shouldStartCanonicalService(route: Route): Boolean = route != Route.DISABLED
+
+    /** Whether BootReceiver itself owns the canonical service start for this route. */
+    fun shouldStartCanonicalServiceDirectly(route: Route): Boolean = route == Route.FULL_PLAYER
 }

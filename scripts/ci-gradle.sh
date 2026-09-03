@@ -144,30 +144,59 @@ if [[ -n "${AUXIO_TS_CI_GRADLE_TIMEOUT:-}" ]]; then
   fi
 fi
 
-"${run_cmd[@]}" \
-  > >(
-    while IFS= read -r line || [[ -n ${line:-} ]]; do
-      date +%s > "${stamp_file}"
-      printf '%s\n' "$line"
-      if [[ -n "${capture_log}" ]]; then
-        printf '%s\n' "$line" >> "${capture_log}"
-      fi
-    done
-  ) \
-  2> >(
-    while IFS= read -r line || [[ -n ${line:-} ]]; do
-      date +%s > "${stamp_file}"
-      printf '%s\n' "$line" >&2
-      if [[ -n "${capture_log}" ]]; then
-        printf '%s\n' "$line" >> "${capture_log}"
-      fi
-    done
-  )
+# Use explicit output-filter file descriptors so their process-substitution PIDs can be joined.
+# A plain `command > >(filter)` does not guarantee that Bash waits for the filters before returning;
+# callers that own a temporary RUNNER_TEMP can otherwise remove the heartbeat directory while the
+# filters are still draining Gradle output. Joining them makes output capture and cleanup ordered.
+exec 3> >(
+  while IFS= read -r line || [[ -n ${line:-} ]]; do
+    date +%s > "${stamp_file}"
+    printf '%s\n' "$line"
+    if [[ -n "${capture_log}" ]]; then
+      printf '%s\n' "$line" >> "${capture_log}"
+    fi
+  done
+)
+stdout_filter_pid=$!
+exec 4> >(
+  # Do not retain the stdout filter's writer descriptor in this sibling process.
+  exec 3>&-
+  while IFS= read -r line || [[ -n ${line:-} ]]; do
+    date +%s > "${stamp_file}"
+    printf '%s\n' "$line" >&2
+    if [[ -n "${capture_log}" ]]; then
+      printf '%s\n' "$line" >> "${capture_log}"
+    fi
+  done
+)
+stderr_filter_pid=$!
+
+"${run_cmd[@]}" >&3 2>&4
 rc=$?
 
+# Close the shell's writer descriptors so the output filters receive EOF, then wait for them before
+# deleting shared heartbeat state. Preserve the Gradle exit code when Gradle itself failed; a stream
+# failure becomes fatal only when Gradle otherwise succeeded.
+exec 3>&-
+exec 4>&-
 if [[ -n ${heartbeat_pid:-} ]] && kill -0 "${heartbeat_pid}" 2>/dev/null; then
   kill -TERM "${heartbeat_pid}" 2>/dev/null || :
   wait "${heartbeat_pid}" 2>/dev/null || :
+fi
+stdout_filter_rc=0
+stderr_filter_rc=0
+wait "${stdout_filter_pid}" || stdout_filter_rc=$?
+wait "${stderr_filter_pid}" || stderr_filter_rc=$?
+if (( stdout_filter_rc != 0 )); then
+  warn "Gradle stdout filter exited non-zero (${stdout_filter_rc})."
+fi
+if (( stderr_filter_rc != 0 )); then
+  warn "Gradle stderr filter exited non-zero (${stderr_filter_rc})."
+fi
+stream_rc=$stdout_filter_rc
+(( stream_rc == 0 )) && stream_rc=$stderr_filter_rc
+if (( rc == 0 && stream_rc != 0 )); then
+  rc=$stream_rc
 fi
 rm -f -- "${stamp_file}" 2>/dev/null || :
 
