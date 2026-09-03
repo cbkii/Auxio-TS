@@ -105,11 +105,11 @@ class BootReceiver : BroadcastReceiver() {
         }
 
         // Full-player boot must initialise the one canonical playback/library service even when
-        // autoplay is disabled. START_ID_BOOT keeps initialisation separate from playback policy:
-        // PlaybackServiceFragment restores paused when autoplay is off and may restore playback when
-        // it is on. MainActivity below is presentation-only because Android 10+ may block background
-        // activity starts. Android 15+ also restricts starting mediaPlayback foreground services
-        // from BOOT_COMPLETED for apps targeting API 35+, so this remains fail-open.
+        // autoplay is disabled. START_ID_BOOT keeps initialisation separate from playback policy.
+        // It restores paused when autoplay is off and may restore playback when it is on.
+        // MainActivity below is presentation-only because Android 10+ may block background starts.
+        // Android 15+ also restricts starting mediaPlayback foreground services from BOOT_COMPLETED
+        // for apps targeting API 35+, so this remains fail-open.
         if (BootLaunchPolicy.shouldStartCanonicalServiceDirectly(launchRoute)) {
             journal.log(
                 DiagnosticJournal.CAT_BOOT,
