@@ -305,29 +305,36 @@ tasks.register("verifyCriticalDependencyResolution") {
             "androidx.recyclerview:recyclerview": recyclerViewVersion,
             "androidx.viewpager2:viewpager2": viewPager2Version,
         ]
-        // Resolve only the two external AndroidX components under test. Filtering by component
-        // keeps local Android projects out of artifact selection, avoiding AGP's multiple-artifact
-        // ambiguity while still validating the versions actually selected for release runtime.
-        def criticalArtifacts = configurations.releaseRuntimeClasspath.incoming.artifactView {
-            componentFilter { id ->
-                id instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier &&
-                    expected.containsKey("${id.group}:${id.module}")
+        // Both contracts are direct releaseRuntimeClasspath dependencies. Validate the selected
+        // component on each first-level dependency edge: this observes conflict/force/substitution
+        // results without resolving local-project artifacts or relying on nullable component
+        // metadata from AGP's variant graph.
+        def resolved = [:]
+        def observedCriticalEdges = []
+        configurations.releaseRuntimeClasspath.incoming.resolutionResult.root.dependencies.each { dependency ->
+            if (dependency instanceof org.gradle.api.artifacts.result.ResolvedDependencyResult &&
+                dependency.requested instanceof org.gradle.api.artifacts.component.ModuleComponentSelector) {
+                def requested = dependency.requested
+                def coordinate = "${requested.group}:${requested.module}"
+                if (expected.containsKey(coordinate)) {
+                    def selectedId = dependency.selected.id
+                    observedCriticalEdges <<
+                        "${requested.displayName} -> ${selectedId.displayName} (${selectedId.class.simpleName})"
+                    if (selectedId instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier) {
+                        resolved[coordinate] = selectedId.version
+                    }
+                }
             }
-        }.artifacts.artifacts
-        def resolved = [:].withDefault { new LinkedHashSet() }
-        criticalArtifacts.each { artifact ->
-            def id = artifact.id.componentIdentifier
-            resolved["${id.group}:${id.module}"].add(id.version)
         }
         expected.each { coordinate, expectedVersion ->
-            def actualVersions = resolved[coordinate]
-            if (actualVersions != ([expectedVersion] as Set)) {
-                def actual = actualVersions ? actualVersions.join(", ") : "missing"
+            def actualVersion = resolved[coordinate]
+            if (actualVersion != expectedVersion) {
+                def observed = observedCriticalEdges ? observedCriticalEdges.join("; ") : "none"
                 throw new GradleException(
-                    "Critical dependency drift: ${coordinate} expected ${expectedVersion}, resolved ${actual}"
+                    "Critical dependency drift: ${coordinate} expected ${expectedVersion}, resolved ${actualVersion ?: 'missing'}; observed critical root edges: ${observed}"
                 )
             }
-            println "Critical dependency OK: ${coordinate}:${expectedVersion}"
+            println "Critical dependency OK: ${coordinate}:${actualVersion}"
         }
     }
 }
