@@ -305,9 +305,15 @@ tasks.register("verifyCriticalDependencyResolution") {
             "androidx.recyclerview:recyclerview": recyclerViewVersion,
             "androidx.viewpager2:viewpager2": viewPager2Version,
         ]
-        def resolved = configurations.releaseRuntimeClasspath.resolvedConfiguration.resolvedArtifacts
-            .collectEntries { artifact ->
-                ["${artifact.moduleVersion.id.group}:${artifact.name}", artifact.moduleVersion.id.version]
+        // Inspect resolved components rather than resolved artifacts. Android library project
+        // dependencies publish multiple artifact types from one runtime variant, so asking Gradle
+        // for every artifact without an artifact type is ambiguous under AGP 9 even though the
+        // runtime dependency graph itself is valid.
+        def resolved = configurations.releaseRuntimeClasspath.incoming.resolutionResult.allComponents
+            .findAll { component -> component.moduleVersion != null }
+            .collectEntries { component ->
+                def moduleVersion = component.moduleVersion
+                ["${moduleVersion.group}:${moduleVersion.name}", moduleVersion.version]
             }
         expected.each { coordinate, expectedVersion ->
             def actualVersion = resolved[coordinate]
