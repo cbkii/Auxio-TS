@@ -41,7 +41,14 @@ def one(pattern: str, text: str, label: str) -> str:
     if len(matches) != 1:
         fail(f"{label}: expected exactly one authoritative version, found {len(matches)}")
     value = matches[0]
-    return value if isinstance(value, str) else value[0]
+    if isinstance(value, str):
+        if not value:
+            fail(f"{label}: authoritative version capture is empty")
+        return value
+    captures = [part for part in value if part]
+    if len(captures) != 1:
+        fail(f"{label}: expected exactly one non-empty version capture, found {len(captures)}")
+    return captures[0]
 
 
 def variable(file_name: str, name: str) -> str:
