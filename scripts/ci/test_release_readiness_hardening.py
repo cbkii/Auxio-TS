@@ -305,6 +305,10 @@ def install_phase_release_gh(fakebin: Path, *, publish_phase: str, assets: str) 
         "phase = os.environ.get('RELEASE_REFRESH_PHASE', '')\n"
         f"publish_phase = {publish_phase!r}\n"
         "if '--method' in sys.argv and 'DELETE' in sys.argv:\n"
+        "    marker = os.environ.get('DELETE_MARKER')\n"
+        "    if marker:\n"
+        "        with open(marker, 'w', encoding='utf-8') as handle:\n"
+        "            handle.write('called')\n"
         "    raise SystemExit(91)\n"
         "draft = phase != publish_phase\n"
         "release = {'id': 101, 'tag_name': 'v6.6.0', 'draft': draft, "
@@ -344,6 +348,7 @@ def test_publication_transition_delete_guard(root: Path) -> None:
     replace.write_text("artifact.apk\n", encoding="utf-8")
     env = upload_env(case, fakebin, uploads, replace)
     env["REPLACE"] = "true"
+    env["DELETE_MARKER"] = str(delete_marker)
     result = run(["bash", str(UPLOAD)], cwd=REPO, env=env, should_pass=False)
     check("already published before deleting artifact.apk" in result.stderr, "publication transition before delete was not rejected at the semantic mutation boundary")
     check(not delete_marker.exists(), "publication transition guard issued DELETE after the release became published")
