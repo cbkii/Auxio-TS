@@ -159,6 +159,8 @@ exec 3> >(
 )
 stdout_filter_pid=$!
 exec 4> >(
+  # Do not retain the stdout filter's writer descriptor in this sibling process.
+  exec 3>&-
   while IFS= read -r line || [[ -n ${line:-} ]]; do
     date +%s > "${stamp_file}"
     printf '%s\n' "$line" >&2
@@ -181,16 +183,18 @@ if [[ -n ${heartbeat_pid:-} ]] && kill -0 "${heartbeat_pid}" 2>/dev/null; then
   kill -TERM "${heartbeat_pid}" 2>/dev/null || :
   wait "${heartbeat_pid}" 2>/dev/null || :
 fi
-stream_rc=0
-if ! wait "${stdout_filter_pid}"; then
-  stream_rc=$?
-  warn "Gradle stdout filter exited non-zero (${stream_rc})."
+stdout_filter_rc=0
+stderr_filter_rc=0
+wait "${stdout_filter_pid}" || stdout_filter_rc=$?
+wait "${stderr_filter_pid}" || stderr_filter_rc=$?
+if (( stdout_filter_rc != 0 )); then
+  warn "Gradle stdout filter exited non-zero (${stdout_filter_rc})."
 fi
-if ! wait "${stderr_filter_pid}"; then
-  filter_rc=$?
-  (( stream_rc == 0 )) && stream_rc=$filter_rc
-  warn "Gradle stderr filter exited non-zero (${filter_rc})."
+if (( stderr_filter_rc != 0 )); then
+  warn "Gradle stderr filter exited non-zero (${stderr_filter_rc})."
 fi
+stream_rc=$stdout_filter_rc
+(( stream_rc == 0 )) && stream_rc=$stderr_filter_rc
 if (( rc == 0 && stream_rc != 0 )); then
   rc=$stream_rc
 fi
