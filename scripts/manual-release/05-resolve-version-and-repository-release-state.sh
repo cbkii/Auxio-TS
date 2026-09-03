@@ -22,8 +22,9 @@ api_read() {
     if timeout 60s gh api "$@" > "${output}.tmp"; then
       mv "${output}.tmp" "${output}"
       return 0
+    else
+      rc=$?
     fi
-    rc=$?
     rm -f -- "${output}.tmp"
     if ((attempt < 3)); then
       echo "::warning::GitHub read failed (attempt ${attempt}/3); retrying." >&2
@@ -83,9 +84,6 @@ if [[ "${preliminary_mode}" == repair_existing_release ]]; then
   else
     selected_parent="$(git rev-parse "${selected_tag_sha}^" 2>/dev/null || true)"
     if [[ "${selected_parent}" == "${source_sha}" ]]; then
-      # A create transaction may have produced a release-metadata commit and pushed its tag
-      # before the final dev fast-forward. This is the only behind-dev automatic-resume shape
-      # that is safe to recognise without explicit user intent.
       selected_tag_relation="source_parent"
     else
       selected_tag_relation="stale"
@@ -123,10 +121,6 @@ case "${release_count}" in
         echo "::error::Release ID ${release_id} did not resolve back to ${release_tag}." >&2
         exit 1
       }
-
-    # Refresh the selected target's draft classification from its direct release read before the
-    # final plan. If publication changed since the paginated index snapshot, the final resolver
-    # must see that transition and either choose a different action or fail the consistency gate.
     target_draft="$(jq -r '.draft' "${target_release}")"
     awk -F '\t' -v tag="${release_tag}" -v draft="${target_draft}" '
       $2 == tag { if (draft == "true") print $2; next }
