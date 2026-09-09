@@ -1,66 +1,77 @@
 # Architecture
 
-This document is the canonical high-level ownership and integration-boundary guide. Detailed source and startup decisions remain in the current architecture references linked from [docs/README.md](README.md).
+This document is the canonical high-level ownership and integration-boundary guide.
 
 ## Runtime ownership
 
-Auxio-TS has one playback authority:
+Auxio-TS has one playback authority in every distribution variant:
 
 - `AuxioService` and its playback fragments own playback lifecycle;
-- one canonical queue/state path owns ordering and restoration;
-- one MediaSession exposes Android transport state;
+- one `PlaybackStateManager`/canonical queue path owns ordering and restoration;
+- one MediaSession exposes transport state;
 - one notification path publishes playback state;
 - one audio-focus path arbitrates audio ownership.
 
-Stock-compatible services, receivers, widgets and activities delegate into these authorities. They must not create another player, queue, MediaSession, notification or audio-focus owner.
+Compatibility activities, aliases, services, receivers and widgets delegate into these authorities. They must not create another player, queue, MediaSession, notification or audio-focus owner.
+
+## Distribution boundaries
+
+| Variant | Identity | Compatibility boundary |
+| --- | --- | --- |
+| `standard` | `org.oxycblt.auxio` | Neutral Android app. `TOPWAY_COMPAT_ENABLED=false`; no Topway/DoFun-only components or dependencies. |
+| `topwayTwMedia` | `com.tw.media` | Primary installable TS18/DoFun Track-A lane. |
+| `topwayTwMusic` | `com.tw.music` | Internal exact-package Track-A build; public only when enclosed by the approved systemless Magisk module. |
+
+`app/src/main` is shared neutral core. `app/src/topwayCompat` is attached only to the two Topway variants and owns the stock-compatible activity/service/widget/boot/overlay manifest additions. Package-specific resource/provider authorities live in the corresponding variant source sets. Topway-only dependencies must not leak into Standard.
+
+`startup-benchmark` mirrors all three identities. API 29 is the hosted runtime-compatibility target; profile-generation APIs may use newer managed devices where required by AndroidX.
 
 ## Authority boundaries
 
 | Authority | Owns | Does not own |
 | --- | --- | --- |
-| Android framework | lifecycle, MediaSession/MediaBrowser, media buttons, audio focus, notifications and storage APIs | Topway/DoFun launcher policy, MCU/CAN, DSP/radio or root privilege |
-| Auxio-TS core | library, queue, playback, UI and app state | protected stock identity or vendor-global state |
-| Track A compatibility | bounded launcher/component, broadcast, widget and command translation inside `com.tw.media` | a second playback stack or vendor service emulation |
-| DoFun/Topway firmware | launcher selection, vendor widgets and observed device services | Auxio queue or MediaSession authority |
-| MCU/CAN and DSP/radio | vehicle and audio-hardware state | Android app playback architecture |
-| Root/Magisk tooling | explicitly approved storage and diagnostic operations | signer, shared UID, platform privileges or stock-package replacement |
-| Track C LSPosed bridge | optional, fail-open translation inside genuine stock `com.tw.music` | Auxio runtime ownership, DoFun scope or system-wide hooks |
+| Android framework | lifecycle, MediaSession/MediaBrowser, media buttons, audio focus, notifications, storage APIs | Topway/DoFun launcher policy, MCU/CAN, DSP/radio, root privilege |
+| Auxio core | library, queue, playback, UI/app state | protected stock signer/UID or vendor-global state |
+| Track A | bounded package/component, broadcast, widget and command translation in Topway variants | second playback stack or platform/vendor authority |
+| DoFun/Topway firmware | launcher selection, vendor widgets/services | Auxio queue or MediaSession authority |
+| MCU/CAN and DSP/radio | vehicle/audio-hardware state | Android app playback architecture |
+| Root/Magisk | approved systemless filesystem overlay and bounded diagnostics | platform signing, UID 1000/shared UID, signature permissions, private-vendor authority |
+| Track C LSPosed bridge | optional fail-open translation in genuine stock `com.tw.music` | Auxio runtime ownership, DoFun scope, system-wide hooks or package replacement |
 
-## Library and source-scan authority
+## Exact com.tw.music systemless replacement
 
-A successfully committed library is the normal operating state of the maintained TS18 product. App/activity/service lifecycle events are not source-enumeration authority. In particular, a visible Topway launch or resume must restore cached state rather than silently converting slow hydration into a compatibility-recovery scan.
+`topwayTwMusic` is built internally with application ID `com.tw.music`, but its raw APK is not a distributable. Where exact application identity is required, Manual Release may package that APK into the systemless Magisk module targeting the observed TS18 path:
 
-Source traversal is entered only for a positive source reason: initial/pending source configuration, an explicit user refresh/rescan/retry, a changed source configuration, or an independently enabled source-observation/removable-storage path. Wall-clock age alone is not a source reason. An unchanged advisory fingerprint therefore remains reusable until its observed token changes, the source is explicitly invalidated, the configuration changes, or a forced scan is requested.
+`/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk`
 
-Generated playlists are derived presentation. Enabling them must not alter source identity, source checkpoints or scan authority. Their whole-library compilation stays on the existing optional background coordinator rather than being moved onto a UI getter; it may run after process recreation when the feature is enabled, but it must never become an indexing/source-scan trigger or block the immediate browse/search lane.
+The module must fail closed when the exact target is absent, and it must not delete, rename, disable or write the stock file on the protected partition. Disable/remove + reboot restores the untouched stock view. Overlaying an independently signed APK does **not** make it platform-signed or UID 1000 and does not grant stock signature/private-vendor permissions.
+
+This lane therefore provides exact **package/application identity only**, subject to Android package/signing rules and exact-device validation. It is not a privilege-emulation mechanism.
 
 ## Integration tracks
 
-### Track A — direct app integration
+### Track A - application integration
 
-Track A is primary. Code under `org.oxycblt.auxio.headunit.topway` and thin `com.tw.music` component wrappers is compiled into the one `com.tw.media` product. It uses public Android surfaces first and isolated observed vendor contracts where justified.
+Topway compatibility source is compiled only into `topwayTwMedia` and `topwayTwMusic`. Public Android surfaces remain preferred; observed vendor contracts are isolated and fail-open where possible. Both variants still delegate playback to the same Auxio core authority.
 
-### Track B — absent
+### Track B - absent
 
-No `com.dofun.variety` module exists. Do not create one unless exact evidence demonstrates a launcher-private gap and a separate architecture decision defines scope, trust, IPC, release, rollback and validation.
+No `com.dofun.variety` module exists. Creating one requires separate exact evidence, scope, trust, IPC, release, rollback and validation approval.
 
-### Track C — optional stock shim
+### Track C - optional stock shim
 
-`lsposed-bridge` is a separately installed optional add-on, statically scoped exactly to genuine stock `com.tw.music`. Installation probing begins only after exact package and main-process routing. The current implementation enables bridge actions only when its fail-safe kill-switch state is `ENABLED`; `UNKNOWN`, unavailable and read-error states leave those actions disabled. Signer fingerprints produced by build/reference checks describe the supplied APKs and are not an independent activation rule. Stock suppression additionally requires a positive bounded Auxio command-admission acknowledgement, while timeout, mismatch and unavailable paths preserve stock behaviour. It is not an Auxio app variant.
+`lsposed-bridge` is separately installed and statically scoped exactly to genuine stock `com.tw.music`. It remains optional, has its own kill-switch/fail-open behaviour and may translate bounded stock integration into the existing Auxio authority. It is neither an application variant nor a substitute for the systemless exact-package lane.
 
-## Source boundaries
+## Library/source authority
 
-- `app/src/main`: core product and main manifest.
-- `app/src/topwayCompat`: thin Kotlin/Java compatibility sources compiled into `main`; production resources and the manifest live in `app/src/main`, with no independent manifest or product flavour.
-- `app/src/test`, `app/src/androidTest`, `app/src/topwayCompatTest`: policy, unit and instrumentation coverage.
-- `musikr`: internal library implementation.
-- `startup-benchmark`: validation-only instrumentation against `com.tw.media`.
-- `lsposed-bridge`: stricter Track-C boundary; see its local `AGENTS.md`.
+A successfully committed library is normal operating state. Activity/service lifecycle is not source-enumeration authority. Source traversal occurs only for a positive source reason: pending/initial configuration, explicit refresh/retry, changed configuration or enabled removable-source observation. Wall-clock age alone is not a source reason.
 
-Generic Android fallback behaviour belongs in pure policy inputs and tests, not a generic application flavour. Package/component fixtures may model a contract; a complete protected-package impersonation APK may not.
+Generated playlists are derived presentation and must not alter source identity, checkpoints, queue authority or trigger source scans. Startup/cache/profile instrumentation must not become a second playback or library authority.
 
 ## Safety and change rules
 
-Preserve API 29 compatibility and API-gate newer behaviour. Keep I/O bounded and off the main thread. Treat notification, RemoteViews, startup, storage scanning and tag parsing as OEM-sensitive.
+Preserve Android 10/API 29 and API-gate newer behaviour. Keep I/O bounded/off-main-thread. Treat startup, RemoteViews, notifications, storage scanning and tag parsing as OEM-sensitive.
 
-Architecture-affecting changes must identify product/module classification, runtime authority impact, evidence status, release implications, validation and rollback. The product expansion gate is defined in root [AGENTS.md](../AGENTS.md).
+Never infer platform signing, UID 1000/shared UID, signature permissions or private-vendor authority from package naming, root, Magisk or LSPosed. Never modify firmware/MCU/CAN or directly mutate protected partitions from this project.
+
+Repository/CI evidence is not exact-device proof. Magisk install/boot/rollback, DoFun fixed-widget selection, ACC behaviour, USB mounts, MCU/CAN/DSP/radio and audible continuity remain **Requires TS18 validation** until captured on the exact unit.
