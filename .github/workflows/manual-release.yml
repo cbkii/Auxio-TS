@@ -1,9 +1,10 @@
 name: Manual Release
 
-# Publication contracts are implemented by bounded scripts/manual-release steps:
-# assembleRelease -> app-release.apk
-# :lsposed-bridge:assembleRelease -> lsposed-api100-bridge.apk
-# The forbidden retired raw asset name topway-twmusic-release.apk is checked before publication.
+# Public artefact matrix:
+# - Standard APK (org.oxycblt.auxio)
+# - TopwayTwMedia APK (com.tw.media)
+# - optional exact-com.tw.music SYSTEMLESS Magisk ZIP (never the raw topwayTwMusic APK)
+# - optional LSPosed Track-C bridge
 
 on:
   workflow_dispatch:
@@ -22,13 +23,23 @@ on:
         required: true
         default: false
         type: boolean
-      include_app_apk:
-        description: Include the maintained Auxio-TS com.tw.media APK (recommended)
+      include_standard_apk:
+        description: Include the Standard org.oxycblt.auxio APK
         required: true
         default: true
         type: boolean
+      include_topway_twmedia_apk:
+        description: Include the maintained TS18 com.tw.media APK
+        required: true
+        default: true
+        type: boolean
+      include_topway_twmusic_magisk:
+        description: Include the systemless exact-com.tw.music Magisk ZIP; use only where exact identity is required
+        required: true
+        default: false
+        type: boolean
       include_lsposed_bridge_apk:
-        description: Opt in to the optional legacy com.tw.music LSPosed Track-C bridge
+        description: Opt in to the optional genuine-stock com.tw.music LSPosed Track-C bridge
         required: true
         default: false
         type: boolean
@@ -38,7 +49,7 @@ on:
         default: false
         type: boolean
       replace_existing_assets:
-        description: When repairing a draft release, replace complete existing APK/checksum/metadata sets
+        description: When repairing a draft release, replace complete existing asset/checksum/metadata sets
         required: true
         default: false
         type: boolean
@@ -56,7 +67,6 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 90
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -75,7 +85,9 @@ jobs:
         id: selection
         shell: bash
         env:
-          INCLUDE_APP: ${{ inputs.include_app_apk }}
+          INCLUDE_STANDARD: ${{ inputs.include_standard_apk }}
+          INCLUDE_TOPWAY_TWMEDIA: ${{ inputs.include_topway_twmedia_apk }}
+          INCLUDE_TOPWAY_TWMUSIC_MAGISK: ${{ inputs.include_topway_twmusic_magisk }}
           INCLUDE_LSPOSED_BRIDGE: ${{ inputs.include_lsposed_bridge_apk }}
           PUBLISH_DEBUG_APKS: ${{ inputs.publish_debug_apks }}
         run: bash scripts/manual-release/03-select-maintained-release-assets.sh
@@ -99,7 +111,7 @@ jobs:
         id: asset_plan
         shell: bash
         env:
-          TOOL: ${{ steps.tooling.outputs.tools_dir }}/release-orchestrator.py
+          ASSET_TOOL: ${{ steps.tooling.outputs.tools_dir }}/release-asset-matrix.py
           RELEASE_MODE: ${{ steps.plan.outputs.effective_mode }}
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
           SELECTED_FILE: ${{ steps.selection.outputs.selected_file }}
@@ -181,10 +193,11 @@ jobs:
           VERSION_CODE: ${{ steps.metadata.outputs.version_code }}
           RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
           BUILD_VARIANTS_FILE: ${{ steps.asset_plan.outputs.build_variants_file }}
-          BUILD_APK_NAMES_FILE: ${{ steps.asset_plan.outputs.build_apk_names_file }}
+          BUILD_ASSET_NAMES_FILE: ${{ steps.asset_plan.outputs.build_asset_names_file }}
           UPLOAD_NAMES_FILE: ${{ steps.asset_plan.outputs.upload_names_file }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
           TOOLS_DIR: ${{ steps.tooling.outputs.tools_dir }}
+          ASSET_TOOL: ${{ steps.tooling.outputs.tools_dir }}/release-asset-matrix.py
           ASSET_PLAN_FILE: ${{ steps.asset_plan.outputs.plan_file }}
           RELEASE_PLAN_FILE: ${{ steps.plan.outputs.plan_file }}
           NEEDS_SIGNING: ${{ steps.asset_plan.outputs.needs_signing }}
