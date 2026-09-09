@@ -1,112 +1,131 @@
 #!/usr/bin/env bash
-# Repository-owned guardrail for the Auxio-TS single-product architecture.
+# Repository-owned guardrail for the Auxio-TS three-variant architecture.
 set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd -- "$repo_root"
 fail() { printf 'product contract: %s\n' "$*" >&2; exit 1; }
 contains() { grep -Fq -- "$2" "$1" || fail "$1 lacks required contract: $2"; }
-absent() { if grep -Fq -- "$2" "$1"; then fail "$1 contains retired contract: $2"; fi; }
+absent() { if grep -Fq -- "$2" "$1"; then fail "$1 contains forbidden contract: $2"; fi; }
 
 required=(
   app/build.gradle
   app/src/main/AndroidManifest.xml
+  app/src/topwayCompat/AndroidManifest.xml
   startup-benchmark/build.gradle
-  settings.gradle
-  lsposed-bridge/build.gradle
-  lsposed-bridge/src/main/resources/META-INF/xposed/scope.list
+  scripts/package-topway-twmusic-magisk-module.sh
   .github/workflows/android.yml
   .github/workflows/lint.yml
   .github/workflows/manual-release.yml
+  scripts/release-orchestrator.py
   scripts/ci-scope.sh
   scripts/check-ts18-installed-topway-media.sh
 )
 for path in "${required[@]}"; do [[ -s $path ]] || fail "required file missing: $path"; done
 
-contains app/build.gradle 'namespace "org.oxycblt.auxio"'
+# Build identity and isolation.
+contains app/build.gradle 'flavorDimensions += "distribution"'
+contains app/build.gradle 'standard {'
+contains app/build.gradle 'topwayTwMedia {'
+contains app/build.gradle 'topwayTwMusic {'
 contains app/build.gradle 'applicationId "com.tw.media"'
+contains app/build.gradle 'applicationId "com.tw.music"'
+contains app/build.gradle 'TOPWAY_COMPAT_ENABLED", "false"'
 contains app/build.gradle 'TOPWAY_COMPAT_ENABLED", "true"'
-contains app/build.gradle 'java.srcDirs += ["src/topwayCompat/java"]'
-contains app/build.gradle 'kotlin.srcDirs += ["src/topwayCompat/java", "src/topwayCompat/kotlin"]'
-contains startup-benchmark/build.gradle 'TARGET_PACKAGE", '\''"com.tw.media"'\'''
-for token in flavorDimensions productFlavors 'applicationId "com.tw.music"' 'topwayTwMusic' 'topwayTwMedia'; do
-  absent app/build.gradle "$token"
-done
-for token in flavorDimensions productFlavors topwayTwMusic topwayTwMedia 'org.oxycblt.auxio"'; do
-  absent startup-benchmark/build.gradle "$token"
-done
+contains app/build.gradle 'topwayTwMediaImplementation "androidx.lifecycle:lifecycle-process:'
+contains app/build.gradle 'topwayTwMusicImplementation "androidx.lifecycle:lifecycle-process:'
+absent app/build.gradle 'implementation "androidx.lifecycle:lifecycle-process:'
 
-python3 scripts/check-manifest-alias-target.py app/src/main/AndroidManifest.xml \
+# Topway implementation must be attached only to Topway source sets, never main.
+contains app/build.gradle 'src/topwayCompat/AndroidManifest.xml'
+contains app/build.gradle 'src/topwayCompat/java'
+if grep -Eq '(^|[[:space:]])main[[:space:]]*\{[^}]*topwayCompat' app/build.gradle; then
+  fail 'Topway compatibility sources are injected into main'
+fi
+
+# Standard manifest/resource boundary: no stock-compatible wrappers or DoFun/boot overlay components.
+for token in \
+  'com.tw.music.MusicActivity' \
+  'com.tw.music.MusicService' \
+  'com.tw.music.view.MusicWidgetProvider' \
+  'TopwayMusicCommandReceiver' \
+  'CarOverlayBootReceiver' \
+  'FloatingControlsLauncher'; do
+  absent app/src/main/AndroidManifest.xml "$token"
+  contains app/src/topwayCompat/AndroidManifest.xml "$token"
+done
+python3 scripts/check-manifest-alias-target.py app/src/topwayCompat/AndroidManifest.xml \
   com.tw.music.MusicActivity org.oxycblt.auxio.MainActivity >/dev/null
-contains app/src/main/AndroidManifest.xml 'android:name="com.tw.music.MusicService"'
-contains app/src/main/AndroidManifest.xml 'android:name=".AuxioService"'
-contains app/src/main/AndroidManifest.xml 'android:name="com.tw.music.view.MusicWidgetProvider"'
-contains app/src/main/res/values/donottranslate.xml 'com.tw.media.image.CoverProvider'
-contains app/src/debug/res/values/donottranslate.xml 'com.tw.media.debug.image.CoverProvider'
 
-for retired in \
-  app/src/topwayCompat/AndroidManifest.xml \
-  app/src/topwayTwMusic app/src/topwayTwMusicDebug \
-  app/src/topwayTwMedia app/src/topwayTwMediaDebug; do
-  [[ ! -e $retired ]] || fail "retired application source-set remains: $retired"
+# Provider authorities are package-specific; Standard remains neutral.
+contains app/src/main/res/values/donottranslate.xml 'org.oxycblt.auxio.image.CoverProvider'
+contains app/src/topwayTwMedia/res/values/donottranslate.xml 'com.tw.media.image.CoverProvider'
+contains app/src/topwayTwMusic/res/values/donottranslate.xml 'com.tw.music.image.CoverProvider'
+
+# Benchmark identity mirrors the three variants and keeps API 29 explicit.
+for token in \
+  'standard {' \
+  'topwayTwMedia {' \
+  'topwayTwMusic {' \
+  '"org.oxycblt.auxio"' \
+  '"com.tw.media"' \
+  '"com.tw.music"' \
+  'apiLevel = 29'; do
+  contains startup-benchmark/build.gradle "$token"
 done
 
-workflow_surface=$(mktemp)
+# Canonical CI must use flavour-qualified tasks. Raw exact-package output may be built internally,
+# but publication is exclusively the Magisk ZIP.
+contains .github/workflows/android.yml ':app:assembleStandardDebug'
+contains .github/workflows/android.yml ':app:assembleTopwayTwMediaDebug'
+contains .github/workflows/android.yml ':app:assembleTopwayTwMusicDebug'
+contains .github/workflows/android.yml ':app:connectedStandardDebugAndroidTest'
+contains .github/workflows/android.yml ':app:connectedTopwayTwMediaDebugAndroidTest'
+contains .github/workflows/android.yml ':app:connectedTopwayTwMusicDebugAndroidTest'
+contains .github/workflows/lint.yml ':app:testStandardDebugUnitTest'
+contains .github/workflows/lint.yml ':app:testTopwayTwMediaDebugUnitTest'
+contains .github/workflows/lint.yml ':app:testTopwayTwMusicDebugUnitTest'
+contains .github/workflows/lint.yml ':app:lintStandardDebug'
+contains .github/workflows/lint.yml ':app:lintTopwayTwMediaDebug'
+contains .github/workflows/lint.yml ':app:lintTopwayTwMusicDebug'
+
 release_surface=$(mktemp)
-retired_identity_surface=$(mktemp)
-cleanup() { rm -f -- "$workflow_surface" "$release_surface" "$retired_identity_surface"; }
+cleanup() { rm -f -- "$release_surface"; }
 trap cleanup EXIT
-find .github/workflows -maxdepth 1 -type f -name '*.yml' -print0 | sort -z | xargs -0 cat > "$workflow_surface"
 cat .github/workflows/manual-release.yml scripts/release-orchestrator.py scripts/manual-release/*.sh > "$release_surface"
 
-if grep -Eq ':(assemble|bundle|test|lint|connected[A-Za-z]*|recordRoborazzi|verifyRoborazzi|compareRoborazzi)[A-Za-z]*TopwayTw(Music|Media)' "$workflow_surface"; then
-  fail 'an active workflow still invokes a retired product-flavour task'
-fi
-if grep -Eq 'app/build/outputs/apk/topwayTw(Music|Media)' "$workflow_surface" "$release_surface"; then
-  fail 'an active build or release path still reads a retired flavour APK directory'
-fi
+for token in \
+  'include_standard_apk:' \
+  'include_topway_twmedia_apk:' \
+  'include_topway_twmusic_magisk:' \
+  'include_lsposed_bridge_apk:'; do
+  contains .github/workflows/manual-release.yml "$token"
+done
+absent .github/workflows/manual-release.yml 'include_app_apk:'
+contains "$release_surface" ':app:assembleStandardRelease'
+contains "$release_surface" ':app:assembleTopwayTwMediaRelease'
+contains "$release_surface" ':app:assembleTopwayTwMusicRelease'
+contains "$release_surface" 'package-topway-twmusic-magisk-module.sh'
+contains "$release_surface" 'topway-twmusic-magisk.zip'
 
-# Keep retired distribution task names out of live production/tooling surfaces. Historical evidence,
-# decision records and this guard itself are intentionally outside this narrow inspection scope.
-retired_distribution_token='topwayTwMediaRelease'
-if grep -R -n -F \
-    --exclude='check-product-contracts.sh' \
-    --exclude-dir='evidence' \
-    -- "$retired_distribution_token" \
-    app/src/main .github/workflows scripts > "$retired_identity_surface"; then
-  cat "$retired_identity_surface" >&2
-  fail "active surface still names retired distribution task: $retired_distribution_token"
-else
-  grep_status=$?
-  [[ $grep_status -eq 1 ]] || fail 'unable to inspect active surfaces for retired distribution identity'
+# No release path may upload or name a raw topwayTwMusic APK as a public asset.
+if grep -Eiq 'upload[^\n]*(topway[-_]?twmusic[^\n]*\.apk)|Auxio-TS-[^[:space:]]*topway-twmusic[^[:space:]]*\.apk' "$release_surface"; then
+  fail 'raw topwayTwMusic APK publication path detected'
 fi
 
-contains .github/workflows/android.yml ':app:assembleDebug'
-contains .github/workflows/android.yml ':app:assembleRelease'
-contains .github/workflows/lint.yml ':app:testDebugUnitTest'
-contains .github/workflows/lint.yml ':app:lintDebug'
-contains .github/workflows/manual-release.yml 'include_app_apk:'
-contains .github/workflows/manual-release.yml 'include_lsposed_bridge_apk:'
-python3 - <<'PY'
-import re
-from pathlib import Path
+# Magisk packager is systemless, exact-target and fail-closed.
+packager=scripts/package-topway-twmusic-magisk-module.sh
+contains "$packager" 'system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk'
+contains "$packager" 'STOP: expected TS18 stock com.tw.music target not found'
+contains "$packager" 'does not grant platform signing'
+for destructive in 'rm "$STOCK_APK"' 'mv "$STOCK_APK"' 'pm disable' 'pm uninstall' 'mount -o remount' 'dd if='; do
+  absent "$packager" "$destructive"
+done
 
-workflow = Path('.github/workflows/manual-release.yml').read_text(encoding='utf-8')
-match = re.search(
-    r'(?ms)^      include_lsposed_bridge_apk:\s*\n(?P<body>(?:^        .*\n?)*)',
-    workflow,
-)
-if match is None or re.search(r'(?m)^        default:\s*false\s*$', match.group('body')) is None:
-    raise SystemExit('product contract: include_lsposed_bridge_apk must default to false')
-PY
-contains "$release_surface" ':app:assembleRelease'
-contains "$release_surface" ':lsposed-bridge:assembleRelease'
-absent "$release_surface" ':app:assembleTopwayTwMusicRelease'
-
+# LSPosed remains optional and separate, statically scoped to genuine stock com.tw.music.
 contains settings.gradle "include ':lsposed-bridge'"
 contains settings.gradle "include ':libxposed-api100-stubs'"
 contains lsposed-bridge/build.gradle 'applicationId "org.oxycblt.auxio.ts18bridge"'
-contains lsposed-bridge/build.gradle 'compileOnly(project(":libxposed-api100-stubs"))'
 [[ $(tr -d '\r\n' < lsposed-bridge/src/main/resources/META-INF/xposed/scope.list) == com.tw.music ]] ||
   fail 'LSPosed static scope must be exactly com.tw.music'
 if grep -Fq 'implementation project(":lsposed-bridge")' app/build.gradle; then
@@ -116,4 +135,4 @@ fi
 bash scripts/check-ts18-installed-topway-media.sh --self-test >/dev/null ||
   fail 'TS18 installed-package preflight self-test failed'
 bash scripts/ci-scope.sh --self-test >/dev/null
-printf 'Auxio-TS single-product contracts: PASS\n'
+printf 'Auxio-TS three-variant/systemless package contracts: PASS\n'
