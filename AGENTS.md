@@ -1,66 +1,71 @@
 # Auxio-TS repository engineering authority
 
-This file is the repository-wide authority for engineering work and must be read at the start of every task.
+Read this file before repository work. Explicit user requirements and safety constraints have highest authority; conflicting lower-level documents must be updated rather than silently followed.
 
-## Instruction precedence
+## Product matrix
 
-1. Explicit user requirements and safety constraints.
-2. This root `AGENTS.md`.
-3. A nearer module-local `AGENTS.md`, but only for stricter rules within that directory.
-4. The canonical documents: [product scope](docs/PRODUCT_SCOPE.md), [architecture](docs/ARCHITECTURE.md), [development](docs/DEVELOPMENT.md) and [release policy](docs/RELEASE_WORKFLOW.md).
-5. Current topic guides and runbooks linked from [docs/README.md](docs/README.md).
+Auxio-TS maintains three strictly separated application variants:
 
-Resolve conflicts in favour of the higher authority and update the lower document. Changelogs, evidence, decompilations, generated output, copied vendor files, old prompts, status reports and historical records are non-normative. Consult current architecture before raw evidence.
+- `standard`: normal Auxio identity `org.oxycblt.auxio`; `TOPWAY_COMPAT_ENABLED=false`; no Topway/DoFun-only components or runtime policy.
+- `topwayTwMedia`: installable TS18 lane, application ID `com.tw.media`; contains bounded Topway/DoFun compatibility adapters.
+- `topwayTwMusic`: internal exact-package build, application ID `com.tw.music`; never publish or recommend its raw APK.
 
-## Product and repository areas
+`musikr` is an internal library. `startup-benchmark` mirrors the distribution variants for validation. `lsposed-bridge` is an optional, separately installed Track-C add-on statically scoped exactly to genuine stock `com.tw.music`; `libxposed-api100-stubs` is compile-only.
 
-- **Active product:** `app`, one application installed as `com.tw.media`; namespace `org.oxycblt.auxio`.
-- **Internal library:** `musikr`.
-- **Optional add-on:** `lsposed-bridge`, Track C, static-scoped only to genuine stock `com.tw.music`.
-- **Compile-only support:** `libxposed-api100-stubs`; it must not enter an APK runtime graph.
-- **Validation:** `startup-benchmark`, Android tests, JVM tests, lint and screenshots.
-- **Tooling:** `scripts`, CI/release automation, diagnostics and root-storage support material.
-- **Evidence:** the [curated evidence index](docs/evidence/README.md) and bounded device/contract records; evidence does not set product policy.
-- **Retired:** the generic `standard` app and the exact-package `topwayTwMusic`/`com.tw.music` Auxio app, including their flavours, benchmarks, screenshots and releases.
+## Exact com.tw.music boundary
 
-No Track-B `com.dofun.variety` module exists.
+Where exact package identity is genuinely required, distribute `topwayTwMusic` only inside the repository's systemless Magisk module. The observed TS18 overlay target is `/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk`; the packager must fail closed when that exact stock target is not present.
 
-## Architecture boundaries
+The module must not delete, rename, disable or overwrite the protected stock APK, and must not write directly to `/system`, `/product` or `/vendor`. Disable/remove module + reboot is the rollback model. Magisk filesystem overlay capability does not confer platform signing, shared UID/UID 1000, signature permissions, or private Topway/vendor authority. Never claim otherwise.
 
-Track A is direct integration inside the `com.tw.media` app and is the primary architecture. Track C is the optional LSPosed stock shim. Do not repurpose Track C into a DoFun adapter.
+Raw `topwayTwMusic` APKs are internal build inputs only and must be impossible to select or upload as public release assets.
 
-Preserve exactly one Auxio playback service, queue authority, MediaSession, notification authority and audio-focus owner. Keep Android framework behaviour separate from Topway, DoFun, MCU/CAN, DSP/radio, root and LSPosed authorities. Preserve Android 10/API 29 behaviour.
+## Runtime ownership
 
-Do not add another player, playback service, MediaSession, notification owner, command queue, global audio mode, protected-package mutation, signature spoof, shared UID, platform privilege, vendor-service dependency or Magisk replacement overlay. Never modify or impersonate genuine stock `com.tw.music`.
+Preserve exactly one Auxio playback service/player, canonical queue/PlaybackStateManager, MediaSession, notification authority and audio-focus owner. Variant-specific code may adapt package/component/launcher integration only; it must never fork playback authority.
 
-Keep `com.tw.music.MusicActivity`, `com.tw.music.MusicService` and proven wrapper names as components of `com.tw.media`; component compatibility is not application identity.
+Keep Android framework, Auxio core, Topway/DoFun, MCU/CAN, DSP/radio, root/Magisk and LSPosed authorities separate. Preserve Android 10/API 29 behaviour and API-gate newer APIs.
 
-## Product expansion gate
+Track A is the bounded Topway/DoFun integration in the two Topway variants. Track C remains optional, fail-open and independent. It must not become a second playback stack or imply stock/private privileges. No Track-B `com.dofun.variety` module exists without a separate explicit architecture decision.
 
-Do not add an application flavour or distributable module without an explicit architecture decision that records all of:
+## Source/build isolation
 
-- a demonstrated user need and why policy/DI/tests cannot cover it;
-- product/module classification and runtime ownership;
-- package/component and release policy;
-- safety boundaries and interaction with existing authorities;
-- validation criteria, physical-device evidence status and rollback plan.
+- `app/src/main`: neutral shared core and Standard-compatible manifest/resources.
+- `app/src/topwayCompat`: Topway-only source/resources/manifest overlay, attached only to `topwayTwMedia` and `topwayTwMusic`.
+- package-specific provider/resource overrides belong to their variant source sets.
+- Topway-only dependencies such as `lifecycle-process` belong only to Topway variants.
+- CI, lint, API-29 tests, screenshots and benchmark tasks must use explicit flavour-qualified targets.
+
+Standard must not package Topway activity/service/widget/boot/overlay components. The two Topway variants may expose stock-compatible component names, but component compatibility is not platform identity or signing authority.
+
+## Release policy
+
+Manual Release supports an explicit public asset matrix:
+
+- Standard APK;
+- `topwayTwMedia` / `com.tw.media` APK;
+- optional exact-`com.tw.music` systemless Magisk ZIP only;
+- optional LSPosed Track-C add-on;
+- debug APKs only when explicitly requested.
+
+Never publish a raw `topwayTwMusic` APK. Preserve immutable tag/release, signer, checksum, metadata, source-SHA and bounded recovery contracts.
 
 ## Engineering workflow
 
-Use the current source and repository-owned checks, not stale prompts. Keep changes within the smallest owning boundary and preserve normal playback, scanning, source authority, startup and UI decisions unless the task explicitly changes them.
-
-Run the narrow relevant checks from [development guidance](docs/DEVELOPMENT.md). CI Gradle calls use `scripts/ci-gradle.sh` with explicit single-product tasks. Never claim a check or physical TS18 scenario passed unless it ran against the reported head.
-
-At minimum for product/build-policy work:
+Use current source and repository-owned checks, not stale prompts. Keep changes in the smallest owning boundary. At minimum for product/build/release work run:
 
 ```bash
 bash scripts/ci-scope.sh --self-test
 bash scripts/check-product-contracts.sh
+bash scripts/check-topway-manifest-components.sh
 bash scripts/check-headunit-compat-safety.sh
 bash scripts/check-dofun-topway-compat.sh
 bash scripts/check-manual-release-workflow.sh
+python3 scripts/check-documentation-policy.py
 ```
 
-Use evidence labels consistently: **Observed**, **Inferred**, **Proposed** or **Physically unverified**. Emulator and CI results do not prove exact TS18 launcher, widget, USB, ACC, MCU/CAN, DSP or radio behaviour.
+Run relevant flavour-qualified Gradle build/test/lint/API-29 gates as defined in current workflows. Do not weaken a guard to make CI pass; fix the underlying contract or classify a genuinely stale check.
 
-Before delivery, review the complete diff for generated APKs, logs, reports, credentials, temporary workflows, copied instructions and stale links.
+Use evidence labels consistently: **Observed**, **Inferred**, **Proposed**, **Requires TS18 validation**. CI/emulator success does not prove exact TS18 launcher, widget, USB, ACC, MCU/CAN, DSP/radio, Magisk install/rollback or audible-continuity behaviour.
+
+Before delivery inspect the complete diff for generated APKs, ZIPs, logs, reports, credentials, temporary workflows/patchers and stale policy links.
