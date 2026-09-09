@@ -2,44 +2,57 @@
 
 This document is the canonical product, package, module, support and release matrix for Auxio-TS.
 
-## Product definition
+## Application variants
 
-Auxio-TS is one maintained in-car local-music application installed as `com.tw.media`. Its Kotlin/Java namespace remains `org.oxycblt.auxio`. It targets Android 10/API 29 TS18 and related Topway/DoFun devices while preserving correct Android media behaviour.
+Auxio-TS targets Android 10/API 29 TS18 while retaining a neutral Android lane. The shared Kotlin/Java namespace remains `org.oxycblt.auxio`; distribution identity is explicit:
 
-The app exposes the exported stock-compatible `com.tw.music.MusicActivity` component and bounded wrappers required by supported launchers. These are components of `com.tw.media`; they do not make Auxio-TS the genuine stock `com.tw.music` application.
-
-## Product and module matrix
-
-| Area | Classification | Package/identity | Build and release posture |
+| Variant | Application ID | Topway compatibility | Release posture |
 | --- | --- | --- | --- |
-| `app` | Active production product; Track A | App `com.tw.media`; source namespace `org.oxycblt.auxio`; exported `com.tw.music.MusicActivity` | Debug, release, JVM test, lint, API 29, screenshot and benchmark target. Signed release APK is the normal product artefact. |
-| `musikr` | Internal library | `org.oxycblt.auxio.musikr` namespace | Built and tested as an app dependency; never a separate product. |
-| `lsposed-bridge` | Optional compatibility add-on; Track C | `org.oxycblt.auxio.ts18bridge`; static hook scope exactly `com.tw.music` | Opt-in, separately built, signed and validated. It is not an app flavour and is not selected by default for release. |
-| `libxposed-api100-stubs` | Compile-only support | API stubs only | Compile-only dependency of Track C; no runtime or release artefact. |
-| `startup-benchmark` | Validation infrastructure | Targets `com.tw.media` | Generates profile/emulator evidence; not a product APK. |
-| `scripts`, diagnostics and root-storage/Magisk material | Support tooling | No product identity | Development, validation and bounded device support only; no replacement overlay release. |
-| `docs/evidence` and curated reference records | Evidence/reference | Observed third-party or device facts | Non-normative; no runtime or release authority. |
-| Former `standard` app | Retired | Former `org.oxycblt.auxio` distributable | Must not return. Standard-Android fallback is tested through pure policy, DI and tests. |
-| Former `topwayTwMusic` app | Retired | Former Auxio APK using `com.tw.music` | No Gradle variant, benchmark, screenshot, CI build, upload or release capability. |
+| `standard` | `org.oxycblt.auxio` | Off | Normal signed APK. No Topway/DoFun-only components. |
+| `topwayTwMedia` | `com.tw.media` | On | Maintained installable TS18 signed APK. |
+| `topwayTwMusic` | `com.tw.music` | On | Internal exact-package build only. Raw APK is never a public asset. |
 
-No Track-B `com.dofun.variety` module exists. Creating one requires the expansion gate in root [AGENTS.md](../AGENTS.md) and a separate architecture decision.
+The two Topway variants may expose the stock-compatible `com.tw.music.MusicActivity` alias and bounded wrapper/service/widget components. Those names do not confer stock signing, UID 1000, signature permissions or vendor authority.
 
-## Support and release matrix
+## Exact-package systemless lane
 
-| Artefact or behaviour | Supported | Notes |
+Where exact `com.tw.music` application identity is genuinely required, the internally built `topwayTwMusic` APK may be packaged only into the repository's **systemless Magisk ZIP**. The observed exact TS18 target is `/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk`; packaging/install must fail closed when that target is absent.
+
+The module overlays through Magisk only. It does not mutate the protected stock file. Disabling/removing the module and rebooting is the rollback model. Root/Magisk does not provide platform signing, UID 1000/shared UID, signature permissions or private Topway/vendor authority.
+
+## Other repository areas
+
+| Area | Classification | Identity / authority |
 | --- | --- | --- |
-| Signed Auxio-TS `com.tw.media` APK | Yes | Primary and default product. |
-| Debug Auxio-TS APK | Diagnostics only | Workflow artefact unless explicitly requested for diagnosis. |
-| Signed LSPosed Track-C add-on | Optional | May accompany a manual release only by explicit opt-in. |
-| Raw Auxio `com.tw.music` APK | No | Retired protected-package impersonation lane. |
-| Generic Android app flavour | No | Use policies and tests for fallback behaviour. |
-| Magisk stock-app replacement overlay | No | Diagnostics/root-storage tools do not grant package or platform identity. |
+| `musikr` | Internal library | No separate product authority. |
+| `startup-benchmark` | Validation | Mirrors `standard`, `topwayTwMedia`, `topwayTwMusic`; API 29 is the TS18 runtime-compatibility target. |
+| `lsposed-bridge` | Optional Track-C add-on | `org.oxycblt.auxio.ts18bridge`; statically scoped exactly to genuine stock `com.tw.music`; separate from app variants. |
+| `libxposed-api100-stubs` | Compile-only | Must not enter runtime APK graphs. |
+| scripts/diagnostics/root-storage | Support tooling | No platform/package authority. |
+| evidence/reference | Non-normative evidence | Does not set runtime/release policy. |
 
-## Compatibility status
+No Track-B `com.dofun.variety` module exists.
 
-- **Observed:** DoFun/Topway launchers may address `com.tw.media/com.tw.music.MusicActivity`; the app preserves that contract.
-- **Observed:** the genuine stock `com.tw.music` package can be platform signed and run as UID 1000 on documented devices.
-- **Inferred:** related firmware may share some action, extra and widget contracts, but related devices are precedent rather than exact TS18 proof.
-- **Physically unverified:** every current build still requires device execution for exact launcher selection, fixed-widget, USB, ACC, MCU/CAN, DSP and radio behaviour.
+## Runtime ownership
 
-See [Architecture](ARCHITECTURE.md), [release policy](RELEASE_WORKFLOW.md) and the [single-product decision](decisions/0001-single-product-architecture.md).
+All variants preserve the same single Auxio playback architecture: one player/ExoPlayer, playback service, canonical queue/PlaybackStateManager, MediaSession, notification path and audio-focus owner. Variant code adapts identity and bounded integration only.
+
+## Public release matrix
+
+| Artefact | Supported | Default posture |
+| --- | --- | --- |
+| Standard APK | Yes | Included by Manual Release unless deselected. |
+| `topwayTwMedia` / `com.tw.media` APK | Yes | Included by Manual Release unless deselected. |
+| exact-`com.tw.music` Magisk ZIP | Yes, only where required | Explicit opt-in; systemless only. |
+| raw `topwayTwMusic` APK | **No** | Internal build input only; publication forbidden. |
+| LSPosed Track-C add-on | Optional | Explicit opt-in. |
+| Debug APKs | Diagnostics only | Workflow artefacts unless explicitly published. |
+
+## Evidence status
+
+- **Observed:** exact stock TS18 package path `/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk` is the current Magisk packager target.
+- **Observed:** genuine stock `com.tw.music` may be platform-signed/UID 1000 on captured devices; that authority does not transfer to Auxio builds.
+- **Inferred:** related firmware may share launcher/action/widget contracts; related devices remain precedent rather than exact proof.
+- **Requires TS18 validation:** exact launcher selection, fixed-widget behaviour, USB/ACC runtime, systemless module install/boot/rollback, MCU/CAN, DSP/radio and audible continuity.
+
+See [Architecture](ARCHITECTURE.md), [release policy](RELEASE_WORKFLOW.md) and [TS18 installation constraints](TS18_INSTALLATION_CONSTRAINTS.md). The earlier single-product decision is historical and superseded by this current product authority.
