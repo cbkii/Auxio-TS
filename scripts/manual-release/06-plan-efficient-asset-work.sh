@@ -5,9 +5,10 @@ set -euo pipefail
   echo "::error::Target release state file is missing: ${TARGET_RELEASE_FILE}" >&2
   exit 1
 }
+[[ -x "${ASSET_TOOL}" ]] || { echo "::error::Release asset planner is unavailable: ${ASSET_TOOL}" >&2; exit 1; }
 
 plan_file="${RUNNER_TEMP}/asset-plan.json"
-python3 "${TOOL}" plan-assets \
+python3 "${ASSET_TOOL}" plan-assets \
   --mode "${RELEASE_MODE}" \
   --release-tag "${RELEASE_TAG}" \
   --selected-variants-file "${SELECTED_FILE}" \
@@ -20,18 +21,18 @@ target_exists="$(jq -r 'has("id")' "${TARGET_RELEASE_FILE}")"
 target_draft="$(jq -r 'if has("id") then .draft else true end' "${TARGET_RELEASE_FILE}")"
 upload_count="$(jq '.upload_names | length' "${plan_file}")"
 if [[ "${target_exists}" == true && "${target_draft}" != true && "${upload_count}" -gt 0 ]]; then
-  echo "::error::Release ${RELEASE_TAG} is already published. Published APK/checksum/metadata assets are immutable in Manual Release; create a new patch release instead." >&2
+  echo "::error::Release ${RELEASE_TAG} is already published. Published assets are immutable in Manual Release; create a new patch release instead." >&2
   exit 1
 fi
 
 build_variants="${RUNNER_TEMP}/build-variants.txt"
-build_apk_names="${RUNNER_TEMP}/build-apk-names.txt"
+build_asset_names="${RUNNER_TEMP}/build-asset-names.txt"
 upload_names="${RUNNER_TEMP}/upload-asset-names.txt"
 replace_names="${RUNNER_TEMP}/replace-asset-names.txt"
 verify_names="${RUNNER_TEMP}/verify-asset-names.txt"
 debug_workflow_names="${RUNNER_TEMP}/debug-workflow-asset-names.txt"
 jq -r '.build_variants[]' "${plan_file}" > "${build_variants}"
-jq -r '.build_apk_names[]' "${plan_file}" > "${build_apk_names}"
+jq -r '.build_asset_names[]' "${plan_file}" > "${build_asset_names}"
 jq -r '.upload_names[]' "${plan_file}" > "${upload_names}"
 jq -r '.replace_names[]' "${plan_file}" > "${replace_names}"
 jq -r '.verify_names[]' "${plan_file}" > "${verify_names}"
@@ -39,7 +40,7 @@ jq -r '.debug_workflow_names[]' "${plan_file}" > "${debug_workflow_names}"
 {
   echo "plan_file=${plan_file}"
   echo "build_variants_file=${build_variants}"
-  echo "build_apk_names_file=${build_apk_names}"
+  echo "build_asset_names_file=${build_asset_names}"
   echo "upload_names_file=${upload_names}"
   echo "replace_names_file=${replace_names}"
   echo "verify_names_file=${verify_names}"
