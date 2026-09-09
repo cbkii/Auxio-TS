@@ -126,6 +126,14 @@ jobs:
         shell: bash
         run: python3 ./scripts/ci/test_manual_release_matrix.py
 
+      - name: Run release-readiness hardening contracts
+        shell: bash
+        run: python3 ./scripts/ci/test_release_readiness_hardening.py
+
+      - name: Prove CI Gradle descriptor cleanup
+        shell: bash
+        run: python3 ./scripts/ci/test_ci_gradle_wrapper.py
+
       - name: Run network-free publication transaction mocks
         shell: bash
         run: python3 ./scripts/ci/test_manual_release_transactions.py
