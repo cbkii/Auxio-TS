@@ -16,10 +16,11 @@
     <string name="cdc_wav">Microsoft WAVE</string>
     <string name="cnt_ogg">Ogg %s</string>
 
-    <!-- Pkg Namespace | Dynamic package names -->
-    <string name="pkg_authority_cover">com.tw.media.image.CoverProvider</string>
+    <!-- Pkg Namespace | Standard application authority; Topway flavours override it. -->
+    <string name="pkg_authority_cover">org.oxycblt.auxio.image.CoverProvider</string>
 
-    <!-- Supporter Namespace | Sponsor usernames  -->
+    <!-- Supporter Namespace | Sponsor usernames -->
     <string name="sup_bkkellyh">bkkellyh - $500!</string>
+    <!-- Shared label referenced only by Topway variant manifests/resources. -->
     <string name="info_topway_music_app_name" translatable="false">Music</string>
 </resources>
