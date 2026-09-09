@@ -171,7 +171,10 @@ exec 4> >(
 )
 stderr_filter_pid=$!
 
-"${run_cmd[@]}" >&3 2>&4
+# Duplicate the filter pipes onto the command's normal stdout/stderr, then close the auxiliary
+# descriptors in the launched command. A Gradle descendant that redirects fd 1/2 must not retain
+# fd 3/4 and keep the process-substitution pipes open after the Gradle command itself has returned.
+"${run_cmd[@]}" >&3 2>&4 3>&- 4>&-
 rc=$?
 
 # Close the shell's writer descriptors so the output filters receive EOF, then wait for them before
