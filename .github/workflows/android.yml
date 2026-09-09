@@ -3,8 +3,7 @@ name: Android Build
 on:
   workflow_dispatch:
   push:
-    branches:
-      - dev
+    branches: [dev]
   pull_request:
     branches:
       - dev
@@ -19,233 +18,157 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  scope:
-    name: CI scope
+  build:
+    name: Three-variant build and binary contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      app_build: ${{ steps.scope.outputs.app_build }}
-      compatibility_contracts: ${{ steps.scope.outputs.compatibility_contracts }}
-      api29: ${{ steps.scope.outputs.api29 }}
-      release: ${{ steps.scope.outputs.release }}
-      full: ${{ steps.scope.outputs.full }}
-      changed_count: ${{ steps.scope.outputs.changed_count }}
-      comparison: ${{ steps.scope.outputs.comparison }}
+    timeout-minutes: 120
     steps:
-      - name: Checkout comparison head
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 2
-          submodules: false
-          persist-credentials: false
-
-      - name: Fetch comparison boundary
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PUSH_BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          target=""
-          case "${EVENT_NAME}" in
-            pull_request) target="${PR_BASE_SHA}" ;;
-            push) target="${PUSH_BEFORE_SHA}" ;;
-          esac
-          if [[ -n "${target}" && ! "${target}" =~ ^0+$ ]] && ! git cat-file -e "${target}^{commit}" 2>/dev/null; then
-            git fetch --no-tags --depth=1 origin "${target}" ||
-              echo "::warning::Could not fetch comparison boundary ${target}; classifier will fail open to full CI."
-          fi
-
-      - name: Classify changed files
-        id: scope
-        shell: bash
-        env:
-          CI_EVENT_NAME: ${{ github.event_name }}
-          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          CI_BEFORE_SHA: ${{ github.event.before }}
-          CI_REF_NAME: ${{ github.ref_name }}
-          CI_FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
-        run: bash ./scripts/ci-scope.sh
-
-      - name: Write scope summary
-        shell: bash
-        run: |
-          {
-            echo "## Android Build scope"
-            echo
-            echo "- Comparison: \`${{ steps.scope.outputs.comparison }}\`"
-            echo "- Changed files: \`${{ steps.scope.outputs.changed_count }}\`"
-            echo "- Build Auxio-TS app: \`${{ steps.scope.outputs.app_build }}\`"
-            echo "- Compatibility contracts: \`${{ steps.scope.outputs.compatibility_contracts }}\`"
-            echo "- API 29: \`${{ steps.scope.outputs.api29 }}\`"
-            echo "- Full CI: \`${{ steps.scope.outputs.full }}\`"
-          } >> "${GITHUB_STEP_SUMMARY}"
-
-  api29-runtime-smoke:
-    name: API 29 runtime smoke
-    needs: scope
-    if: needs.scope.outputs.api29 == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    env:
-      AVD_NAME: auxio-api29
-      ANDROID_API: "29"
-      SYSTEM_IMAGE: system-images;android-29;google_apis;x86_64
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 1
           submodules: false
           persist-credentials: false
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
         with:
           distribution: temurin
           java-version: "21"
-
-      - name: Configure isolated Android state
-        shell: bash
-        run: |
-          printf 'ANDROID_USER_HOME=%s\n' "${RUNNER_TEMP}/android-user-home" >> "${GITHUB_ENV}"
-          printf 'ANDROID_AVD_HOME=%s\n' "${RUNNER_TEMP}/android-avd-home" >> "${GITHUB_ENV}"
-
-      - name: Write local.properties for Android SDK
+      - name: Write local.properties
         shell: bash
         run: |
           sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          if [[ -z "${sdk_dir}" ]]; then
-            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
-            exit 1
-          fi
-          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+          [[ -n "$sdk_dir" ]] || { echo '::error::Android SDK unavailable'; exit 1; }
+          printf 'sdk.dir=%s\n' "$sdk_dir" > local.properties
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
         with:
-          cache-read-only: true
-
-      - name: Ensure native and emulator tools are present
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      - name: Ensure native tools
         shell: bash
         run: |
-          missing=()
-          command -v ninja >/dev/null 2>&1 || missing+=(ninja-build)
-          command -v unzip >/dev/null 2>&1 || missing+=(unzip)
-          if ((${#missing[@]})); then
-            sudo apt-get update
-            sudo apt-get install -y "${missing[@]}"
-          fi
+          if ! command -v ninja >/dev/null 2>&1; then sudo apt-get update && sudo apt-get install -y ninja-build; fi
+      - name: Prepare CI environment
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+      - name: Validate source contracts before build
+        run: |
+          bash ./scripts/ci-scope.sh --self-test
+          bash ./scripts/check-product-contracts.sh
+          bash ./scripts/check-topway-manifest-components.sh
+          bash ./scripts/check-headunit-compat-safety.sh
+          bash ./scripts/check-dofun-topway-compat.sh
+      - name: Build all maintained debug variants
+        env:
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-debug.log
+        run: |
+          bash ./scripts/ci-gradle.sh --warning-mode all \
+            :app:assembleStandardDebug \
+            :app:assembleTopwayTwMediaDebug \
+            :app:assembleTopwayTwMusicDebug
+      - name: Validate debug package/component isolation
+        run: bash ./scripts/check-built-topway-apks.sh
+      - name: Compile all release variants
+        env:
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-release.log
+        run: |
+          bash ./scripts/ci-gradle.sh --warning-mode all \
+            :app:assembleStandardRelease \
+            :app:assembleTopwayTwMediaRelease \
+            :app:assembleTopwayTwMusicRelease
+      - name: Validate native ABI and startup contracts on release outputs
+        shell: bash
+        run: |
+          for variant in standard topwayTwMedia topwayTwMusic; do
+            dir="app/build/outputs/apk/${variant}/release"
+            mapfile -t apks < <(find "$dir" -maxdepth 1 -type f -name '*.apk' | sort)
+            ((${#apks[@]} >= 1)) || { echo "::error::No ${variant} release APK produced"; exit 1; }
+            apk=${apks[0]}
+            bash ./scripts/check-native-abi-contracts.sh "$apk"
+            bash ./scripts/check-release-diagnostics-boundary.sh "$apk"
+          done
+          media_apk=$(find app/build/outputs/apk/topwayTwMedia/release -maxdepth 1 -type f -name '*.apk' -print -quit)
+          bash ./scripts/check-startup-performance-contracts.sh "$media_apk"
+      - name: Upload build failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android-build-failure-reports
+          path: |
+            app/build/reports/**
+            app/build/outputs/**
+            build/reports/problems/**
+            ${{ runner.temp }}/android-build-*.log
+          if-no-files-found: ignore
+          retention-days: 7
 
+  api29-runtime-smoke:
+    name: Android 10 API 29 runtime smoke - all variants
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      AVD_NAME: auxio-api29
+      ANDROID_API: "29"
+      SYSTEM_IMAGE: system-images;android-29;google_apis;x86_64
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 1
+          submodules: false
+          persist-credentials: false
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Configure Android state
+        shell: bash
+        run: |
+          echo "ANDROID_USER_HOME=${RUNNER_TEMP}/android-user-home" >> "$GITHUB_ENV"
+          echo "ANDROID_AVD_HOME=${RUNNER_TEMP}/android-avd-home" >> "$GITHUB_ENV"
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          [[ -n "$sdk_dir" ]] || exit 1
+          printf 'sdk.dir=%s\n' "$sdk_dir" > local.properties
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: true
+      - name: Install API 29 emulator image
+        shell: bash
+        run: |
+          if ! command -v ninja >/dev/null 2>&1; then sudo apt-get update && sudo apt-get install -y ninja-build; fi
           sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
           sdkmanager_bin="${sdk_root}/cmdline-tools/latest/bin/sdkmanager"
           avdmanager_bin="${sdk_root}/cmdline-tools/latest/bin/avdmanager"
-          [[ -x "${sdkmanager_bin}" ]] || sdkmanager_bin="$(command -v sdkmanager || true)"
-          [[ -x "${avdmanager_bin}" ]] || avdmanager_bin="$(command -v avdmanager || true)"
-          [[ -n "${sdkmanager_bin}" && -x "${sdkmanager_bin}" ]] || { echo "::error::sdkmanager was not found."; exit 1; }
-          [[ -n "${avdmanager_bin}" && -x "${avdmanager_bin}" ]] || { echo "::error::avdmanager was not found."; exit 1; }
-
-          set +e
-          yes | "${sdkmanager_bin}" --licenses >/dev/null 2>&1
-          licence_status=${PIPESTATUS[1]}
-          set -e
-          if [[ "${licence_status}" -ne 0 ]]; then
-            echo "::error::Android SDK licence acceptance failed with status ${licence_status}."
-            exit "${licence_status}"
-          fi
-          "${sdkmanager_bin}" --install \
-            "platform-tools" \
-            "emulator" \
-            "platforms;android-${ANDROID_API}" \
-            "${SYSTEM_IMAGE}"
-
-          emulator_bin="${sdk_root}/emulator/emulator"
-          [[ -x "${emulator_bin}" ]] || emulator_bin="$(command -v emulator || true)"
-          [[ -n "${emulator_bin}" && -x "${emulator_bin}" ]] || { echo "::error::Android emulator binary was not found."; exit 1; }
-          printf '%s\n' "${sdk_root}/platform-tools" >> "${GITHUB_PATH}"
-          printf 'AVDMANAGER_BIN=%s\n' "${avdmanager_bin}" >> "${GITHUB_ENV}"
-          printf 'EMULATOR_BIN=%s\n' "${emulator_bin}" >> "${GITHUB_ENV}"
-
-      - name: Create API 29 emulator
+          [[ -x "$sdkmanager_bin" ]] || sdkmanager_bin=$(command -v sdkmanager)
+          [[ -x "$avdmanager_bin" ]] || avdmanager_bin=$(command -v avdmanager)
+          set +e; yes | "$sdkmanager_bin" --licenses >/dev/null 2>&1; rc=${PIPESTATUS[1]}; set -e; [[ $rc -eq 0 ]] || exit "$rc"
+          "$sdkmanager_bin" --install platform-tools emulator "platforms;android-${ANDROID_API}" "$SYSTEM_IMAGE"
+          echo "AVDMANAGER_BIN=$avdmanager_bin" >> "$GITHUB_ENV"
+          echo "EMULATOR_BIN=${sdk_root}/emulator/emulator" >> "$GITHUB_ENV"
+          echo "${sdk_root}/platform-tools" >> "$GITHUB_PATH"
+      - name: Create and boot API 29 emulator
         shell: bash
         run: |
-          if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
-          mkdir -p "${ANDROID_USER_HOME}" "${ANDROID_AVD_HOME}"
-          touch "${ANDROID_USER_HOME}/repositories.cfg"
-          avd_log="${RUNNER_TEMP}/avdmanager-create.log"
-          set +e
-          printf 'no\n' | "${AVDMANAGER_BIN}" create avd \
-            --force \
-            -n "${AVD_NAME}" \
-            -k "${SYSTEM_IMAGE}" 2>&1 | tee "${avd_log}"
-          pipeline_status=("${PIPESTATUS[@]}")
-          set -e
-          avd_status="${pipeline_status[1]}"
-          if [[ "${avd_status}" -ne 0 ]]; then
-            echo "::error::avdmanager failed with status ${avd_status}."
-            exit "${avd_status}"
-          fi
-          avd_names="$("${EMULATOR_BIN}" -list-avds 2>&1 | tee -a "${avd_log}")"
-          grep -Fxq "${AVD_NAME}" <<<"${avd_names}" || { echo "::error::${AVD_NAME} is not runnable."; exit 1; }
-
-      - name: Start emulator and wait for Android 10
-        shell: bash
-        run: |
-          emulator_log="${RUNNER_TEMP}/api29-emulator.log"
-          printf 'Launching %s at %s\n' "${AVD_NAME}" "$(date -u +%FT%TZ)" > "${emulator_log}"
-          nohup "${EMULATOR_BIN}" \
-            -avd "${AVD_NAME}" \
-            -no-window \
-            -no-audio \
-            -no-boot-anim \
-            -no-snapshot-save \
-            -memory 2048 \
-            -partition-size 2048 \
-            -gpu swiftshader_indirect \
-            -camera-back none \
-            -camera-front none \
-            >>"${emulator_log}" 2>&1 &
-          echo "$!" > "${RUNNER_TEMP}/api29-emulator.pid"
-
-          adb start-server >>"${emulator_log}" 2>&1 || { echo "::error::adb server failed to start."; exit 1; }
-          device_ready=0
-          for attempt in $(seq 1 120); do
-            if adb get-state 2>/dev/null | grep -Fxq device; then device_ready=1; break; fi
-            sleep 2
-          done
-          [[ "${device_ready}" -eq 1 ]] || { echo "::error::API 29 emulator did not become available to adb."; tail -n 200 "${emulator_log}" || true; exit 1; }
-
-          booted=0
-          for attempt in $(seq 1 180); do
-            if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; then booted=1; break; fi
-            sleep 2
-          done
-          [[ "${booted}" -eq 1 ]] || { echo "::error::API 29 emulator did not finish booting."; tail -n 200 "${emulator_log}" || true; exit 1; }
-
+          [[ ! -e /dev/kvm ]] || sudo chmod 666 /dev/kvm
+          mkdir -p "$ANDROID_USER_HOME" "$ANDROID_AVD_HOME"; touch "$ANDROID_USER_HOME/repositories.cfg"
+          printf 'no\n' | "$AVDMANAGER_BIN" create avd --force -n "$AVD_NAME" -k "$SYSTEM_IMAGE"
+          nohup "$EMULATOR_BIN" -avd "$AVD_NAME" -no-window -no-audio -no-boot-anim -no-snapshot-save -memory 2048 -partition-size 2048 -gpu swiftshader_indirect -camera-back none -camera-front none >"$RUNNER_TEMP/api29-emulator.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/api29-emulator.pid"
+          for _ in $(seq 1 120); do adb get-state 2>/dev/null | grep -Fxq device && break; sleep 2; done
+          adb get-state | grep -Fxq device || { tail -n 200 "$RUNNER_TEMP/api29-emulator.log"; exit 1; }
+          for _ in $(seq 1 180); do [[ $(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r') == 1 ]] && break; sleep 2; done
+          [[ $(adb shell getprop ro.build.version.sdk | tr -d '\r') == 29 ]] || exit 1
           adb shell input keyevent 82
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
-          sdk_value="$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')"
-          [[ "${sdk_value}" == "${ANDROID_API}" ]] || { echo "::error::Expected Android API ${ANDROID_API}, got ${sdk_value:-<empty>}."; exit 1; }
-
       - name: Prepare CI environment
-        shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
-
-      - name: Run API 29 compatibility and Room migration tests
-        shell: bash
+      - name: Run API 29 compatibility and migrations for every distribution lane
         env:
           AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/api29-gradle.log
         run: |
           bash ./scripts/ci-gradle.sh \
-            :app:connectedDebugAndroidTest \
+            :app:connectedStandardDebugAndroidTest \
+            :app:connectedTopwayTwMediaDebugAndroidTest \
+            :app:connectedTopwayTwMusicDebugAndroidTest \
             :musikr:connectedDebugAndroidTest
-
-      - name: Upload API 29 failure reports
+      - name: Upload API 29 failure evidence
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -255,210 +178,26 @@ jobs:
             app/build/outputs/androidTest-results/**
             musikr/build/reports/androidTests/**
             musikr/build/outputs/androidTest-results/**
-            ${{ runner.temp }}/avdmanager-create.log
             ${{ runner.temp }}/api29-emulator.log
             ${{ runner.temp }}/api29-gradle.log
           if-no-files-found: ignore
           retention-days: 7
-
       - name: Stop emulator
         if: always()
-        shell: bash
         run: |
           adb emu kill >/dev/null 2>&1 || true
-          if [[ -f "${RUNNER_TEMP}/api29-emulator.pid" ]]; then
-            pid="$(cat "${RUNNER_TEMP}/api29-emulator.pid")"
-            kill "${pid}" >/dev/null 2>&1 || true
-          fi
+          [[ ! -f "$RUNNER_TEMP/api29-emulator.pid" ]] || kill "$(cat "$RUNNER_TEMP/api29-emulator.pid")" >/dev/null 2>&1 || true
 
-  build:
-    name: build
-    needs: scope
-    if: needs.scope.outputs.app_build == 'true'
+  required-summary:
+    name: Required Android build gates
+    if: always()
+    needs: [build, api29-runtime-smoke]
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      PUBLISH_DEBUG_ARTIFACTS: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'ci:debug-artifacts')) }}
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          fetch-depth: 1
-          submodules: false
-          persist-credentials: false
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Write local.properties for Android SDK
-        shell: bash
-        run: |
-          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          [[ -n "${sdk_dir}" ]] || { echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."; exit 1; }
-          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
-        with:
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
-
-      - name: Ensure native build tools are present
-        shell: bash
-        run: |
-          if ! command -v ninja >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y ninja-build
-          fi
-
-      - name: Prepare CI environment
-        shell: bash
-        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
-
-      - name: Build maintained debug APK
-        shell: bash
+      - name: Require build and API 29
         env:
-          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-debug-gradle.log
-        run: bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleDebug
-
-      - name: Build maintained release APK
-        if: github.event_name != 'pull_request' && (needs.scope.outputs.release == 'true' || needs.scope.outputs.full == 'true')
-        shell: bash
-        env:
-          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-release-gradle.log
-        run: bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleRelease
-
-      - name: Build and inspect primary release diagnostics boundary
-        if: github.event_name == 'pull_request' && needs.scope.outputs.release == 'true'
-        shell: bash
-        env:
-          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-release-gradle.log
+          BUILD: ${{ needs.build.result }}
+          API29: ${{ needs.api29-runtime-smoke.result }}
         run: |
-          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleRelease
-          release_apk="$(
-            find app/build/outputs/apk/release \
-              -maxdepth 1 -type f -name '*.apk' -print -quit
-          )"
-          [[ -n "${release_apk}" ]] || {
-            echo "::error::Primary release APK was not produced."
-            exit 1
-          }
-          bash ./scripts/check-release-diagnostics-boundary.sh "${release_apk}"
-
-      - name: Validate maintained APK output
-        shell: bash
-        run: bash ./scripts/check-built-topway-apks.sh
-
-      - name: Validate single-product contracts
-        shell: bash
-        run: bash ./scripts/check-product-contracts.sh
-
-      - name: Validate TS18 APK reference contracts
-        if: needs.scope.outputs.compatibility_contracts == 'true' || needs.scope.outputs.full == 'true'
-        shell: bash
-        run: bash ./scripts/check-ts18-apk-reference-contracts.sh
-
-      - name: Validate DoFun/Topway product contracts
-        if: needs.scope.outputs.compatibility_contracts == 'true' || needs.scope.outputs.full == 'true'
-        shell: bash
-        run: bash ./scripts/check-dofun-topway-compat.sh
-
-      - name: Upload failure reports
-        id: failure_reports
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: android-build-reports
-          path: |
-            app/build/reports/**
-            build/reports/problems/**
-            ${{ runner.temp }}/android-build-debug-gradle.log
-            ${{ runner.temp }}/android-build-release-gradle.log
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Prepare debug artifact inventory
-        id: artifact_inventory
-        if: success() && env.PUBLISH_DEBUG_ARTIFACTS == 'true'
-        shell: bash
-        run: |
-          stage="${RUNNER_TEMP}/auxio-ts-debug-artifacts"
-          mkdir -p "${stage}/app"
-          : > "${stage}/debug-apks.sha256"
-          {
-            echo "commit=${GITHUB_SHA}"
-            echo "run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          } > "${stage}/build-metadata.txt"
-
-          app_apk="$(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
-          [[ -n "${app_apk}" ]] || { echo "::error::Auxio-TS debug APK is missing."; exit 1; }
-          cp -- "${app_apk}" "${stage}/app/"
-          app_name="$(basename -- "${app_apk}")"
-          app_sha="$(sha256sum "${app_apk}" | awk '{print $1}')"
-          printf '%s  %s\n' "${app_sha}" "${app_name}" >> "${stage}/debug-apks.sha256"
-          echo "app_sha256=${app_sha}" >> "${GITHUB_OUTPUT}"
-
-          echo "stage=${stage}" >> "${GITHUB_OUTPUT}"
-
-      - name: Upload Auxio-TS debug APK
-        id: debug_app
-        if: success() && env.PUBLISH_DEBUG_ARTIFACTS == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: auxio-ts-debug-${{ github.sha }}
-          path: ${{ steps.artifact_inventory.outputs.stage }}/app/*
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload debug artifact inventory
-        id: debug_inventory
-        if: success() && env.PUBLISH_DEBUG_ARTIFACTS == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: auxio-ts-debug-artifact-inventory-${{ github.sha }}
-          path: |
-            ${{ steps.artifact_inventory.outputs.stage }}/debug-apks.sha256
-            ${{ steps.artifact_inventory.outputs.stage }}/build-metadata.txt
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Write build summary
-        if: always()
-        shell: bash
-        env:
-          JOB_STATUS: ${{ job.status }}
-          REPORTS_URL: ${{ steps.failure_reports.outputs.artifact-url }}
-          APP_URL: ${{ steps.debug_app.outputs.artifact-url }}
-          INVENTORY_URL: ${{ steps.debug_inventory.outputs.artifact-url }}
-          APP_SHA256: ${{ steps.artifact_inventory.outputs.app_sha256 }}
-          PUBLISH_DEBUG_ARTIFACTS: ${{ env.PUBLISH_DEBUG_ARTIFACTS }}
-        run: |
-          {
-            echo "## Android Build"
-            echo
-            echo "- Result: \`${JOB_STATUS}\`"
-            echo "- Product: \`Auxio-TS / com.tw.media\`"
-            echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Debug artifact publication authorized: \`${PUBLISH_DEBUG_ARTIFACTS}\`"
-            echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            if [[ -n "${REPORTS_URL}" ]]; then
-              echo "- Failure reports: ${REPORTS_URL}"
-            fi
-            echo
-            echo "### Download generated artifacts"
-            echo
-            echo "| Artifact | Download | SHA-256 |"
-            echo "|---|---|---|"
-            if [[ -n "${APP_URL}" ]]; then
-              echo "| Auxio-TS debug APK | [Download](${APP_URL}) | \`${APP_SHA256}\` |"
-            fi
-            if [[ -n "${INVENTORY_URL}" ]]; then
-              echo "| Checksums and build metadata | [Download](${INVENTORY_URL}) | — |"
-            fi
-            if [[ -z "${APP_URL}${INVENTORY_URL}" ]]; then
-              echo "| None | Build validation ran without publishing debug binaries | — |"
-            fi
-          } >> "${GITHUB_STEP_SUMMARY}"
+          [[ "$BUILD" == success ]] || { echo "::error::Build contracts: $BUILD"; exit 1; }
+          [[ "$API29" == success ]] || { echo "::error::API 29 runtime smoke: $API29"; exit 1; }
