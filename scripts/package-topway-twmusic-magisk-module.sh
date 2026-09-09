@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Package the internal topwayTwMusic release APK as the only supported exact-com.tw.music asset.
 #
-# This is a SYSTEMLESS Magisk overlay. It never writes, deletes, renames or disables the stock APK.
-# Removing/disabling the module and rebooting exposes the untouched stock path again.
+# SYSTEMLESS only: the module overlays the observed stock path through Magisk. It never writes,
+# deletes, renames or disables the stock APK. Disabling/removing the module and rebooting exposes
+# the untouched protected-partition file again.
 set -euo pipefail
 
 usage() {
@@ -19,10 +20,7 @@ UID 1000/shared UID, signature permissions, or private Topway/vendor authority.
 EOF
 }
 
-apk=''
-output=''
-version=''
-version_code=''
+apk=''; output=''; version=''; version_code=''
 while (($#)); do
   case "$1" in
     --apk) apk=${2:-}; shift 2 ;;
@@ -38,8 +36,18 @@ done
 [[ -n "$output" ]] || { printf 'ERROR: --output is required.\n' >&2; exit 2; }
 [[ -n "$version" ]] || { printf 'ERROR: --version is required.\n' >&2; exit 2; }
 [[ "$version_code" =~ ^[0-9]+$ ]] || { printf 'ERROR: --version-code must be numeric.\n' >&2; exit 2; }
-command -v zip >/dev/null 2>&1 || { printf 'ERROR: zip is required.\n' >&2; exit 2; }
-command -v unzip >/dev/null 2>&1 || { printf 'ERROR: unzip is required.\n' >&2; exit 2; }
+for command in zip unzip; do command -v "$command" >/dev/null 2>&1 || { printf 'ERROR: %s is required.\n' "$command" >&2; exit 2; }; done
+
+aapt=${AAPT_BIN:-}
+if [[ -z "$aapt" || ! -x "$aapt" ]]; then aapt=$(command -v aapt || true); fi
+[[ -n "$aapt" && -x "$aapt" ]] || { printf 'ERROR: aapt is required to validate exact package identity.\n' >&2; exit 2; }
+badging="$($aapt dump badging "$apk")" || { printf 'ERROR: unable to inspect input APK.\n' >&2; exit 1; }
+actual_package=$(sed -n -E "s/^package: name='([^']+)'.*/\1/p" <<<"$badging")
+actual_code=$(sed -n -E "s/^package: .*versionCode='([^']+)'.*/\1/p" <<<"$badging")
+actual_name=$(sed -n -E "s/^package: .*versionName='([^']+)'.*/\1/p" <<<"$badging")
+[[ "$actual_package" == com.tw.music ]] || { printf 'ERROR: input APK must be com.tw.music, got %s.\n' "${actual_package:-<empty>}" >&2; exit 1; }
+[[ "$actual_code" == "$version_code" ]] || { printf 'ERROR: input APK versionCode %s does not match %s.\n' "${actual_code:-<empty>}" "$version_code" >&2; exit 1; }
+[[ "$actual_name" == "$version" ]] || { printf 'ERROR: input APK versionName %s does not match %s.\n' "${actual_name:-<empty>}" "$version" >&2; exit 1; }
 
 stock_rel='system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk'
 module_id='auxio_ts_topway_twmusic'
@@ -67,6 +75,7 @@ if [ ! -f "$STOCK_APK" ]; then
   abort "STOP: expected TS18 stock com.tw.music target not found at $STOCK_APK; module not installed."
 fi
 ui_print "Auxio-TS: exact stock target observed; installing systemless overlay only."
+ui_print "Auxio-TS: stock APK remains untouched on the protected partition."
 ui_print "Auxio-TS: this does not grant platform signing, UID 1000, signature permissions, or vendor authority."
 set_perm "$MODPATH/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk" 0 0 0644
 EOF
@@ -74,30 +83,26 @@ chmod 0755 "$stage/customize.sh"
 
 mkdir -p "$(dirname "$output")"
 rm -f -- "$output"
-(
-  cd "$stage"
-  zip -q -r "$OLDPWD/$output" .
-)
+(cd "$stage" && zip -q -r "$OLDPWD/$output" .)
 
 mapfile -t entries < <(unzip -Z1 "$output" | sort)
-required=(
-  customize.sh
-  module.prop
-  "$stock_rel"
-)
+required=(customize.sh module.prop "$stock_rel")
 for entry in "${required[@]}"; do
-  printf '%s\n' "${entries[@]}" | grep -Fxq -- "$entry" || {
-    printf 'ERROR: packaged Magisk ZIP is missing %s\n' "$entry" >&2
-    exit 1
-  }
+  printf '%s\n' "${entries[@]}" | grep -Fxq -- "$entry" || { printf 'ERROR: packaged Magisk ZIP is missing %s\n' "$entry" >&2; exit 1; }
 done
+[[ $(printf '%s\n' "${entries[@]}" | grep -Ec '\.apk$') -eq 1 ]] || { printf 'ERROR: Magisk ZIP must contain exactly one APK.\n' >&2; exit 1; }
 
-# Guard against accidental destructive/install-time mutation mechanisms.
+# Guard against accidental destructive/protected-partition mutation mechanisms.
 if unzip -p "$output" customize.sh | grep -Eq '(^|[;&|[:space:]])(rm|mv|dd|mount|pm[[:space:]]+(disable|uninstall|clear)|magisk --remove-modules)([;&|[:space:]]|$)'; then
   printf 'ERROR: destructive command detected in customize.sh.\n' >&2
+  exit 1
+fi
+if unzip -Z1 "$output" | grep -Eq '(^|/)service\.sh$|(^|/)post-fs-data\.sh$'; then
+  printf 'ERROR: persistent boot mutation script is outside this module contract.\n' >&2
   exit 1
 fi
 
 printf 'SUCCESS: packaged systemless topwayTwMusic module: %s\n' "$output"
 printf 'Target: /%s\n' "$stock_rel"
+printf 'Rollback: disable/remove module and reboot; stock protected-partition APK is not modified.\n'
 printf 'Requires exact TS18 install/boot/rollback validation before any runtime-success claim.\n'
