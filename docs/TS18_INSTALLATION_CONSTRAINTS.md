@@ -1,109 +1,86 @@
 # TS18 installation and package-identity constraints
 
-This document records the supported Auxio-TS installation shape for the observed TS18/Topway
-device. It complements:
+This document records supported Auxio-TS installation shapes for the observed TS18/Topway target. It complements [DoFun compatibility](DOFUN_VARIETY_COMPATIBILITY.md), [runtime validation](TS18_RUNTIME_VALIDATION.md), and the [LSPosed Track-C guide](ts18/launcher-integration/LSPOSED_API100_BRIDGE.md).
 
-- [`DOFUN_VARIETY_COMPATIBILITY.md`](DOFUN_VARIETY_COMPATIBILITY.md)
-- [`TS18_RUNTIME_VALIDATION.md`](TS18_RUNTIME_VALIDATION.md)
-- [`ts18/launcher-integration/LSPOSED_API100_BRIDGE.md`](ts18/launcher-integration/LSPOSED_API100_BRIDGE.md)
+## Observed stock identity
 
-[Evidence confidence: Observed device diagnostics + APK reference evidence] [Porting decision:
-Installation/runbook requirement]
-
-## Supported package layout
-
-The target firmware already contains genuine stock `com.tw.music` as a platform-signed,
-UID-1000 system priv-app:
+The captured target contains genuine stock `com.tw.music` at:
 
 ```text
 /system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk
 ```
 
-Do not replace, disable, uninstall-for-user, re-sign, or overlay that package for normal Auxio-TS
-operation. The supported release layout is:
+Captured evidence shows privileged/platform characteristics including UID 1000. Those properties belong to the genuine stock package and signer. Auxio builds do **not** inherit them by using the same package name or systemless path.
 
-| Component | Package | Role |
+## Choose one Auxio application lane
+
+Do not run multiple Auxio application variants concurrently on the head unit. That would create competing playback services/MediaSessions/notifications and violates the single-playback-authority contract.
+
+| Lane | Package | Intended use |
 | --- | --- | --- |
-| Stock Topway music | `com.tw.music` | Keeps the OEM/platform identity that DoFun addresses |
-| Auxio-TS release | `com.tw.media` | Independently signed playback app and media service |
-| Auxio-TS LSPosed API-100 bridge | `org.oxycblt.auxio.ts18bridge` | Runs only inside genuine `com.tw.music` and forwards its public integration surface to Auxio |
+| `standard` | `org.oxycblt.auxio` | Neutral Android installation; no Topway compatibility. |
+| `topwayTwMedia` | `com.tw.media` | Preferred ordinary TS18/DoFun installation. |
+| `topwayTwMusic` systemless | `com.tw.music` | Optional exact-package experiment only where exact application identity is required and the exact stock/path/signing constraints are understood. Public artifact is the Magisk ZIP only. |
 
-The LSPosed module has `staticScope=true`; its packaged, default, and recommended scope is exactly
-`com.tw.music`. Do not add `com.tw.media`, `com.dofun.variety`, `android`, `system`, or
-`system_server` to its scope.
+The raw `topwayTwMusic` APK is never a supported install/download artifact.
 
-The former exact-package Auxio application is retired. Package/component coverage uses fixtures,
-manifest inspection and tests instead of a replacement APK. The former exact-package Magisk
-overlay is retired and must not be installed alongside the bridge.
+## Preferred TS18 lane: topwayTwMedia
 
-## Installation authority
+For normal TS18 use, install the signed `topwayTwMedia` / `com.tw.media` APK. It contains the bounded stock-compatible activity/service/widget/component wrappers without claiming genuine stock identity.
 
-| Lane | Supported result | Constraint |
-| --- | --- | --- |
-| Normal package installer | Install signed `com.tw.media` | Cannot configure LSPosed |
-| ADB/Termux shell | Inspect package state and install APKs where permitted | Does not grant platform signing or UID 1000 |
-| Root + LSPosed | Install Auxio and the bridge, then enable the static scope | Required for the full stock-identity addon path |
-| Firmware/platform signing | Not required | Must not be treated as an Auxio release prerequisite |
+If the direct Track-A path is insufficient and genuine stock `com.tw.music` must remain authoritative, the optional LSPosed Track-C add-on may be tested. Its static scope remains exactly genuine stock `com.tw.music`; do not add `com.tw.media`, `com.dofun.variety`, `android`, `system` or `system_server`.
 
-Without LSPosed, `com.tw.media` can still be used as a normal media app and may satisfy DoFun's
-observed alternate component entry. Fixed-panel parity is not guaranteed until it is validated on
-the physical TS18.
+## Optional exact-package Magisk lane
 
-## Pre-install identity gate
+Where exact application ID `com.tw.music` is genuinely required, Manual Release can produce a **systemless Magisk ZIP** containing the internally built `topwayTwMusic` APK at the observed overlay path:
 
-Before enabling the bridge, prove that `com.tw.music` is the genuine system package:
+```text
+/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk
+```
+
+The installer must fail closed if that exact stock file is absent. It leaves the protected stock APK untouched on disk. Disabling/removing the module and rebooting is the rollback model.
+
+**Critical authority limit:** the Auxio APK is independently signed. A Magisk overlay does not make it platform-signed, does not confer UID 1000/shared UID, does not grant signature permissions and does not create private-vendor authority. If PackageManager/shared-UID/signature state rejects the overlaid APK, **STOP**; do not attempt signature spoofing, package-database edits or protected-partition mutation. Exact package identity alone is not proof that this lane will load on the physical TS18.
+
+Do not combine the exact-package Magisk lane with Track C: Track C is designed to run inside the **genuine stock** `com.tw.music` process. Do not keep an active `topwayTwMedia` Auxio instance alongside the exact-package Auxio instance during validation; test one playback authority at a time.
+
+## Preflight for exact-package testing
+
+Before enabling the Magisk module, capture the current stock state and confirm the exact target:
 
 ```sh
 adb shell pm path com.tw.music
-adb shell dumpsys package com.tw.music |
-  grep -iE 'codePath|versionCode|versionName|userId|sharedUserId|flags|privateFlags|enabled'
-stock_apk="$(adb shell pm path com.tw.music | tr -d '\r' | sed -n 's/^package://p' | head -n1)"
-adb pull "${stock_apk}" /tmp/ts18-stock-com.tw.music.apk
-apksigner verify --verbose --print-certs /tmp/ts18-stock-com.tw.music.apk |
-  grep 'Signer #1 certificate SHA-256 digest'
+adb shell dumpsys package com.tw.music | grep -iE 'codePath|versionCode|versionName|userId|sharedUserId|flags|privateFlags|enabled'
 ```
 
-Expected on the captured target:
+Expected from the captured baseline includes the exact `/system/priv-app/com.tw.music_a41e/...` path. Record the stock signer from a pulled copy with `apksigner` if available. Do not assume a related TS18/TS10/8581 unit has the same package path, shared UID or signer.
 
-- the code path is under `/system/priv-app/`;
-- the app UID/shared UID is the platform/system identity;
-- the package is enabled for user 0;
-- the certificate SHA-256 is
-  `AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3`.
+**STOP** if the path, device/build identity, current package state, Magisk recovery path or rollback media are not confirmed.
 
-If an old Auxio exact-package overlay/module is present, disable or uninstall that Magisk module,
-reboot, and repeat the identity gate before installing the bridge. Do not clear stock app state
-unless a separate, backed-up recovery procedure explicitly requires it.
+## Exact-package validation sequence
 
-## Recommended installation
+1. Keep a known-good copy of the stock package evidence and the Magisk ZIP outside the head unit.
+2. Ensure other Auxio application variants and Track C are not actively providing playback on the same test boot.
+3. Install the Magisk module only after its exact-path preflight passes.
+4. Reboot and capture `pm path`, `dumpsys package`, process UID, package load errors and logcat before interpreting behaviour.
+5. If PackageManager rejects the independently signed/shared-UID state, stop and remove/disable the module; do not try to force platform authority.
+6. If the package loads, validate launch, one playback service/MediaSession/notification, DoFun controls/metadata, USB, process restart and ACC sleep/wake.
+7. Validate rollback by disabling/removing the module, rebooting and confirming genuine stock `com.tw.music` is visible and functional again.
 
-1. Install the signed Auxio-TS release APK as `com.tw.media`.
-2. Install the separately signed LSPosed API-100 bridge APK.
-3. In LSPosed, enable the module and leave its scope at the single recommended package:
-   `com.tw.music`.
-4. Reboot the head unit so the bridge loads with a fresh stock process.
-5. Open Auxio once, grant its normal media/storage access, and validate service connectivity.
-6. Exercise DoFun launch, metadata, transport controls, seek, process restart, and ACC/reboot
-   recovery using `TS18_RUNTIME_VALIDATION.md`.
+Every step above remains **Requires TS18 validation** until captured on the exact unit.
 
-The bridge verifies the expected stock package/UID/certificate and fails open when the identity is
-not trusted or Auxio is unavailable. Its kill switch is disabling the LSPosed module and rebooting;
-stock music must remain usable after that rollback.
+## Track-C validation/recovery
 
-## Recovery
+For the preferred `com.tw.media` + genuine-stock Track-C model, first prove `com.tw.music` is the genuine stock package, then enable only the bridge's exact static scope. The bridge must fail open when Auxio is unavailable. Recovery is: disable the LSPosed module, reboot, verify stock music, and optionally uninstall the bridge and `com.tw.media`.
 
-If the bridge causes a problem:
+## Hard prohibitions
 
-1. disable the Auxio-TS bridge in LSPosed;
-2. reboot;
-3. verify genuine stock `com.tw.music` launches normally;
-4. optionally uninstall only `org.oxycblt.auxio.ts18bridge` and `com.tw.media`.
+Do not:
 
-Do not use package-database/XML surgery, replace the system APK, or re-enable the retired
-exact-package Magisk overlay.
-
-## Documentation rule
-
-Do not describe the former exact-package Auxio app or old Magisk overlay as a supported release/install lane.
-Always describe `com.tw.media` plus the single-scope LSPosed addon, and retain the physical TS18
-acceptance boundary for DoFun/private-panel behaviour.
+- delete/rename/overwrite the stock APK on its protected partition;
+- `pm disable`/uninstall-for-user genuine stock as part of normal setup;
+- edit package-manager XML/database state to force the exact-package lane;
+- claim the Auxio build is platform-signed or UID 1000;
+- claim signature/private-vendor permissions from root/Magisk/LSPosed;
+- run multiple Auxio variants as simultaneous playback authorities;
+- treat emulator/CI packaging success as physical TS18 acceptance.
