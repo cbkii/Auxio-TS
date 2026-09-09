@@ -1,5 +1,4 @@
 # Full release/profile validation is intentionally manual.
-# Routine pull requests use Android Build and Android Quality instead.
 name: Startup Release Validation (manual)
 
 on:
@@ -15,151 +14,81 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
-
+    timeout-minutes: 180
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 1
           submodules: false
           persist-credentials: false
-
-      - name: Validate workflow YAML
+      - name: Validate workflow/script syntax
         shell: bash
         run: |
           ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
-
-      - name: Validate shell and Python script syntax
-        shell: bash
-        run: |
           status=0
-          while IFS= read -r -d '' script; do
-            printf 'Checking %s\n' "${script}"
-            if ! bash -n "${script}"; then status=1; fi
-          done < <(find scripts -type f -name '*.sh' -print0)
-          while IFS= read -r -d '' script; do
-            printf 'Compiling %s\n' "${script}"
-            if ! python3 -m py_compile "${script}"; then status=1; fi
-          done < <(find scripts -type f -name '*.py' -print0)
-          exit "${status}"
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+          while IFS= read -r -d '' f; do bash -n "$f" || status=1; done < <(find scripts -type f -name '*.sh' -print0)
+          while IFS= read -r -d '' f; do python3 -m py_compile "$f" || status=1; done < <(find scripts -type f -name '*.py' -print0)
+          exit "$status"
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
         with:
           distribution: temurin
           java-version: "21"
-
-      - name: Write local.properties for Android SDK
+      - name: Write local.properties
         shell: bash
         run: |
-          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          [[ -n "${sdk_dir}" ]] || { echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."; exit 1; }
-          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"; [[ -n "$sdk_dir" ]] || exit 1
+          printf 'sdk.dir=%s\n' "$sdk_dir" > local.properties
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
         with:
           cache-read-only: false
-
-      - name: Ensure native and profile inspection tools are present
+      - name: Ensure native/profile tools
         shell: bash
         run: |
-          missing=()
-          command -v ninja >/dev/null 2>&1 || missing+=(ninja-build)
-          command -v unzip >/dev/null 2>&1 || missing+=(unzip)
-          command -v jq >/dev/null 2>&1 || missing+=(jq)
-          if ((${#missing[@]})); then
-            sudo apt-get update
-            sudo apt-get install -y "${missing[@]}"
-          fi
-
+          missing=(); command -v ninja >/dev/null 2>&1 || missing+=(ninja-build); command -v unzip >/dev/null 2>&1 || missing+=(unzip); command -v jq >/dev/null 2>&1 || missing+=(jq)
+          if ((${#missing[@]})); then sudo apt-get update && sudo apt-get install -y "${missing[@]}"; fi
       - name: Prepare CI environment
-        shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
-
-      - name: Validate static startup and variant contracts
-        shell: bash
+      - name: Validate static startup, product and safety contracts
         run: |
           bash ./scripts/check-startup-performance-contracts.sh
           bash ./scripts/check-product-contracts.sh
-
-      - name: Run maintained quality tasks
-        shell: bash
+          bash ./scripts/check-headunit-compat-safety.sh
+      - name: Run all distribution quality tasks
         run: |
           bash ./scripts/ci-gradle.sh --continue \
             spotlessKotlinCheck \
-            :app:testDebugUnitTest \
+            :app:testStandardDebugUnitTest \
+            :app:testTopwayTwMediaDebugUnitTest \
+            :app:testTopwayTwMusicDebugUnitTest \
             :musikr:testDebugUnitTest \
-            :app:lintDebug
-
-      - name: Run head-unit safety checks
-        shell: bash
-        run: bash ./scripts/check-headunit-compat-safety.sh
-
-      - name: Compile maintained benchmark and profile instrumentation
-        shell: bash
+            :app:lintStandardDebug \
+            :app:lintTopwayTwMediaDebug \
+            :app:lintTopwayTwMusicDebug
+      - name: Compile flavor-aware benchmark instrumentation
         run: |
-          mkdir -p build/reports/startup-performance
-          set +e
           bash ./scripts/ci-gradle.sh \
-            :startup-benchmark:assembleBenchmarkBenchmark 2>&1 |
-            tee build/reports/startup-performance/benchmark-compile.log
-          status=${PIPESTATUS[0]}
-          set -e
-          exit "${status}"
-
-      - name: Build maintained debug app
-        shell: bash
+            :startup-benchmark:assembleStandardBenchmark \
+            :startup-benchmark:assembleTopwayTwMediaBenchmark \
+            :startup-benchmark:assembleTopwayTwMusicBenchmark
+      - name: Build all debug/release application variants
         run: |
-          bash ./scripts/ci-gradle.sh :app:assembleDebug
-
-      - name: Build maintained release app
-        shell: bash
-        run: |
-          bash ./scripts/ci-gradle.sh :app:assembleRelease
-
+          bash ./scripts/ci-gradle.sh \
+            :app:assembleStandardDebug :app:assembleTopwayTwMediaDebug :app:assembleTopwayTwMusicDebug \
+            :app:assembleStandardRelease :app:assembleTopwayTwMediaRelease :app:assembleTopwayTwMusicRelease
       - name: Validate compiled Baseline Profile artefacts
         shell: bash
         run: |
-          set -o pipefail
-          report=build/reports/startup-performance/compiled-profile-validation.log
-          mkdir -p "$(dirname "${report}")"
-          set +e
-          {
-            mapfile -t apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' | sort)
-            printf 'Release APK count: %s\n' "${#apks[@]}"
-            printf '%s\n' "${apks[@]:-}"
-            if ((${#apks[@]} != 1)); then
-              printf 'Expected the maintained Auxio-TS release APK, found %s\n' "${#apks[@]}" >&2
-              exit 1
-            fi
-            for apk in "${apks[@]}"; do
-              printf '\n[%s]\n' "${apk}"
-              unzip -Z1 "${apk}" | grep -E '^assets/dexopt/baseline\.(prof|profm)$'
-            done
-            bash ./scripts/check-startup-performance-contracts.sh "${apks[@]}"
-          } 2>&1 | tee "${report}"
-          status=${PIPESTATUS[0]}
-          set -e
-          exit "${status}"
-
-      - name: Validate TS18 APK reference contracts
-        shell: bash
-        run: bash ./scripts/check-ts18-apk-reference-contracts.sh
-
-      - name: Validate DoFun and Topway compatibility sources and outputs
-        shell: bash
+          mapfile -t apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' | sort)
+          ((${#apks[@]} == 3)) || { echo "::error::Expected three release APKs, found ${#apks[@]}"; printf '%s\n' "${apks[@]}"; exit 1; }
+          for apk in "${apks[@]}"; do
+            unzip -Z1 "$apk" | grep -Eq '^assets/dexopt/baseline\.(prof|profm)$' || { echo "::error::Compiled Baseline Profile missing: $apk"; exit 1; }
+          done
+          bash ./scripts/check-startup-performance-contracts.sh "${apks[@]}"
+      - name: Validate TS18 and Topway output contracts
         run: |
-          set -o pipefail
-          report=build/reports/startup-performance/dofun-topway-compat.log
-          mkdir -p "$(dirname "${report}")"
-          set +e
-          bash ./scripts/check-dofun-topway-compat.sh 2>&1 | tee "${report}"
-          status=${PIPESTATUS[0]}
-          set -e
-          exit "${status}"
-
+          bash ./scripts/check-ts18-apk-reference-contracts.sh
+          bash ./scripts/check-dofun-topway-compat.sh
+          bash ./scripts/check-built-topway-apks.sh
       - name: Upload failure reports
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -170,23 +99,19 @@ jobs:
             musikr/build/reports/**
             startup-benchmark/build/reports/**
             build/reports/problems/**
-            build/reports/startup-performance/**
           if-no-files-found: ignore
           retention-days: 7
-
       - name: Write validation summary
         if: always()
-        shell: bash
         env:
           JOB_STATUS: ${{ job.status }}
         run: |
           {
-            echo "## Startup Release Validation"
+            echo '## Startup Release Validation'
             echo
             echo "- Result: \`${JOB_STATUS}\`"
             echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Maintained product package: \`com.tw.media\`"
-            echo "- Includes syntax, single-product contracts, formatting, unit tests, lint, head-unit safety, benchmark instrumentation, debug/release APKs, Baseline Profile packaging, TS18 APK contracts and DoFun/Topway output checks."
-            echo "- No hosted-runner wall-clock threshold or exact-device latency claim is produced."
-            echo "- Exact TS18 runtime behaviour: Requires device validation."
-          } >> "${GITHUB_STEP_SUMMARY}"
+            echo '- Variants: `standard`, `topwayTwMedia`, internal `topwayTwMusic`.'
+            echo '- Includes formatting, tests, lint, benchmark compilation, release APK/profile and head-unit contracts.'
+            echo '- Hosted/managed-device evidence is not physical TS18 validation.'
+          } >> "$GITHUB_STEP_SUMMARY"
