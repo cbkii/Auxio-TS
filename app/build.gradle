@@ -17,7 +17,7 @@ android {
     namespace "org.oxycblt.auxio"
 
     defaultConfig {
-        applicationId "com.tw.media"
+        applicationId namespace
         versionName "26.6.8"
         // Monotonic TS18 code: major * 1,000,000 + minor * 10,000 + patch * 100 + revision.
         // Keep this above every recorded stock com.tw.music build (currently 118) so an
@@ -26,7 +26,6 @@ android {
         versionCode 26060800
         def buildCommit = System.getenv("GITHUB_SHA") ?: "local-unrecorded"
         buildConfigField "String", "BUILD_COMMIT", "\"${buildCommit.replace("\\", "\\\\").replace("\"", "\\\"")}\""
-        buildConfigField "boolean", "TOPWAY_COMPAT_ENABLED", "true"
 
         minSdk min_sdk
         // randomly flickers between deprecated and required depending on what mood my gradle is in
@@ -35,6 +34,30 @@ android {
         targetSdk target_sdk
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+        standard {
+            dimension "distribution"
+            buildConfigField "boolean", "TOPWAY_COMPAT_ENABLED", "false"
+            buildConfigField "boolean", "TOPWAY_TWMEDIA_FLAVOR", "false"
+            buildConfigField "boolean", "TOPWAY_TWMUSIC_FLAVOR", "false"
+        }
+        topwayTwMedia {
+            dimension "distribution"
+            applicationId "com.tw.media"
+            buildConfigField "boolean", "TOPWAY_COMPAT_ENABLED", "true"
+            buildConfigField "boolean", "TOPWAY_TWMEDIA_FLAVOR", "true"
+            buildConfigField "boolean", "TOPWAY_TWMUSIC_FLAVOR", "false"
+        }
+        topwayTwMusic {
+            dimension "distribution"
+            applicationId "com.tw.music"
+            buildConfigField "boolean", "TOPWAY_COMPAT_ENABLED", "true"
+            buildConfigField "boolean", "TOPWAY_TWMEDIA_FLAVOR", "false"
+            buildConfigField "boolean", "TOPWAY_TWMUSIC_FLAVOR", "true"
+        }
     }
 
     compileOptions {
@@ -141,14 +164,26 @@ android {
             java.srcDirs += ["src/release/java"]
             kotlin.srcDirs += ["src/release/java"]
         }
-        // Compile the thin Topway/DoFun wrappers into the one Auxio-TS product. The app keeps
-        // com.tw.media identity while exposing the stock-compatible com.tw.music components
-        // declared in the main manifest.
-        main {
+        // Topway/DoFun wrappers, manifest aliases and overlay resources are deliberately excluded
+        // from the Standard product. Both Topway identities reuse the same thin compatibility
+        // implementation; only application identity differs.
+        topwayTwMedia {
+            manifest.srcFile "src/topwayCompat/AndroidManifest.xml"
             java.srcDirs += ["src/topwayCompat/java"]
             kotlin.srcDirs += ["src/topwayCompat/java", "src/topwayCompat/kotlin"]
+            res.srcDirs += ["src/topwayCompat/res"]
         }
-        test {
+        topwayTwMusic {
+            manifest.srcFile "src/topwayCompat/AndroidManifest.xml"
+            java.srcDirs += ["src/topwayCompat/java"]
+            kotlin.srcDirs += ["src/topwayCompat/java", "src/topwayCompat/kotlin"]
+            res.srcDirs += ["src/topwayCompat/res"]
+        }
+        testTopwayTwMedia {
+            java.srcDirs += ["src/topwayCompatTest/java"]
+            kotlin.srcDirs += ["src/topwayCompatTest/java"]
+        }
+        testTopwayTwMusic {
             java.srcDirs += ["src/topwayCompatTest/java"]
             kotlin.srcDirs += ["src/topwayCompatTest/java"]
         }
@@ -221,7 +256,8 @@ dependencies {
     def lifecycle_version = "2.10.0"
     implementation "androidx.lifecycle:lifecycle-common:$lifecycle_version"
     implementation "androidx.lifecycle:lifecycle-common-java8:$lifecycle_version"
-    implementation "androidx.lifecycle:lifecycle-process:$lifecycle_version"
+    topwayTwMediaImplementation "androidx.lifecycle:lifecycle-process:$lifecycle_version"
+    topwayTwMusicImplementation "androidx.lifecycle:lifecycle-process:$lifecycle_version"
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycle_version"
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:$lifecycle_version"
 
@@ -327,4 +363,4 @@ tasks.withType(Test).configureEach { testTask ->
     }
 }
 
-// Roborazzi record/verify/compare tasks are registered for the single Debug build.
+// Roborazzi record/verify/compare tasks are registered per distribution Debug variant.
