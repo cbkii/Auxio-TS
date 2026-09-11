@@ -26,7 +26,6 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.ItemSongPropertyBinding
 import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
 import org.oxycblt.auxio.list.adapter.SimpleDiffCallback
-import org.oxycblt.auxio.list.recycler.DialogRecyclerView
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.formatDurationMs
@@ -94,7 +93,7 @@ data class SongProperty(@StringRes val name: Int, val value: Value) {
  * @author Alexander Capehart (OxygenCobalt)
  */
 class SongPropertyViewHolder private constructor(private val binding: ItemSongPropertyBinding) :
-    DialogRecyclerView.ViewHolder(binding.root) {
+    RecyclerView.ViewHolder(binding.root) {
     fun bind(property: SongProperty) {
         val context = binding.context
         binding.propertyName.hint = context.getString(property.name)
