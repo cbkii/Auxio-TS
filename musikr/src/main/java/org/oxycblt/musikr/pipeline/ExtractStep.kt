@@ -27,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import org.oxycblt.musikr.Config
 import org.oxycblt.musikr.cache.Audio
+import org.oxycblt.musikr.cache.CACHE_WRITE_BATCH_SIZE
 import org.oxycblt.musikr.cache.CachedFile
 import org.oxycblt.musikr.cache.IncrementalCache
 import org.oxycblt.musikr.cache.MutableCache
@@ -175,10 +176,11 @@ private class ExtractStepImpl(
         val finalizedTask =
             scope.tryAsyncWith(extracted, Dispatchers.IO) {
                 // Legacy caches still require the complete exclusion list. Incremental caches
-                // record
-                // every discovered row directly and reconcile missing rows in SQL at commit time.
+                // record every discovered row directly and reconcile missing rows in SQL at commit
+                // time.
                 val legacyExclude =
                     mutableListOf<CachedFile>().takeUnless { cache is IncrementalCache }
+                val pendingWrites = mutableListOf<CachedFile>()
                 for (item in parsed) {
                     val result =
                         when (item) {
@@ -190,12 +192,19 @@ private class ExtractStepImpl(
                             }
                             is NeedsCaching -> {
                                 val cachedFile = item.rawSong.toCachedFile()
-                                cache.write(cachedFile)
+                                pendingWrites += cachedFile
+                                if (pendingWrites.size >= CACHE_WRITE_BATCH_SIZE) {
+                                    cache.writeAll(pendingWrites.toList())
+                                    pendingWrites.clear()
+                                }
                                 legacyExclude?.add(cachedFile)
                                 Finalized(item.rawSong)
                             }
                         }
                     it.send(result.extracted)
+                }
+                if (pendingWrites.isNotEmpty()) {
+                    cache.writeAll(pendingWrites)
                 }
                 legacyExclude?.let { cache.cleanup(it) }
             }
