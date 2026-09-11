@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2023 Auxio Project
+ * PlaylistDatabase.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package org.oxycblt.musikr.playlist.db
 
 import android.content.Context
@@ -14,6 +32,11 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import org.oxycblt.musikr.Music
 
+/**
+ * Allows persistence of all user-created music information.
+ *
+ * @author Alexander Capehart (OxygenCobalt)
+ */
 @Database(
     entities = [PlaylistInfo::class, PlaylistSong::class, PlaylistSongCrossRef::class],
     version = 31,
@@ -33,6 +56,13 @@ internal abstract class PlaylistDatabase : RoomDatabase() {
                         "PlaylistSongCrossRef",
                         "playlistUid",
                         collapsePrimaryKey = false,
+                    )
+                    // Mixed legacy/current databases can contain duplicate logical refs after both
+                    // UID representations collapse to one canonical value. Keep the oldest row.
+                    db.execSQL(
+                        "DELETE FROM `PlaylistSongCrossRef` WHERE `id` NOT IN (" +
+                            "SELECT MIN(`id`) FROM `PlaylistSongCrossRef` " +
+                            "GROUP BY `playlistUid`, `songUid`)"
                     )
                 }
 
@@ -54,7 +84,8 @@ internal abstract class PlaylistDatabase : RoomDatabase() {
 
                     val pending = mutableListOf<Pair<String, String>>()
                     values.forEachIndexed { index, oldValue ->
-                        val canonical = Music.UID.fromString(oldValue)?.toString() ?: return@forEachIndexed
+                        val canonical =
+                            Music.UID.fromString(oldValue)?.toString() ?: return@forEachIndexed
                         if (canonical == oldValue) return@forEachIndexed
                         val temporary = "__auxio_uid_31_${index}__${canonical}"
                         db.execSQL(
@@ -104,12 +135,26 @@ internal abstract class PlaylistDatabase : RoomDatabase() {
     }
 }
 
+// TODO: Handle playlist defragmentation? I really don't want dead songs to accumulate in this
+//  database.
+
+/**
+ * The DAO for persisted playlist information.
+ *
+ * @author Alexander Capehart (OxygenCobalt)
+ */
 @Dao
 internal abstract class PlaylistDao {
+    /**
+     * Read out all playlists stored in the database.
+     *
+     * @return A list of [RawPlaylist] representing each playlist stored.
+     */
     @Transaction
     @Query("SELECT * FROM PlaylistInfo")
     abstract suspend fun readRawPlaylists(): List<RawPlaylist>
 
+    /** Create a new playlist. */
     @Transaction
     open suspend fun insertPlaylist(rawPlaylist: RawPlaylist) {
         insertInfo(rawPlaylist.playlistInfo)
@@ -124,18 +169,21 @@ internal abstract class PlaylistDao {
         )
     }
 
+    /** Replace the currently stored [PlaylistInfo] for a playlist entry. */
     @Transaction
     open suspend fun replacePlaylistInfo(playlistInfo: PlaylistInfo) {
         deleteInfo(playlistInfo.playlistUid)
         insertInfo(playlistInfo)
     }
 
+    /** Delete a playlist entry. */
     @Transaction
     open suspend fun deletePlaylist(playlistUid: Music.UID) {
         deleteInfo(playlistUid)
         deleteRefs(playlistUid)
     }
 
+    /** Insert new song entries into a playlist. */
     @Transaction
     open suspend fun insertPlaylistSongs(playlistUid: Music.UID, songs: List<PlaylistSong>) {
         insertSongs(songs)
@@ -144,6 +192,7 @@ internal abstract class PlaylistDao {
         )
     }
 
+    /** Replace the currently stored songs of a playlist entry. */
     @Transaction
     open suspend fun replacePlaylistSongs(playlistUid: Music.UID, songs: List<PlaylistSong>) {
         deleteRefs(playlistUid)
@@ -153,18 +202,23 @@ internal abstract class PlaylistDao {
         )
     }
 
+    /** Internal, do not use. */
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertInfo(info: PlaylistInfo)
 
+    /** Internal, do not use. */
     @Query("DELETE FROM PlaylistInfo where playlistUid = :playlistUid")
     abstract suspend fun deleteInfo(playlistUid: Music.UID)
 
+    /** Internal, do not use. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     abstract suspend fun insertSongs(songs: List<PlaylistSong>)
 
+    /** Internal, do not use. */
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertRefs(refs: List<PlaylistSongCrossRef>)
 
+    /** Internal, do not use. */
     @Query("DELETE FROM PlaylistSongCrossRef where playlistUid = :playlistUid")
     abstract suspend fun deleteRefs(playlistUid: Music.UID)
 }
