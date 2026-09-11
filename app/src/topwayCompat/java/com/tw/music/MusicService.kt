@@ -20,15 +20,18 @@ package com.tw.music
 
 import android.content.Intent
 import android.os.Binder
+import android.os.Bundle
 import android.os.IBinder
 import android.os.Parcel
 import android.os.Process
 import android.os.SystemClock
+import androidx.media.MediaBrowserServiceCompat.BrowserRoot
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import org.oxycblt.auxio.AuxioService
+import org.oxycblt.auxio.music.service.MediaBrowserClientPolicy
 import org.oxycblt.auxio.playback.service.TopwayBridgeAdmissionResult
 import org.oxycblt.auxio.playback.service.TopwayBridgePlaybackIngress
 import org.oxycblt.auxio.ts18bridge.BridgeWireContract
@@ -44,6 +47,8 @@ import timber.log.Timber
  */
 class MusicService : AuxioService() {
     private val commandLedger = TopwayBridgeCommandLedger()
+    private val mediaBrowserClientPolicy by
+        lazy(LazyThreadSafetyMode.NONE) { MediaBrowserClientPolicy(applicationContext) }
 
     private val playbackIngress: TopwayBridgePlaybackIngress by
         lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
@@ -78,6 +83,25 @@ class MusicService : AuxioService() {
                 return true
             }
         }
+
+    /**
+     * The exported wrapper exists for TS18/DoFun MediaBrowser compatibility, not as a public music
+     * catalogue. Verify that the package actually belongs to the supplied UID before granting
+     * browse access, then allow only the app itself, system/media-control clients, and the two
+     * evidenced OEM packages. Transport through the normal MediaSession/notification path remains
+     * independent from this browse boundary.
+     */
+    override fun onGetRoot(
+        clientPackageName: String,
+        clientUid: Int,
+        rootHints: Bundle?,
+    ): BrowserRoot? {
+        if (!mediaBrowserClientPolicy.isTrusted(clientPackageName, clientUid)) {
+            Timber.w("Rejecting untrusted MediaBrowser client: $clientPackageName uid=$clientUid")
+            return null
+        }
+        return super.onGetRoot(clientPackageName, clientUid, rootHints)
+    }
 
     override fun onBind(intent: Intent): IBinder? {
         if (intent.action == BridgeWireContract.ACTION_BIND_COMMAND) {
