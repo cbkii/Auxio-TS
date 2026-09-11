@@ -19,8 +19,10 @@
 package org.oxycblt.musikr.cache.db
 
 import android.content.Context
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.toList
 import org.oxycblt.musikr.cache.Audio
+import org.oxycblt.musikr.cache.CACHE_WRITE_BATCH_SIZE
 import org.oxycblt.musikr.cache.Cache
 import org.oxycblt.musikr.cache.CacheResult
 import org.oxycblt.musikr.cache.CachedFile
@@ -177,6 +179,7 @@ private constructor(
 /** Mutable cache with staged source generations and legacy compatibility APIs. */
 class MutableDBCache
 private constructor(
+    private val db: CacheDatabase,
     private val inner: DBCache,
     private val writeDao: CacheWriteDao,
     private val backfill: LibraryBackfill,
@@ -200,6 +203,22 @@ private constructor(
     override suspend fun write(cachedFile: CachedFile) {
         if (incrementalStore.stage(cachedFile)) return
         writeDao.updateSong(cachedFile.toCachedFileData())
+    }
+
+    override suspend fun writeAll(cachedFiles: List<CachedFile>) {
+        for (chunk in cachedFiles.chunked(CACHE_WRITE_BATCH_SIZE)) {
+            db.withTransaction {
+                val legacyRows = mutableListOf<CachedFileData>()
+                for (cachedFile in chunk) {
+                    if (!incrementalStore.stage(cachedFile)) {
+                        legacyRows += cachedFile.toCachedFileData()
+                    }
+                }
+                if (legacyRows.isNotEmpty()) {
+                    writeDao.updateSongs(legacyRows)
+                }
+            }
+        }
     }
 
     override suspend fun cleanup(excluding: List<CachedFile>) {
@@ -246,6 +265,7 @@ private constructor(
         internal fun from(db: CacheDatabase): MutableDBCache {
             val store = IncrementalScanStore(db, db.readDao(), db.writeDao(), db.incrementalDao())
             return MutableDBCache(
+                db,
                 DBCache.from(db, store),
                 db.writeDao(),
                 LibraryBackfill(db),
