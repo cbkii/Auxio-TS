@@ -20,7 +20,6 @@ package org.oxycblt.auxio.playback.ui.swiper
 
 import android.graphics.RectF
 import android.view.View
-import androidx.core.view.isInvisible
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.carousel.MaskableFrameLayout
 
@@ -44,10 +43,6 @@ class CarouselTransformer : ViewPager2.PageTransformer {
         // Pin the page to its natural position so LinearLayoutManager's side-by-side
         // placement does not affect the visual arrangement.
         page.translationX = -position * width
-
-        // Offscreen pages (-1 or beyond) are made invisible so their touch areas
-        // do not interfere with the playback stepper gesture detection.
-        page.isInvisible = position <= -1f || position >= 1f
 
         page.alpha = 1f
 
