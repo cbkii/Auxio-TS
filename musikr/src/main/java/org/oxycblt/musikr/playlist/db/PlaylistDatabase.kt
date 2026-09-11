@@ -84,7 +84,8 @@ internal abstract class PlaylistDatabase : RoomDatabase() {
                         val canonical = Music.UID.fromString(oldValue)?.toString() ?: continue
                         if (canonical == oldValue) continue
                         if (collapsePrimaryKey && rowExists(db, table, column, canonical)) {
-                            // Prefer an already-canonical playlist record, but keep every cross-ref.
+                            // Prefer an already-canonical playlist record, but keep every
+                            // cross-ref.
                             // Repeated song refs can be intentional and must not be deduplicated.
                             db.execSQL(
                                 "DELETE FROM `$table` WHERE `$column` = ?",
