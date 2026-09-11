@@ -90,7 +90,7 @@ class PlaylistDatabaseMigrationInstrumentedTest {
             db.query("SELECT playlistUid FROM PlaylistSongCrossRef ORDER BY id").use { cursor ->
                 while (cursor.moveToNext()) crossRefs += cursor.getString(0)
             }
-            assertEquals(listOf(canonical, otherCanonical, malformed), crossRefs)
+            assertEquals(listOf(canonical, canonical, otherCanonical, malformed), crossRefs)
             assertTrue(crossRefs.none { it == legacy || it == otherLegacy })
         } finally {
             helper.close()
