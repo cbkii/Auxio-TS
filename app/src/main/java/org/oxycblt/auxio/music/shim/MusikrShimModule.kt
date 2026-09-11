@@ -26,7 +26,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 import org.oxycblt.musikr.cache.MutableCache
-import org.oxycblt.musikr.cache.db.MutableDBCache
+import org.oxycblt.musikr.cache.db.BatchingMutableCache
 import org.oxycblt.musikr.playlist.db.StoredPlaylists
 
 @Module
@@ -34,7 +34,7 @@ import org.oxycblt.musikr.playlist.db.StoredPlaylists
 class MusikrShimModule {
     @Singleton
     @Provides
-    fun cache(@ApplicationContext context: Context): MutableCache = MutableDBCache.from(context)
+    fun cache(@ApplicationContext context: Context): MutableCache = BatchingMutableCache.from(context)
 
     @Singleton
     @Provides
