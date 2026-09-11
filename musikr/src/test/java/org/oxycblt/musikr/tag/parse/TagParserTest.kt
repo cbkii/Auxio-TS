@@ -171,6 +171,26 @@ class TagParserTest {
         assertEquals(listOf("composer-artist-mbid"), tags.artistMusicBrainzIds)
     }
 
+    @Test
+    fun tagParser_doesNotHybridizeArtistAndComposerIdentity() {
+        val metadata =
+            createTestMetadata(
+                id3v2Tags =
+                    mapOf(
+                        "TPE1" to listOf("Tagged Artist"),
+                        "TCOM" to listOf("Composer Artist"),
+                        "TSOC" to listOf("Composer Artist Sort"),
+                        "TXXX:MUSICBRAINZ COMPOSER ID" to listOf("composer-artist-mbid"),
+                    )
+            )
+
+        val tags = tagParser.parse(metadata)
+
+        assertEquals(listOf("Tagged Artist"), tags.artistNames)
+        assertEquals(emptyList<String>(), tags.artistSortNames)
+        assertEquals(emptyList<String>(), tags.artistMusicBrainzIds)
+    }
+
     private fun createTestMetadata(
         id3v2Tags: Map<String, List<String>> = emptyMap(),
         xiphTags: Map<String, List<String>> = emptyMap(),
