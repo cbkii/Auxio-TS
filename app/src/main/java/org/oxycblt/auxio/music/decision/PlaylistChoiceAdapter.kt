@@ -19,11 +19,11 @@
 package org.oxycblt.auxio.music.decision
 
 import android.view.ViewGroup
+import androidx.recyclerview.widget.RecyclerView
 import org.oxycblt.auxio.databinding.ItemPickerChoiceBinding
 import org.oxycblt.auxio.list.ClickableListListener
 import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
 import org.oxycblt.auxio.list.adapter.SimpleDiffCallback
-import org.oxycblt.auxio.list.recycler.DialogRecyclerView
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.util.context
 import org.oxycblt.auxio.util.inflater
@@ -47,13 +47,13 @@ class PlaylistChoiceAdapter(val listener: ClickableListListener<PlaylistChoice>)
 }
 
 /**
- * A [DialogRecyclerView.ViewHolder] that displays an individual playlist choice. Use [from] to
- * create an instance.
+ * A [RecyclerView.ViewHolder] that displays an individual playlist choice. Use [from] to create an
+ * instance.
  *
  * @author Alexander Capehart (OxygenCobalt)
  */
 class PlaylistChoiceViewHolder private constructor(private val binding: ItemPickerChoiceBinding) :
-    DialogRecyclerView.ViewHolder(binding.root) {
+    RecyclerView.ViewHolder(binding.root) {
     fun bind(choice: PlaylistChoice, listener: ClickableListListener<PlaylistChoice>) {
         listener.bind(choice, this)
         binding.pickerImage.apply {
