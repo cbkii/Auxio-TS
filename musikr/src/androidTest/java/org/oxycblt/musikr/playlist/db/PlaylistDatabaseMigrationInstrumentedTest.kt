@@ -19,6 +19,7 @@
 package org.oxycblt.musikr.playlist.db
 
 import android.content.Context
+import androidx.room.Room
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
@@ -37,44 +38,53 @@ class PlaylistDatabaseMigrationInstrumentedTest {
     fun migrate30To31CanonicalizesPlaylistUidsWithoutDroppingMalformedRows() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         context.deleteDatabase(DB_NAME)
-        val helper = createVersion30Database(context)
-        try {
-            val db = helper.writableDatabase
-            val uuid = "12345678-1234-1234-1234-123456789abc"
-            val secondUuid = "87654321-4321-4321-4321-cba987654321"
-            val legacy = "org.oxycblt.auxio:a107-$uuid"
-            val canonical = "uap$uuid"
-            val otherLegacy = "org.oxycblt.auxio:a107-$secondUuid"
-            val otherCanonical = "uap$secondUuid"
-            val malformed = "not-a-valid-uid"
-            val song = "uas11111111-2222-3333-4444-555555555555"
+        val uuid = "12345678-1234-1234-1234-123456789abc"
+        val secondUuid = "87654321-4321-4321-4321-cba987654321"
+        val legacy = "org.oxycblt.auxio:a107-$uuid"
+        val canonical = "uap$uuid"
+        val otherLegacy = "org.oxycblt.auxio:a107-$secondUuid"
+        val otherCanonical = "uap$secondUuid"
+        val malformed = "not-a-valid-uid"
+        val song = "uas11111111-2222-3333-4444-555555555555"
 
-            db.execSQL(
-                "INSERT INTO PlaylistInfo (playlistUid, name) VALUES (?, ?)",
-                arrayOf<Any?>(legacy, "Legacy duplicate"),
-            )
-            db.execSQL(
-                "INSERT INTO PlaylistInfo (playlistUid, name) VALUES (?, ?)",
-                arrayOf<Any?>(canonical, "Canonical wins"),
-            )
-            db.execSQL(
-                "INSERT INTO PlaylistInfo (playlistUid, name) VALUES (?, ?)",
-                arrayOf<Any?>(otherLegacy, "Legacy only"),
-            )
-            db.execSQL(
-                "INSERT INTO PlaylistInfo (playlistUid, name) VALUES (?, ?)",
-                arrayOf<Any?>(malformed, "Malformed retained"),
-            )
-            db.execSQL("INSERT INTO PlaylistSong (songUid) VALUES (?)", arrayOf<Any?>(song))
-            for (playlistUid in listOf(legacy, canonical, otherLegacy, malformed)) {
+        createVersion30Database(context).let { helper ->
+            try {
+                val db = helper.writableDatabase
                 db.execSQL(
-                    "INSERT INTO PlaylistSongCrossRef (playlistUid, songUid) VALUES (?, ?)",
-                    arrayOf<Any?>(playlistUid, song),
+                    "INSERT INTO PlaylistInfo (playlistUid, name) VALUES (?, ?)",
+                    arrayOf<Any?>(legacy, "Legacy duplicate"),
                 )
+                db.execSQL(
+                    "INSERT INTO PlaylistInfo (playlistUid, name) VALUES (?, ?)",
+                    arrayOf<Any?>(canonical, "Canonical wins"),
+                )
+                db.execSQL(
+                    "INSERT INTO PlaylistInfo (playlistUid, name) VALUES (?, ?)",
+                    arrayOf<Any?>(otherLegacy, "Legacy only"),
+                )
+                db.execSQL(
+                    "INSERT INTO PlaylistInfo (playlistUid, name) VALUES (?, ?)",
+                    arrayOf<Any?>(malformed, "Malformed retained"),
+                )
+                db.execSQL("INSERT INTO PlaylistSong (songUid) VALUES (?)", arrayOf<Any?>(song))
+                for (playlistUid in listOf(legacy, canonical, otherLegacy, malformed)) {
+                    db.execSQL(
+                        "INSERT INTO PlaylistSongCrossRef (playlistUid, songUid) VALUES (?, ?)",
+                        arrayOf<Any?>(playlistUid, song),
+                    )
+                }
+            } finally {
+                helper.close()
             }
+        }
 
-            PlaylistDatabase.MIGRATION_30_31.migrate(db)
-
+        val migrated =
+            Room.databaseBuilder(context, PlaylistDatabase::class.java, DB_NAME)
+                .addMigrations(PlaylistDatabase.MIGRATION_30_31)
+                .allowMainThreadQueries()
+                .build()
+        try {
+            val db = migrated.openHelper.writableDatabase
             val info = mutableMapOf<String, String>()
             db.query("SELECT playlistUid, name FROM PlaylistInfo").use { cursor ->
                 while (cursor.moveToNext()) {
@@ -93,7 +103,7 @@ class PlaylistDatabaseMigrationInstrumentedTest {
             assertEquals(listOf(canonical, canonical, otherCanonical, malformed), crossRefs)
             assertTrue(crossRefs.none { it == legacy || it == otherLegacy })
         } finally {
-            helper.close()
+            migrated.close()
             context.deleteDatabase(DB_NAME)
         }
     }
@@ -106,13 +116,19 @@ class PlaylistDatabaseMigrationInstrumentedTest {
                     object : SupportSQLiteOpenHelper.Callback(30) {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             db.execSQL(
-                                "CREATE TABLE PlaylistInfo (playlistUid TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL)"
+                                "CREATE TABLE IF NOT EXISTS `PlaylistInfo` (`playlistUid` TEXT NOT NULL, `name` TEXT NOT NULL, PRIMARY KEY(`playlistUid`))"
                             )
                             db.execSQL(
-                                "CREATE TABLE PlaylistSong (songUid TEXT NOT NULL PRIMARY KEY)"
+                                "CREATE TABLE IF NOT EXISTS `PlaylistSong` (`songUid` TEXT NOT NULL, PRIMARY KEY(`songUid`))"
                             )
                             db.execSQL(
-                                "CREATE TABLE PlaylistSongCrossRef (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, playlistUid TEXT NOT NULL, songUid TEXT NOT NULL)"
+                                "CREATE TABLE IF NOT EXISTS `PlaylistSongCrossRef` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `playlistUid` TEXT NOT NULL, `songUid` TEXT NOT NULL)"
+                            )
+                            db.execSQL(
+                                "CREATE INDEX IF NOT EXISTS `index_PlaylistSongCrossRef_playlistUid` ON `PlaylistSongCrossRef` (`playlistUid`)"
+                            )
+                            db.execSQL(
+                                "CREATE INDEX IF NOT EXISTS `index_PlaylistSongCrossRef_songUid` ON `PlaylistSongCrossRef` (`songUid`)"
                             )
                         }
 
