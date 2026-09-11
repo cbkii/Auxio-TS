@@ -78,7 +78,14 @@ class SearchAdapter(
             ArtistViewHolder.VIEW_TYPE -> ArtistViewHolder.from(parent)
             GenreViewHolder.VIEW_TYPE -> GenreViewHolder.from(parent)
             PlaylistViewHolder.VIEW_TYPE -> PlaylistViewHolder.from(parent)
-            DividerViewHolder.VIEW_TYPE -> DividerViewHolder.from(parent)
+            DividerViewHolder.VIEW_TYPE ->
+                DividerViewHolder.from(parent).apply {
+                    itemView.layoutParams =
+                        RecyclerView.LayoutParams(
+                            RecyclerView.LayoutParams.MATCH_PARENT,
+                            RecyclerView.LayoutParams.WRAP_CONTENT,
+                        )
+                }
             BasicHeaderViewHolder.VIEW_TYPE -> BasicHeaderViewHolder.from(parent)
             else -> error("Invalid item type $viewType")
         }
