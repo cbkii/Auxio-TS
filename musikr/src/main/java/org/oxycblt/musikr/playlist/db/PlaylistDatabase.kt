@@ -50,7 +50,12 @@ internal abstract class PlaylistDatabase : RoomDatabase() {
         internal val MIGRATION_30_31 =
             object : Migration(30, 31) {
                 override fun migrate(db: SupportSQLiteDatabase) {
-                    canonicalizeUidColumn(db, "PlaylistInfo", "playlistUid", collapsePrimaryKey = true)
+                    canonicalizeUidColumn(
+                        db,
+                        "PlaylistInfo",
+                        "playlistUid",
+                        collapsePrimaryKey = true,
+                    )
                     canonicalizeUidColumn(
                         db,
                         "PlaylistSongCrossRef",

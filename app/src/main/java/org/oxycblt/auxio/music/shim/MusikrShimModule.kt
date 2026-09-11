@@ -34,7 +34,8 @@ import org.oxycblt.musikr.playlist.db.StoredPlaylists
 class MusikrShimModule {
     @Singleton
     @Provides
-    fun cache(@ApplicationContext context: Context): MutableCache = BatchingMutableCache.from(context)
+    fun cache(@ApplicationContext context: Context): MutableCache =
+        BatchingMutableCache.from(context)
 
     @Singleton
     @Provides

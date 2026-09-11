@@ -57,8 +57,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleRes: Int = -1
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         if (
-            event.actionMasked == MotionEvent.ACTION_DOWN &&
-                !maskRectF.contains(event.x, event.y)
+            event.actionMasked == MotionEvent.ACTION_DOWN && !maskRectF.contains(event.x, event.y)
         ) {
             return false
         }

@@ -29,12 +29,8 @@ import org.oxycblt.musikr.fs.File
 
 /** Groups active scan cache writes into bounded Room transactions. */
 class BatchingMutableCache
-private constructor(
-    private val db: CacheDatabase,
-    private val inner: MutableDBCache,
-) : MutableCache,
-    StartupProjectionCache by inner,
-    IncrementalCache by inner {
+private constructor(private val db: CacheDatabase, private val inner: MutableDBCache) :
+    MutableCache, StartupProjectionCache by inner, IncrementalCache by inner {
     private val pending = ArrayList<CachedFile>(WRITE_BATCH_SIZE)
 
     override suspend fun read(file: File) = inner.read(file)

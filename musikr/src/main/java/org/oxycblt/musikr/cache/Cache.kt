@@ -74,8 +74,8 @@ interface MutableCache : Cache {
     /**
      * Write multiple [CachedFile]s to the cache.
      *
-     * Implementations may override this to group persistence into bounded transactions. The
-     * default preserves compatibility for caches that only support single-entry writes.
+     * Implementations may override this to group persistence into bounded transactions. The default
+     * preserves compatibility for caches that only support single-entry writes.
      */
     suspend fun writeAll(cachedFiles: List<CachedFile>) {
         cachedFiles.forEach { write(it) }

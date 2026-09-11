@@ -228,7 +228,8 @@ private class AlbumSongViewHolder private constructor(private val binding: ItemA
             }
             binding.songTrackPlaceholder.isInvisible = true
         } else {
-            binding.songTrackCover.contentDescription = binding.context.getString(R.string.def_track)
+            binding.songTrackCover.contentDescription =
+                binding.context.getString(R.string.def_track)
             binding.songTrackText.apply {
                 isInvisible = true
                 text = null
