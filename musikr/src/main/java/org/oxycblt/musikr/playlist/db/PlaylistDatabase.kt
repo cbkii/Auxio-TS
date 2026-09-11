@@ -82,29 +82,18 @@ internal abstract class PlaylistDatabase : RoomDatabase() {
                             }
                         }
 
-                    val pending = mutableListOf<Pair<String, String>>()
-                    values.forEachIndexed { index, oldValue ->
-                        val canonical =
-                            Music.UID.fromString(oldValue)?.toString() ?: return@forEachIndexed
-                        if (canonical == oldValue) return@forEachIndexed
-                        val temporary = "__auxio_uid_31_${index}__${canonical}"
-                        db.execSQL(
-                            "UPDATE `$table` SET `$column` = ? WHERE `$column` = ?",
-                            arrayOf<Any?>(temporary, oldValue),
-                        )
-                        pending += temporary to canonical
-                    }
-
-                    for ((temporary, canonical) in pending) {
+                    for (oldValue in values) {
+                        val canonical = Music.UID.fromString(oldValue)?.toString() ?: continue
+                        if (canonical == oldValue) continue
                         if (collapsePrimaryKey && rowExists(db, table, column, canonical)) {
                             db.execSQL(
                                 "DELETE FROM `$table` WHERE `$column` = ?",
-                                arrayOf<Any?>(temporary),
+                                arrayOf<Any?>(oldValue),
                             )
                         } else {
                             db.execSQL(
                                 "UPDATE `$table` SET `$column` = ? WHERE `$column` = ?",
-                                arrayOf<Any?>(canonical, temporary),
+                                arrayOf<Any?>(canonical, oldValue),
                             )
                         }
                     }
@@ -154,7 +143,11 @@ internal abstract class PlaylistDao {
     @Query("SELECT * FROM PlaylistInfo")
     abstract suspend fun readRawPlaylists(): List<RawPlaylist>
 
-    /** Create a new playlist. */
+    /**
+     * Create a new playlist.
+     *
+     * @param rawPlaylist The [RawPlaylist] to create.
+     */
     @Transaction
     open suspend fun insertPlaylist(rawPlaylist: RawPlaylist) {
         insertInfo(rawPlaylist.playlistInfo)
@@ -169,21 +162,34 @@ internal abstract class PlaylistDao {
         )
     }
 
-    /** Replace the currently stored [PlaylistInfo] for a playlist entry. */
+    /**
+     * Replace the currently-stored [PlaylistInfo] for a playlist entry.
+     *
+     * @param playlistInfo The new [PlaylistInfo] to store.
+     */
     @Transaction
     open suspend fun replacePlaylistInfo(playlistInfo: PlaylistInfo) {
         deleteInfo(playlistInfo.playlistUid)
         insertInfo(playlistInfo)
     }
 
-    /** Delete a playlist entry. */
+    /**
+     * Delete a playlist entry's [PlaylistInfo] and [PlaylistSong].
+     *
+     * @param playlistUid The [Music.UID] of the playlist to delete.
+     */
     @Transaction
     open suspend fun deletePlaylist(playlistUid: Music.UID) {
         deleteInfo(playlistUid)
         deleteRefs(playlistUid)
     }
 
-    /** Insert new song entries into a playlist. */
+    /**
+     * Insert new song entries into a playlist.
+     *
+     * @param playlistUid The [Music.UID] of the playlist to insert into.
+     * @param songs The [PlaylistSong] representing each song to put into the playlist.
+     */
     @Transaction
     open suspend fun insertPlaylistSongs(playlistUid: Music.UID, songs: List<PlaylistSong>) {
         insertSongs(songs)
@@ -192,7 +198,13 @@ internal abstract class PlaylistDao {
         )
     }
 
-    /** Replace the currently stored songs of a playlist entry. */
+    /**
+     * Replace the currently stored songs of the given playlist entry.
+     *
+     * @param playlistUid The [Music.UID] of the playlist to update.
+     * @param songs The [PlaylistSong] representing the new list of songs to be placed in the
+     *   playlist.
+     */
     @Transaction
     open suspend fun replacePlaylistSongs(playlistUid: Music.UID, songs: List<PlaylistSong>) {
         deleteRefs(playlistUid)
