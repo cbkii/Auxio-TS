@@ -21,7 +21,6 @@ package org.oxycblt.auxio.music.decision
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import org.oxycblt.auxio.databinding.ItemNewPlaylistChoiceBinding
-import org.oxycblt.auxio.list.recycler.DialogRecyclerView
 import org.oxycblt.auxio.util.inflater
 
 /**
@@ -58,7 +57,7 @@ class NewPlaylistFooterAdapter(private val listener: Listener) :
  */
 class NewPlaylistFooterViewHolder
 private constructor(private val binding: ItemNewPlaylistChoiceBinding) :
-    DialogRecyclerView.ViewHolder(binding.root) {
+    RecyclerView.ViewHolder(binding.root) {
     /**
      * Bind new data to this instance.
      *
