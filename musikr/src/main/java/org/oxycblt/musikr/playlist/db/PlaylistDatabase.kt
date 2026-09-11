@@ -18,7 +18,10 @@
 
 package org.oxycblt.musikr.playlist.db
 
+import android.content.ContentValues
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
+import androidx.core.database.getStringOrNull
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Insert
@@ -28,6 +31,9 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+import androidx.sqlite.db.SupportSQLiteQueryBuilder
 import org.oxycblt.musikr.Music
 
 /**
@@ -37,7 +43,7 @@ import org.oxycblt.musikr.Music
  */
 @Database(
     entities = [PlaylistInfo::class, PlaylistSong::class, PlaylistSongCrossRef::class],
-    version = 30,
+    version = 31,
     exportSchema = false,
 )
 @TypeConverters(Music.UID.TypeConverters::class)
@@ -45,14 +51,78 @@ internal abstract class PlaylistDatabase : RoomDatabase() {
     abstract fun playlistDao(): PlaylistDao
 
     companion object {
+        internal val MIGRATION_30_31 =
+            object : Migration(30, 31) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    canonicalizeUids(db, "PlaylistInfo", "playlistUid")
+                    canonicalizeUids(db, "PlaylistSongCrossRef", "playlistUid")
+                }
+            }
+
         fun from(context: Context) =
             Room.databaseBuilder(
                     context.applicationContext,
                     PlaylistDatabase::class.java,
                     "user_music.db",
                 )
+                .addMigrations(MIGRATION_30_31)
                 .fallbackToDestructiveMigration(true)
                 .build()
+
+        private fun canonicalizeUids(
+            db: SupportSQLiteDatabase,
+            table: String,
+            column: String,
+        ) {
+            val migrations =
+                db.query(
+                        SupportSQLiteQueryBuilder.builder(table)
+                            .columns(arrayOf(column))
+                            .create()
+                    )
+                    .use { cursor ->
+                        val uidIndex = cursor.getColumnIndexOrThrow(column)
+                        buildList {
+                            while (cursor.moveToNext()) {
+                                val oldUid =
+                                    requireNotNull(cursor.getStringOrNull(uidIndex)) {
+                                        "Playlist UID migration failed: $table.$column was null"
+                                    }
+                                val newUid =
+                                    requireNotNull(Music.UID.fromString(oldUid)) {
+                                            "Playlist UID migration failed: invalid UID in $table.$column"
+                                        }
+                                        .toString()
+                                add(oldUid to newUid)
+                            }
+                        }
+                    }
+
+            // Collapse an already-canonical duplicate onto the legacy key first. This prevents a
+            // primary-key collision from destroying the canonical row when a database contains
+            // both representations of the same logical playlist UID.
+            migrations.forEach { (oldUid, newUid) ->
+                if (oldUid == newUid) return@forEach
+                db.update(
+                    table,
+                    SQLiteDatabase.CONFLICT_REPLACE,
+                    ContentValues().apply { put(column, oldUid) },
+                    "$column = ?",
+                    arrayOf(newUid),
+                )
+            }
+
+            migrations.forEach { (oldUid, newUid) ->
+                if (oldUid == newUid) return@forEach
+                db.update(
+                    table,
+                    SQLiteDatabase.CONFLICT_REPLACE,
+                    ContentValues().apply { put(column, newUid) },
+                    "$column = ?",
+                    arrayOf(oldUid),
+                )
+            }
+        }
     }
 }
 
