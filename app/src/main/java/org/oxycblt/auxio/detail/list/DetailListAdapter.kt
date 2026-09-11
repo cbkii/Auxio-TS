@@ -62,14 +62,7 @@ abstract class DetailListAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
         when (viewType) {
-            DividerViewHolder.VIEW_TYPE ->
-                DividerViewHolder.from(parent).apply {
-                    itemView.layoutParams =
-                        RecyclerView.LayoutParams(
-                            RecyclerView.LayoutParams.MATCH_PARENT,
-                            RecyclerView.LayoutParams.WRAP_CONTENT,
-                        )
-                }
+            DividerViewHolder.VIEW_TYPE -> DividerViewHolder.from(parent)
             BasicHeaderViewHolder.VIEW_TYPE -> BasicHeaderViewHolder.from(parent)
             SortHeaderViewHolder.VIEW_TYPE -> SortHeaderViewHolder.from(parent)
             else -> error("Invalid item type $viewType")
