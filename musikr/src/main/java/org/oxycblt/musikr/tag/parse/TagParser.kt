@@ -50,9 +50,15 @@ private class ProfiledTagParser(
 ) : TagParser {
     override fun parse(metadata: Metadata): ParsedTags {
         val compilation = work.readReleaseTypes && metadata.isCompilation()
-        val rawArtistNames = metadata.artistNames() ?: metadata.composerNames() ?: emptyList()
+        val taggedArtistNames = metadata.artistNames()
+        val useComposerFallback = taggedArtistNames == null
+        val rawArtistNames = taggedArtistNames ?: metadata.composerNames().orEmpty()
         val rawArtistSortNames =
-            metadata.artistSortNames() ?: metadata.composerSortNames() ?: emptyList()
+            if (useComposerFallback) {
+                metadata.composerSortNames().orEmpty()
+            } else {
+                metadata.artistSortNames().orEmpty()
+            }
         val rawAlbumArtistNames = metadata.albumArtistNames().orEmpty()
         val artistNames =
             if (work.expandMultipleArtists && dimensions.detailedCollaborators) {
@@ -107,9 +113,11 @@ private class ProfiledTagParser(
                 },
             artistMusicBrainzIds =
                 if (work.readMusicBrainz && dimensions.musicBrainz) {
-                    metadata.artistMusicBrainzIds()
-                        ?: metadata.composerMusicBrainzIds()
-                        ?: emptyList()
+                    if (useComposerFallback) {
+                        metadata.composerMusicBrainzIds().orEmpty()
+                    } else {
+                        metadata.artistMusicBrainzIds().orEmpty()
+                    }
                 } else {
                     emptyList()
                 },
