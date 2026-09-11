@@ -27,47 +27,42 @@ import org.oxycblt.musikr.cache.MutableCache
 import org.oxycblt.musikr.cache.StartupProjectionCache
 import org.oxycblt.musikr.fs.File
 
-/** Groups active scan cache writes into bounded Room transactions. */
+/** Adapts cache batches to bounded Room transactions and bulk DAO operations. */
 class BatchingMutableCache
-private constructor(private val db: CacheDatabase, private val inner: MutableDBCache) :
-    MutableCache, StartupProjectionCache by inner, IncrementalCache by inner {
-    private val pending = ArrayList<CachedFile>(WRITE_BATCH_SIZE)
-
+private constructor(
+    private val db: CacheDatabase,
+    private val inner: MutableDBCache,
+    private val batchWriter: IncrementalBatchWriter,
+) : MutableCache, StartupProjectionCache by inner, IncrementalCache by inner {
     override suspend fun read(file: File) = inner.read(file)
 
     override suspend fun snapshot() = inner.snapshot()
 
     override suspend fun write(cachedFile: CachedFile) {
-        if (inner.activePlan() == null) {
-            inner.write(cachedFile)
-            return
-        }
-        pending += cachedFile
-        if (pending.size >= WRITE_BATCH_SIZE) flush()
+        writeAll(listOf(cachedFile))
     }
 
     override suspend fun writeAll(cachedFiles: List<CachedFile>) {
-        if (inner.activePlan() == null) {
-            cachedFiles.chunked(WRITE_BATCH_SIZE).forEach { batch ->
-                db.withTransaction { batch.forEach { inner.write(it) } }
+        cachedFiles.chunked(WRITE_BATCH_SIZE).forEach { batch ->
+            db.withTransaction {
+                val plan = inner.activePlan()
+                if (plan == null) {
+                    batchWriter.writeLegacyAll(batch)
+                } else {
+                    batchWriter.writeLegacyAll(batchWriter.stageAll(plan, batch))
+                }
             }
-            return
         }
-        for (cachedFile in cachedFiles) write(cachedFile)
     }
 
-    override suspend fun commitScan(commitGuard: () -> Boolean): IncrementalScanCommit {
-        flush()
-        return inner.commitScan(commitGuard)
-    }
+    override suspend fun commitScan(commitGuard: () -> Boolean): IncrementalScanCommit =
+        inner.commitScan(commitGuard)
 
     override suspend fun abortScan(cause: Throwable?) {
-        pending.clear()
         inner.abortScan(cause)
     }
 
     override suspend fun cleanup(excluding: List<CachedFile>) {
-        flush()
         inner.cleanup(excluding)
     }
 
@@ -75,18 +70,12 @@ private constructor(private val db: CacheDatabase, private val inner: MutableDBC
 
     override suspend fun prepareStartupProjections(): Int = inner.prepareStartupProjections()
 
-    private suspend fun flush() {
-        if (pending.isEmpty()) return
-        db.withTransaction { pending.forEach { inner.write(it) } }
-        pending.clear()
-    }
-
     companion object {
         internal const val WRITE_BATCH_SIZE = 128
 
         fun from(context: Context): BatchingMutableCache = from(CacheDatabase.from(context))
 
         internal fun from(db: CacheDatabase): BatchingMutableCache =
-            BatchingMutableCache(db, MutableDBCache.from(db))
+            BatchingMutableCache(db, MutableDBCache.from(db), IncrementalBatchWriter(db))
     }
 }

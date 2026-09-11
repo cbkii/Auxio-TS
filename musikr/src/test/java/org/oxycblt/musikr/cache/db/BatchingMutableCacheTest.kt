@@ -25,6 +25,7 @@ import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
@@ -64,26 +65,24 @@ class BatchingMutableCacheTest {
     }
 
     @Test
-    fun activeScanFlushesAtBatchBoundaryAndBeforeCommit() = runBlocking {
+    fun activeScanWriteAllStagesPendingAndSeenRowsBeforeCommit() = runBlocking {
         val source = snapshot("v1")
         val plan = cache.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
         cache.beginScan(plan)
+        val files =
+            List(BatchingMutableCache.WRITE_BATCH_SIZE + 1) { index ->
+                cachedFile("track-$index.mp3")
+            }
 
-        repeat(BatchingMutableCache.WRITE_BATCH_SIZE - 1) { index ->
-            cache.write(cachedFile("track-$index.mp3"))
-        }
-        assertEquals(0, db.incrementalDao().pendingCount(plan.scanId, source.sourceKey))
+        cache.writeAll(files)
 
-        cache.write(cachedFile("track-last-in-batch.mp3"))
         assertEquals(
-            BatchingMutableCache.WRITE_BATCH_SIZE,
+            BatchingMutableCache.WRITE_BATCH_SIZE + 1,
             db.incrementalDao().pendingCount(plan.scanId, source.sourceKey),
         )
-
-        cache.write(cachedFile("track-remainder.mp3"))
         assertEquals(
-            BatchingMutableCache.WRITE_BATCH_SIZE,
-            db.incrementalDao().pendingCount(plan.scanId, source.sourceKey),
+            BatchingMutableCache.WRITE_BATCH_SIZE + 1,
+            db.incrementalDao().seenCount(plan.scanId, source.sourceKey),
         )
 
         cache.commitScan()
@@ -94,17 +93,27 @@ class BatchingMutableCacheTest {
     }
 
     @Test
-    fun abortDropsUnflushedRowsWithoutPublishingThem() = runBlocking {
+    fun abortDropsStagedRowsWithoutPublishingThem() = runBlocking {
         val source = snapshot("v1")
         val plan = cache.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
         cache.beginScan(plan)
-        cache.write(cachedFile("alpha.mp3"))
+        cache.writeAll(listOf(cachedFile("alpha.mp3")))
 
         cache.abortScan(IllegalStateException("cancelled"))
 
         assertEquals(0, db.incrementalDao().pendingCount(plan.scanId, source.sourceKey))
         assertEquals(0, db.incrementalLibraryDao().songCount())
         assertNull(cache.activePlan())
+    }
+
+    @Test
+    fun writeAllWithoutActiveScanPersistsLegacyRows() = runBlocking {
+        val files = listOf(cachedFile("alpha.mp3"), cachedFile("beta.mp3"))
+
+        cache.writeAll(files)
+
+        assertNotNull(db.readDao().selectSongByUri(files[0].file.uri))
+        assertNotNull(db.readDao().selectSongByUri(files[1].file.uri))
     }
 
     private fun snapshot(fingerprint: String): SourceSnapshot {
