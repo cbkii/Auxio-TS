@@ -57,13 +57,6 @@ internal abstract class PlaylistDatabase : RoomDatabase() {
                         "playlistUid",
                         collapsePrimaryKey = false,
                     )
-                    // Mixed legacy/current databases can contain duplicate logical refs after both
-                    // UID representations collapse to one canonical value. Keep the oldest row.
-                    db.execSQL(
-                        "DELETE FROM `PlaylistSongCrossRef` WHERE `id` NOT IN (" +
-                            "SELECT MIN(`id`) FROM `PlaylistSongCrossRef` " +
-                            "GROUP BY `playlistUid`, `songUid`)"
-                    )
                 }
 
                 private fun canonicalizeUidColumn(
@@ -86,6 +79,8 @@ internal abstract class PlaylistDatabase : RoomDatabase() {
                         val canonical = Music.UID.fromString(oldValue)?.toString() ?: continue
                         if (canonical == oldValue) continue
                         if (collapsePrimaryKey && rowExists(db, table, column, canonical)) {
+                            // Prefer an already-canonical playlist record, but keep every cross-ref.
+                            // Repeated song refs can be intentional and must not be deduplicated.
                             db.execSQL(
                                 "DELETE FROM `$table` WHERE `$column` = ?",
                                 arrayOf<Any?>(oldValue),
