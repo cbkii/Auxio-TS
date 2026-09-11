@@ -181,7 +181,16 @@ class DiscDividerViewHolder private constructor(divider: MaterialDivider) :
          * @param parent The parent to inflate this instance from.
          * @return A new instance.
          */
-        fun from(parent: ViewGroup) = DiscDividerViewHolder(MaterialDivider(parent.context))
+        fun from(parent: ViewGroup) =
+            DiscDividerViewHolder(
+                MaterialDivider(parent.context).apply {
+                    layoutParams =
+                        RecyclerView.LayoutParams(
+                            RecyclerView.LayoutParams.MATCH_PARENT,
+                            RecyclerView.LayoutParams.WRAP_CONTENT,
+                        )
+                }
+            )
 
         /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =
@@ -219,8 +228,7 @@ private class AlbumSongViewHolder private constructor(private val binding: ItemA
             }
             binding.songTrackPlaceholder.isInvisible = true
         } else {
-            binding.songTrackCover.contentDescription =
-                binding.context.getString(R.string.def_track)
+            binding.songTrackCover.contentDescription = binding.context.getString(R.string.def_track)
             binding.songTrackText.apply {
                 isInvisible = true
                 text = null
