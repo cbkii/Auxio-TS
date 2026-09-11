@@ -22,6 +22,9 @@ import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.metadata.Properties
 import org.oxycblt.musikr.tag.parse.ParsedTags
 
+/** Bounded write transaction size used for cache persistence on constrained Android storage. */
+internal const val CACHE_WRITE_BATCH_SIZE = 256
+
 /**
  * An immutable repository for cached song metadata.
  *
@@ -70,6 +73,16 @@ interface MutableCache : Cache {
      * @param cachedFile the [CachedFile] to write to the cache
      */
     suspend fun write(cachedFile: CachedFile)
+
+    /**
+     * Write multiple cached files while allowing implementations to batch durable transactions.
+     *
+     * The default preserves compatibility for custom cache implementations. Database-backed caches
+     * should override this to avoid one transaction/fsync per file during a cold scan.
+     */
+    suspend fun writeAll(cachedFiles: List<CachedFile>) {
+        cachedFiles.forEach { write(it) }
+    }
 
     /**
      * Cleanup the cache by removing all [CachedFile]s that are not in the provided [excluding]
@@ -134,21 +147,21 @@ sealed interface CacheResult {
     /**
      * A cache entry was found.
      *
-     * @param file the [CachedFile] that was found.
+     * @param file The [CachedFile] that was found.
      */
     data class Hit(val file: CachedFile) : CacheResult
 
     /**
      * A cache entry was not found.
      *
-     * @param file the [File] that could not be found in the cache.
+     * @param file The [File] that could not be found.
      */
     data class Miss(val file: File) : CacheResult
 
     /**
      * A cache entry was found, but it's out of date compared to the [file] given.
      *
-     * @param file the [File] that was found in the cache.
+     * @param file The [File] that was found in the cache.
      * @param addedMs the time the song was added to the cache.
      */
     data class Stale(val file: File, val addedMs: Long) : CacheResult
