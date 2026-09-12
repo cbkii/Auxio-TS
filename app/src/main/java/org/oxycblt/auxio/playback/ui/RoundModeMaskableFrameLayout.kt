@@ -20,6 +20,7 @@ package org.oxycblt.auxio.playback.ui
 
 import android.content.Context
 import android.util.AttributeSet
+import android.view.MotionEvent
 import com.google.android.material.carousel.MaskableFrameLayout
 import com.google.android.material.shape.ShapeAppearanceModel
 import dagger.hilt.EntryPoint
@@ -52,5 +53,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleRes: Int = -1
         } else {
             // Keep the XML-provided shapeAppearance when round mode is enabled.
         }
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (
+            event.actionMasked == MotionEvent.ACTION_DOWN && !maskRectF.contains(event.x, event.y)
+        ) {
+            return false
+        }
+        return super.dispatchTouchEvent(event)
     }
 }

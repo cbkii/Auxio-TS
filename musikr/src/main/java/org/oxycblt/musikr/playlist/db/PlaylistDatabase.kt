@@ -28,6 +28,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import org.oxycblt.musikr.Music
 
 /**
@@ -37,7 +39,7 @@ import org.oxycblt.musikr.Music
  */
 @Database(
     entities = [PlaylistInfo::class, PlaylistSong::class, PlaylistSongCrossRef::class],
-    version = 30,
+    version = 31,
     exportSchema = false,
 )
 @TypeConverters(Music.UID.TypeConverters::class)
@@ -45,12 +47,79 @@ internal abstract class PlaylistDatabase : RoomDatabase() {
     abstract fun playlistDao(): PlaylistDao
 
     companion object {
+        internal val MIGRATION_30_31 =
+            object : Migration(30, 31) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    canonicalizeUidColumn(
+                        db,
+                        "PlaylistInfo",
+                        "playlistUid",
+                        collapsePrimaryKey = true,
+                    )
+                    canonicalizeUidColumn(
+                        db,
+                        "PlaylistSongCrossRef",
+                        "playlistUid",
+                        collapsePrimaryKey = false,
+                    )
+                }
+
+                private fun canonicalizeUidColumn(
+                    db: SupportSQLiteDatabase,
+                    table: String,
+                    column: String,
+                    collapsePrimaryKey: Boolean,
+                ) {
+                    val values =
+                        db.query("SELECT DISTINCT `$column` FROM `$table`").use { cursor ->
+                            val index = cursor.getColumnIndexOrThrow(column)
+                            buildList {
+                                while (cursor.moveToNext()) {
+                                    cursor.getString(index)?.let(::add)
+                                }
+                            }
+                        }
+
+                    for (oldValue in values) {
+                        val canonical = Music.UID.fromString(oldValue)?.toString() ?: continue
+                        if (canonical == oldValue) continue
+                        if (collapsePrimaryKey && rowExists(db, table, column, canonical)) {
+                            // Prefer an already-canonical playlist record, but keep every
+                            // cross-ref.
+                            // Repeated song refs can be intentional and must not be deduplicated.
+                            db.execSQL(
+                                "DELETE FROM `$table` WHERE `$column` = ?",
+                                arrayOf<Any?>(oldValue),
+                            )
+                        } else {
+                            db.execSQL(
+                                "UPDATE `$table` SET `$column` = ? WHERE `$column` = ?",
+                                arrayOf<Any?>(canonical, oldValue),
+                            )
+                        }
+                    }
+                }
+
+                private fun rowExists(
+                    db: SupportSQLiteDatabase,
+                    table: String,
+                    column: String,
+                    value: String,
+                ): Boolean =
+                    db.query(
+                            "SELECT 1 FROM `$table` WHERE `$column` = ? LIMIT 1",
+                            arrayOf<Any?>(value),
+                        )
+                        .use { it.moveToFirst() }
+            }
+
         fun from(context: Context) =
             Room.databaseBuilder(
                     context.applicationContext,
                     PlaylistDatabase::class.java,
                     "user_music.db",
                 )
+                .addMigrations(MIGRATION_30_31)
                 .fallbackToDestructiveMigration(true)
                 .build()
     }

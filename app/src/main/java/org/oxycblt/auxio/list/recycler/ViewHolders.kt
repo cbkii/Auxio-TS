@@ -391,7 +391,16 @@ class DividerViewHolder private constructor(divider: MaterialDivider) :
          * @param parent The parent to inflate this instance from.
          * @return A new instance.
          */
-        fun from(parent: ViewGroup) = DividerViewHolder(MaterialDivider(parent.context))
+        fun from(parent: ViewGroup) =
+            DividerViewHolder(
+                MaterialDivider(parent.context).apply {
+                    layoutParams =
+                        RecyclerView.LayoutParams(
+                            RecyclerView.LayoutParams.MATCH_PARENT,
+                            RecyclerView.LayoutParams.WRAP_CONTENT,
+                        )
+                }
+            )
 
         /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =

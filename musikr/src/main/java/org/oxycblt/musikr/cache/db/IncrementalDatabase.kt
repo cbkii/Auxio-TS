@@ -220,6 +220,9 @@ internal interface IncrementalScanDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertSeen(row: ScanSeenData)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSeenRows(rows: List<ScanSeenData>)
+
     @Query(
         "SELECT COUNT(*) FROM IndexedSongData WHERE sourceKey = :sourceKey AND generation = :generation AND uri IN (:uris)"
     )
@@ -239,6 +242,9 @@ internal interface IncrementalScanDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertPending(row: PendingCachedFileData)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPendingRows(rows: List<PendingCachedFileData>)
 
     @Query(
         "SELECT * FROM PendingCachedFileData WHERE scanId = :scanId AND sourceKey = :sourceKey ORDER BY uri LIMIT :limit OFFSET :offset"

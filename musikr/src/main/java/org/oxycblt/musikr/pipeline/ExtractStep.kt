@@ -175,10 +175,11 @@ private class ExtractStepImpl(
         val finalizedTask =
             scope.tryAsyncWith(extracted, Dispatchers.IO) {
                 // Legacy caches still require the complete exclusion list. Incremental caches
-                // record
-                // every discovered row directly and reconcile missing rows in SQL at commit time.
+                // record every discovered row directly and reconcile missing rows in SQL at commit
+                // time.
                 val legacyExclude =
                     mutableListOf<CachedFile>().takeUnless { cache is IncrementalCache }
+                val pendingWrites = ArrayList<CachedFile>(CACHE_WRITE_BATCH_SIZE)
                 for (item in parsed) {
                     val result =
                         when (item) {
@@ -190,12 +191,19 @@ private class ExtractStepImpl(
                             }
                             is NeedsCaching -> {
                                 val cachedFile = item.rawSong.toCachedFile()
-                                cache.write(cachedFile)
+                                pendingWrites += cachedFile
+                                if (pendingWrites.size >= CACHE_WRITE_BATCH_SIZE) {
+                                    cache.writeAll(pendingWrites.toList())
+                                    pendingWrites.clear()
+                                }
                                 legacyExclude?.add(cachedFile)
                                 Finalized(item.rawSong)
                             }
                         }
                     it.send(result.extracted)
+                }
+                if (pendingWrites.isNotEmpty()) {
+                    cache.writeAll(pendingWrites)
                 }
                 legacyExclude?.let { cache.cleanup(it) }
             }
@@ -228,5 +236,6 @@ private class ExtractStepImpl(
     private companion object {
         const val TAG = "ExtractStep"
         const val SLOW_ITEM_WARNING_MS = 5_000L
+        const val CACHE_WRITE_BATCH_SIZE = 128
     }
 }
