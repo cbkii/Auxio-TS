@@ -20,7 +20,9 @@ package org.oxycblt.auxio.playback.service
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SeamlessQueueHandoffPolicyTest {
     @Test
@@ -89,6 +91,43 @@ class SeamlessQueueHandoffPolicyTest {
 
         assertEquals(0, plan.prependCount)
         assertEquals(0, plan.appendCount)
+    }
+
+    @Test
+    fun installedTopologyMustPreserveCurrentSourceAndCanonicalNeighbours() {
+        assertTrue(
+            SeamlessQueueHandoffPolicy.installedMatches(
+                expectedItemCount = 5,
+                expectedCurrentIndex = 2,
+                sourceUriBefore = "file:///current.flac",
+                actualItemCount = 5,
+                actualCurrentIndex = 2,
+                sourceUriAfter = "file:///current.flac",
+                nonCurrentItemsMatch = true,
+            )
+        )
+        assertFalse(
+            SeamlessQueueHandoffPolicy.installedMatches(
+                expectedItemCount = 5,
+                expectedCurrentIndex = 2,
+                sourceUriBefore = "file:///current.flac",
+                actualItemCount = 5,
+                actualCurrentIndex = 1,
+                sourceUriAfter = "file:///current.flac",
+                nonCurrentItemsMatch = true,
+            )
+        )
+        assertFalse(
+            SeamlessQueueHandoffPolicy.installedMatches(
+                expectedItemCount = 5,
+                expectedCurrentIndex = 2,
+                sourceUriBefore = "file:///current.flac",
+                actualItemCount = 5,
+                actualCurrentIndex = 2,
+                sourceUriAfter = "file:///current.flac",
+                nonCurrentItemsMatch = false,
+            )
+        )
     }
 
     @Test

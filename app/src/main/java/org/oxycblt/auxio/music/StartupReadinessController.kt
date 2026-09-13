@@ -28,11 +28,8 @@ import org.oxycblt.auxio.util.PerfTimer
  * Process-wide startup capability coordinator.
  *
  * Capability milestones are recorded independently and the public contiguous stage advances only
- * when every prerequisite in the interaction lane has actually been achieved. Recoverable
- * library/source conditions are tracked orthogonally and never compete with capability ordering.
- *
- * Fast browse and search deliberately precede queue restoration: a slow, corrupt, or unavailable
- * playback-persistence database must never hold the music library UI in a permanent loading state.
+ * when every prerequisite in the interaction lane has actually been achieved. Playback readiness is
+ * an orthogonal observation of the one canonical player and never owns or mutates playback.
  */
 @Singleton
 class StartupReadinessController @Inject constructor() {
@@ -40,6 +37,7 @@ class StartupReadinessController @Inject constructor() {
         val achieved: Set<StartupCapability> = setOf(StartupCapability.PROCESS_VISIBLE),
         val contiguous: StartupReadinessState = StartupReadinessState.ProcessVisible,
         val libraryStatus: StartupLibraryStatus = StartupLibraryStatus.Unknown,
+        val playbackReadiness: PlaybackReadinessState = PlaybackReadinessState.COLD,
     )
 
     fun interface Listener {
@@ -90,6 +88,17 @@ class StartupReadinessController @Inject constructor() {
         snapshot.forEach { it.onStartupReadinessStateChanged() }
     }
 
+    fun publishPlaybackReadiness(readiness: PlaybackReadinessState) {
+        val snapshot =
+            synchronized(this) {
+                if (currentState.playbackReadiness == readiness) return
+                currentState = currentState.copy(playbackReadiness = readiness)
+                PerfTimer.point("startup.playbackReadiness.${readiness.name}")
+                listeners.toList()
+            }
+        snapshot.forEach { it.onStartupReadinessStateChanged() }
+    }
+
     private fun deriveContiguous(): StartupReadinessState {
         var latest: StartupReadinessState = StartupReadinessState.ProcessVisible
         for (capability in StartupCapability.entries) {
@@ -98,6 +107,15 @@ class StartupReadinessController @Inject constructor() {
         }
         return latest
     }
+}
+
+enum class PlaybackReadinessState {
+    COLD,
+    SERVICE_READY,
+    QUEUE_RESTORED,
+    HOT_PAUSED,
+    PLAYING,
+    CANONICAL,
 }
 
 enum class StartupCapability {

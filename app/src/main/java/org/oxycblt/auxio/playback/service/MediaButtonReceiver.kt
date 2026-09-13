@@ -64,12 +64,13 @@ class MediaButtonReceiver : BroadcastReceiver() {
                 return
             }
 
-        val hasCurrentSong = playbackManager.currentSong != null
+        val hasCurrentMedia =
+            playbackManager.currentSong != null || playbackManager.rawPlaybackMetadata != null
         val isFocusHeld = playbackManager.isAudioFocusHeld
         if (
             !MediaButtonActionMapper.shouldForward(
                 event,
-                hasCurrentSong = hasCurrentSong,
+                hasCurrentSong = hasCurrentMedia,
                 isFocusHeld = isFocusHeld,
             )
         ) {
@@ -94,7 +95,7 @@ class MediaButtonReceiver : BroadcastReceiver() {
             origin = "MediaButtonReceiver",
             command = KeyEvent.keyCodeToString(keyCode),
             result = "ADMITTED",
-            detail = "currentSong=$hasCurrentSong focusHeld=$isFocusHeld",
+            detail = "currentMedia=$hasCurrentMedia focusHeld=$isFocusHeld",
         )
 
         val serviceClass = TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)

@@ -148,13 +148,24 @@ constructor(
         try {
             val session = queueDao.getQueueSession() ?: return null
             val actualCount = queueDao.countQueueItems(session.id)
-            if (actualCount <= 0) return null
-            val totalCount = minOf(session.totalCount, actualCount).coerceAtLeast(0)
-            if (totalCount == 0) return null
+            val totalCount =
+                PrimitiveQueueIntegrityPolicy.validTotalCount(
+                    declaredCount = session.totalCount,
+                    actualCount = actualCount,
+                    currentPosition = session.currentLogicalPosition,
+                )
+            if (totalCount == null) {
+                L.w(
+                    "Ignoring inconsistent primitive queue descriptor " +
+                        "[session=${session.id} declared=${session.totalCount} actual=$actualCount " +
+                        "current=${session.currentLogicalPosition}]"
+                )
+                return null
+            }
             QueueDescriptor(
                 sessionId = session.id,
                 totalCount = totalCount,
-                currentLogicalPosition = session.currentLogicalPosition.coerceIn(0, totalCount - 1),
+                currentLogicalPosition = session.currentLogicalPosition,
                 positionMs = session.positionMs.coerceAtLeast(0L),
                 repeatMode = session.repeatMode,
                 shuffleScope = session.shuffleScope,
