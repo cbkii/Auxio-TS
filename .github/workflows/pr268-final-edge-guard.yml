@@ -6,6 +6,7 @@ on:
       - fix/fast-resume-canonical-convergence
     paths:
       - ".github/workflows/pr268-final-edge-guard.yml"
+      - ".github/scripts/pr268-final-edge-guard.py"
 
 permissions:
   contents: write
