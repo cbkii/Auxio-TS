@@ -77,6 +77,19 @@ import org.oxycblt.musikr.tag.interpret.Naming
 import org.oxycblt.musikr.tag.interpret.Separators
 import timber.log.Timber as L
 
+/** Source authority paired with the exact published device-library generation it describes. */
+data class DeviceLibraryAuthority(val generation: Long, val sourceScanOutcome: SourceScanOutcome?)
+
+/** Rejects stale source outcomes when replaying device-library authority to late listeners. */
+internal object DeviceLibraryAuthorityPolicy {
+    fun coherentSnapshot(
+        currentGeneration: Long,
+        published: DeviceLibraryAuthority?,
+    ): DeviceLibraryAuthority =
+        published?.takeIf { it.generation == currentGeneration }
+            ?: DeviceLibraryAuthority(currentGeneration, null)
+}
+
 /**
  * Primary manager of music information and loading.
  *
@@ -294,6 +307,7 @@ interface MusicRepository {
         val userLibrary: Boolean,
         val deviceGeneration: Long,
         val userGeneration: Long,
+        val deviceSourceScanOutcome: SourceScanOutcome? = null,
     )
 
     /** Listener for changes in the music library. */
@@ -418,6 +432,7 @@ constructor(
     private val indexingSessionGate = IndexingSessionGate()
     private val deviceLibraryGeneration = AtomicLong(0L)
     private val userLibraryGeneration = AtomicLong(0L)
+    @Volatile private var publishedDeviceLibraryAuthority: DeviceLibraryAuthority? = null
     private val compatibilityHydrationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var compatibilityHydrationJob: Job? = null
 
@@ -453,12 +468,14 @@ constructor(
     override fun addUpdateListener(listener: MusicRepository.UpdateListener) {
         L.d("Adding $listener to update listeners")
         updateListeners.add(listener)
+        val deviceAuthority = currentDeviceLibraryAuthority()
         listener.onMusicChanges(
             MusicRepository.Changes(
                 deviceLibrary = true,
                 userLibrary = true,
-                deviceGeneration = deviceLibraryGeneration.get(),
+                deviceGeneration = deviceAuthority.generation,
                 userGeneration = userLibraryGeneration.get(),
+                deviceSourceScanOutcome = deviceAuthority.sourceScanOutcome,
             )
         )
     }
@@ -2383,17 +2400,39 @@ constructor(
         const val HEARTBEAT_PERSIST_INTERVAL_MS = 5_000L
     }
 
+    private fun currentDeviceLibraryAuthority(): DeviceLibraryAuthority =
+        synchronized(this) {
+            DeviceLibraryAuthorityPolicy.coherentSnapshot(
+                currentGeneration = deviceLibraryGeneration.get(),
+                published = publishedDeviceLibraryAuthority,
+            )
+        }
+
     private fun dispatchLibraryChange(device: Boolean, user: Boolean) {
+        val deviceAuthority =
+            synchronized(this) {
+                if (device) {
+                    DeviceLibraryAuthority(
+                            generation = deviceLibraryGeneration.incrementAndGet(),
+                            sourceScanOutcome = lastSourceScanOutcome,
+                        )
+                        .also { publishedDeviceLibraryAuthority = it }
+                } else {
+                    DeviceLibraryAuthorityPolicy.coherentSnapshot(
+                        currentGeneration = deviceLibraryGeneration.get(),
+                        published = publishedDeviceLibraryAuthority,
+                    )
+                }
+            }
         val changes =
             MusicRepository.Changes(
                 deviceLibrary = device,
                 userLibrary = user,
-                deviceGeneration =
-                    if (device) deviceLibraryGeneration.incrementAndGet()
-                    else deviceLibraryGeneration.get(),
+                deviceGeneration = deviceAuthority.generation,
                 userGeneration =
                     if (user) userLibraryGeneration.incrementAndGet()
                     else userLibraryGeneration.get(),
+                deviceSourceScanOutcome = if (device) deviceAuthority.sourceScanOutcome else null,
             )
         L.d("Dispatching library change [changes=$changes]")
         for (listener in updateListeners) {

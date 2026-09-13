@@ -18,6 +18,10 @@
 
 package org.oxycblt.auxio.playback.service
 
+import java.net.URI
+import java.util.Locale
+import kotlin.math.abs
+
 /** Builds fallback identity indexes that exclude every ambiguous identity. */
 internal object PrimitiveQueuePromotionIdentityIndex {
     fun <T> uniqueBy(items: Iterable<T>, identity: (T) -> String): Map<String, T> {
@@ -35,4 +39,24 @@ internal object PrimitiveQueuePromotionIdentityIndex {
         }
         return unique
     }
+
+    fun normalizeUriIdentity(value: String?): String? {
+        val trimmed = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val parsed = runCatching { URI(trimmed) }.getOrNull() ?: return trimmed
+        if (!parsed.scheme.equals("file", ignoreCase = true)) return trimmed
+        val path = normalizePathIdentity(parsed.path) ?: return trimmed
+        return "file://$path"
+    }
+
+    fun normalizePathIdentity(value: String?): String? {
+        val trimmed = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val slashNormalised = trimmed.replace('\\', '/').replace(Regex("/+"), "/")
+        return if (slashNormalised.length > 1) slashNormalised.trimEnd('/') else slashNormalised
+    }
+
+    fun normalizeTextIdentity(value: String?): String? =
+        value?.trim()?.takeIf { it.isNotEmpty() }?.lowercase(Locale.ROOT)
+
+    fun durationMatches(firstMs: Long, secondMs: Long, toleranceMs: Long = 1_500L): Boolean =
+        firstMs > 0L && secondMs > 0L && abs(firstMs - secondMs) <= toleranceMs
 }

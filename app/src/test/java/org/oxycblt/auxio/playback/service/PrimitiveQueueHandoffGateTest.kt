@@ -69,6 +69,18 @@ class PrimitiveQueueHandoffGateTest {
     }
 
     @Test
+    fun boundedRetryCanRearmFailedHydrationWithoutQueueMutation() {
+        val gate = PrimitiveQueueHandoffGate()
+        gate.onFailed(key)
+        gate.onRetry(key)
+
+        assertEquals(
+            PrimitiveQueueHandoffGate.Decision.PREPARE,
+            gate.requestHandoff(key, libraryReady = true),
+        )
+    }
+
+    @Test
     fun newLibraryGenerationCanRetryFailedHydration() {
         val gate = PrimitiveQueueHandoffGate()
         gate.onFailed(key)

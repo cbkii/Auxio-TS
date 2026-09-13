@@ -48,6 +48,13 @@ internal class PrimitiveQueueHandoffGate {
         if (failedKey == key) failedKey = null
     }
 
+    /**
+     * Re-arm a failed queue revision for an explicit bounded retry without waiting for user input.
+     */
+    fun onRetry(key: Key) {
+        if (failedKey == key) failedKey = null
+    }
+
     fun onPrepared(key: Key) {
         preparedKey = key
         if (failedKey == key) failedKey = null

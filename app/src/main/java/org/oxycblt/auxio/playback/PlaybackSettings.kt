@@ -60,6 +60,10 @@ interface PlaybackSettings : Settings<PlaybackSettings.Listener> {
     val rememberPause: Boolean
     /** Whether to always exit when task is removed, even if playing. */
     val exitOnTaskRemoval: Boolean
+    /**
+     * Whether the canonical TS18 playback authority should remain resident/prepared while paused.
+     */
+    val keepPlaybackReady: Boolean
     /** Whether to launch Auxio-TS automatically on device boot. */
     val autostartOnBoot: Boolean
     /** Whether to only launch the floating controls when autostarting. */
@@ -148,6 +152,9 @@ class PlaybackSettingsImpl @Inject constructor(@ApplicationContext context: Cont
 
     override val exitOnTaskRemoval: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_task_exit), false)
+
+    override val keepPlaybackReady: Boolean
+        get() = sharedPreferences.getBoolean(KEY_KEEP_PLAYBACK_READY, true)
 
     override val autostartOnBoot: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_autostart_on_boot), false)
@@ -238,6 +245,7 @@ class PlaybackSettingsImpl @Inject constructor(@ApplicationContext context: Cont
     }
 
     private companion object {
+        const val KEY_KEEP_PLAYBACK_READY = "auxio_keep_playback_ready"
         const val OLD_KEY_LIB_MUSIC_PLAYBACK_MODE = "auxio_library_playback_mode"
         const val OLD_KEY_DETAIL_MUSIC_PLAYBACK_MODE = "auxio_detail_playback_mode"
     }
