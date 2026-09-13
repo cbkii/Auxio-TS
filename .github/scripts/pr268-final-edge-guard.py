@@ -15,6 +15,9 @@ policy = Path(
 policy_test = Path(
     "app/src/test/java/org/oxycblt/auxio/playback/persist/PrimitiveQueueIntegrityPolicyTest.kt"
 )
+database = Path(
+    "app/src/main/java/org/oxycblt/auxio/playback/persist/PersistenceDatabase.kt"
+)
 repository = Path(
     "app/src/main/java/org/oxycblt/auxio/playback/persist/PersistenceRepository.kt"
 )
@@ -36,19 +39,8 @@ replace_once(
         return declaredCount
     }
 
-    fun canEnrichCurrentItem(
-        descriptorSessionId: Long,
-        descriptorRevision: Long,
-        descriptorCurrentPosition: Int,
-        logicalPosition: Int,
-        persistedSessionId: Long?,
-        persistedRevision: Long?,
-        persistedCurrentPosition: Int?,
-    ): Boolean =
-        logicalPosition == descriptorCurrentPosition &&
-            persistedSessionId == descriptorSessionId &&
-            persistedRevision == descriptorRevision &&
-            persistedCurrentPosition == descriptorCurrentPosition
+    fun canEnrichCurrentItem(descriptorCurrentPosition: Int, logicalPosition: Int): Boolean =
+        logicalPosition == descriptorCurrentPosition
 """,
     "current-item enrichment policy",
 )
@@ -80,13 +72,8 @@ replace_once(
         assertEquals(
             true,
             PrimitiveQueueIntegrityPolicy.canEnrichCurrentItem(
-                descriptorSessionId = 1L,
-                descriptorRevision = 7L,
                 descriptorCurrentPosition = 3,
                 logicalPosition = 3,
-                persistedSessionId = 1L,
-                persistedRevision = 7L,
-                persistedCurrentPosition = 3,
             ),
         )
     }
@@ -96,46 +83,64 @@ replace_once(
         assertEquals(
             false,
             PrimitiveQueueIntegrityPolicy.canEnrichCurrentItem(
-                descriptorSessionId = 1L,
-                descriptorRevision = 7L,
                 descriptorCurrentPosition = 3,
                 logicalPosition = 4,
-                persistedSessionId = 1L,
-                persistedRevision = 7L,
-                persistedCurrentPosition = 4,
-            ),
-        )
-    }
-
-    @Test
-    fun staleSessionOrRevisionCannotBeEnriched() {
-        assertEquals(
-            false,
-            PrimitiveQueueIntegrityPolicy.canEnrichCurrentItem(
-                descriptorSessionId = 1L,
-                descriptorRevision = 7L,
-                descriptorCurrentPosition = 3,
-                logicalPosition = 3,
-                persistedSessionId = 2L,
-                persistedRevision = 7L,
-                persistedCurrentPosition = 3,
-            ),
-        )
-        assertEquals(
-            false,
-            PrimitiveQueueIntegrityPolicy.canEnrichCurrentItem(
-                descriptorSessionId = 1L,
-                descriptorRevision = 7L,
-                descriptorCurrentPosition = 3,
-                logicalPosition = 3,
-                persistedSessionId = 1L,
-                persistedRevision = 8L,
-                persistedCurrentPosition = 3,
             ),
         )
     }
 """,
     "snapshot enrichment policy tests",
+)
+
+replace_once(
+    database,
+    """    @Query(
+        "UPDATE QueueItemRefEntity SET uri = COALESCE(:uri, uri), " +
+            "pathFallback = COALESCE(:pathFallback, pathFallback), " +
+            "titleFallback = COALESCE(:titleFallback, titleFallback), " +
+            "artistFallback = COALESCE(:artistFallback, artistFallback), " +
+            "albumFallback = COALESCE(:albumFallback, albumFallback), " +
+            "durationMs = CASE WHEN :durationMs > 0 THEN :durationMs ELSE durationMs END " +
+            "WHERE sessionId = :sessionId AND logicalPosition = :logicalPosition"
+    )
+    suspend fun enrichQueueItem(
+        sessionId: Long,
+        logicalPosition: Int,
+        uri: String?,
+        pathFallback: String?,
+        titleFallback: String?,
+        artistFallback: String?,
+        albumFallback: String?,
+        durationMs: Long,
+    ): Int
+""",
+    """    @Query(
+        "UPDATE QueueItemRefEntity SET uri = COALESCE(:uri, uri), " +
+            "pathFallback = COALESCE(:pathFallback, pathFallback), " +
+            "titleFallback = COALESCE(:titleFallback, titleFallback), " +
+            "artistFallback = COALESCE(:artistFallback, artistFallback), " +
+            "albumFallback = COALESCE(:albumFallback, albumFallback), " +
+            "durationMs = CASE WHEN :durationMs > 0 THEN :durationMs ELSE durationMs END " +
+            "WHERE sessionId = :sessionId AND logicalPosition = :logicalPosition " +
+            "AND logicalPosition = :expectedCurrentLogicalPosition " +
+            "AND EXISTS (SELECT 1 FROM QueueSessionEntity " +
+            "WHERE id = :sessionId AND revision = :expectedRevision " +
+            "AND currentLogicalPosition = :expectedCurrentLogicalPosition)"
+    )
+    suspend fun enrichQueueItem(
+        sessionId: Long,
+        logicalPosition: Int,
+        expectedRevision: Long,
+        expectedCurrentLogicalPosition: Int,
+        uri: String?,
+        pathFallback: String?,
+        titleFallback: String?,
+        artistFallback: String?,
+        albumFallback: String?,
+        durationMs: Long,
+    ): Int
+""",
+    "atomically guard queue enrichment",
 )
 
 replace_once(
@@ -180,30 +185,24 @@ replace_once(
         snapshot: FastResumeSnapshot,
     ): Boolean =
         try {
-            val session = queueDao.getQueueSession()
             if (
                 !PrimitiveQueueIntegrityPolicy.canEnrichCurrentItem(
-                    descriptorSessionId = descriptor.sessionId,
-                    descriptorRevision = descriptor.revision,
                     descriptorCurrentPosition = descriptor.currentLogicalPosition,
                     logicalPosition = logicalPosition,
-                    persistedSessionId = session?.id,
-                    persistedRevision = session?.revision,
-                    persistedCurrentPosition = session?.currentLogicalPosition,
                 )
             ) {
                 L.w(
-                    "Refusing Fast Resume snapshot enrichment for non-current or stale queue item " +
+                    "Refusing Fast Resume snapshot enrichment for non-current queue item " +
                         "[session=${descriptor.sessionId} revision=${descriptor.revision} " +
-                        "descriptorCurrent=${descriptor.currentLogicalPosition} logical=$logicalPosition " +
-                        "persistedSession=${session?.id} persistedRevision=${session?.revision} " +
-                        "persistedCurrent=${session?.currentLogicalPosition}]"
+                        "descriptorCurrent=${descriptor.currentLogicalPosition} logical=$logicalPosition]"
                 )
                 false
             } else {
                 queueDao.enrichQueueItem(
                     sessionId = descriptor.sessionId,
                     logicalPosition = logicalPosition,
+                    expectedRevision = descriptor.revision,
+                    expectedCurrentLogicalPosition = descriptor.currentLogicalPosition,
                     uri = snapshot.uri.takeIf { it.isNotBlank() },
                     pathFallback = snapshot.path,
                     titleFallback = snapshot.title,
