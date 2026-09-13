@@ -24,7 +24,19 @@ repository = Path(
 holder = Path(
     "app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt"
 )
+media_session = Path(
+    "app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt"
+)
+restore_arbiter_test = Path(
+    "app/src/test/java/org/oxycblt/auxio/playback/service/RestoreIntentArbiterTest.kt"
+)
+playback_fragment = Path(
+    "app/src/main/java/org/oxycblt/auxio/playback/service/PlaybackServiceFragment.kt"
+)
+preferences_audio = Path("app/src/main/res/xml/preferences_audio.xml")
+strings_pr268 = Path("app/src/main/res/values/strings_pr268.xml")
 
+# A Fast Resume snapshot belongs only to the exact persisted current queue item that created it.
 replace_once(
     policy,
     """    fun validTotalCount(declaredCount: Int, actualCount: Int, currentPosition: Int): Int? {
@@ -92,6 +104,7 @@ replace_once(
     "snapshot enrichment policy tests",
 )
 
+# Guard the Room write itself so a concurrent queue move/revision cannot race a prior check.
 replace_once(
     database,
     """    @Query(
@@ -228,4 +241,80 @@ replace_once(
     """                                persistenceRepository.enrichQueueItem(descriptor, target, snapshot)
 """,
     "preserve original descriptor authority during enrichment",
+)
+
+# Latest Pause must win while restore is still cold, without inventing a ShuffleAll fallback.
+replace_once(
+    media_session,
+    """        if (hasCurrentMedia()) {
+            playbackManager.playing(false)
+        }
+""",
+    """        if (hasCurrentMedia()) {
+            playbackManager.playing(false)
+        } else {
+            playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
+        }
+""",
+    "record pause during cold restore",
+)
+
+replace_once(
+    restore_arbiter_test,
+    """        assertTrue(arbiter.snapshot().play)
+""",
+    """        assertTrue(arbiter.snapshot().play)
+        assertFalse(arbiter.begin(DeferredPlayback.RestoreState(play = false)))
+        assertFalse(arbiter.snapshot().play)
+""",
+    "latest pause wins restore arbiter test",
+)
+
+# Cold Topway seek starts a restore and must get the same bounded watchdog as other ingress paths.
+replace_once(
+    playback_fragment,
+    """                    ) {
+                        playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
+                    }
+                    playbackManager.seekTo(positionMs)
+                    publishTopwayProgress("launcher-seek", force = true)
+""",
+    """                    ) {
+                        playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
+                        scheduleRestoreWatchdog()
+                    }
+                    playbackManager.seekTo(positionMs)
+                    publishTopwayProgress("launcher-seek", force = true)
+""",
+    "supervise cold Topway seek restore",
+)
+
+# Keep user-visible residency copy on the normal Android resource surface.
+replace_once(
+    preferences_audio,
+    """<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" xmlns:tools="http://schemas.android.com/tools" app:title="@string/set_audio">
+""",
+    """<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" app:title="@string/set_audio">
+""",
+    "remove unused tools namespace",
+)
+
+replace_once(
+    preferences_audio,
+    """        <SwitchPreferenceCompat app:defaultValue="true" app:key="auxio_keep_playback_ready" app:summary="Keep the canonical TS18 playback service and prepared current track resident while paused for faster media-control response." app:title="Keep playback ready" tools:ignore="HardcodedText" />
+""",
+    """        <SwitchPreferenceCompat app:defaultValue="true" app:key="auxio_keep_playback_ready" app:summary="@string/set_keep_playback_ready_desc" app:title="@string/set_keep_playback_ready" />
+""",
+    "resource playback residency preference text",
+)
+
+if strings_pr268.exists():
+    raise SystemExit("strings_pr268.xml unexpectedly already exists")
+strings_pr268.write_text(
+    """<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="set_keep_playback_ready">Keep playback ready</string>
+    <string name="set_keep_playback_ready_desc">Keep the canonical TS18 playback service and prepared current track resident while paused for faster media-control response.</string>
+</resources>
+"""
 )
