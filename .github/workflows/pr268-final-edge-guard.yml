@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/pr268-final-edge-guard.yml"
       - ".github/scripts/pr268-final-edge-guard.py"
+      - ".github/scripts/pr268-final-edge-guard-extra.py"
 
 permissions:
   contents: write
@@ -39,8 +40,10 @@ jobs:
           set -euo pipefail
 
           python3 .github/scripts/pr268-final-edge-guard.py
+          python3 .github/scripts/pr268-final-edge-guard-extra.py
           rm -f \
             .github/scripts/pr268-final-edge-guard.py \
+            .github/scripts/pr268-final-edge-guard-extra.py \
             .github/workflows/pr268-final-edge-guard.yml
 
           sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
