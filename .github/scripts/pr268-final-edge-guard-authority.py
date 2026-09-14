@@ -47,6 +47,44 @@ replace_once(
     "make authority-only publication idempotent",
 )
 
+# The incremental planner can prove a source-complete scan without producing a new Library object.
+# Publish that Success/Partial authority before returning so Fast Resume can converge immediately.
+replace_once(
+    repository,
+    """                    completeSourceAttempt(
+                        request = request,
+                        outcome =
+                            if (empty) {
+                                SourceScanAttemptOutcome.AUTHORITATIVE_EMPTY
+                            } else {
+                                SourceScanAttemptOutcome.SUCCESS
+                            },
+                        unresolvedSourceKeys = unresolved,
+                        reason = "Configured sources unchanged",
+                        lastScanFailed = unresolved.isNotEmpty(),
+                    )
+                    emitIndexingCompletion(
+""",
+    """                    completeSourceAttempt(
+                        request = request,
+                        outcome =
+                            if (empty) {
+                                SourceScanAttemptOutcome.AUTHORITATIVE_EMPTY
+                            } else {
+                                SourceScanAttemptOutcome.SUCCESS
+                            },
+                        unresolvedSourceKeys = unresolved,
+                        reason = "Configured sources unchanged",
+                        lastScanFailed = unresolved.isNotEmpty(),
+                    )
+                    if (IndexRequestPolicy.recordsSourceOutcome(request)) {
+                        withContext(Dispatchers.Main) { dispatchDeviceSourceAuthorityChange() }
+                    }
+                    emitIndexingCompletion(
+""",
+    "publish unchanged-source authority before early completion",
+)
+
 # USER_REFRESH/SOURCE_OBSERVER recovery scans deliberately hold no checkpoint lease. emitLibrary()
 # publishes when content changes, but returns silently when the same library is re-proven. Publish
 # the newly recorded source authority in both cases; the idempotence guard avoids a duplicate event
