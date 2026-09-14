@@ -8,6 +8,7 @@ on:
       - ".github/workflows/pr268-final-edge-guard.yml"
       - ".github/scripts/pr268-final-edge-guard.py"
       - ".github/scripts/pr268-final-edge-guard-extra.py"
+      - ".github/scripts/pr268-final-edge-guard-authority.py"
 
 permissions:
   contents: write
@@ -41,9 +42,11 @@ jobs:
 
           python3 .github/scripts/pr268-final-edge-guard.py
           python3 .github/scripts/pr268-final-edge-guard-extra.py
+          python3 .github/scripts/pr268-final-edge-guard-authority.py
           rm -f \
             .github/scripts/pr268-final-edge-guard.py \
             .github/scripts/pr268-final-edge-guard-extra.py \
+            .github/scripts/pr268-final-edge-guard-authority.py \
             .github/workflows/pr268-final-edge-guard.yml
 
           sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
