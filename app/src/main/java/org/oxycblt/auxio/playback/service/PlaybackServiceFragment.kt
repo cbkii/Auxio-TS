@@ -40,6 +40,7 @@ import org.oxycblt.auxio.headunit.topway.TopwayLauncherIntegrationCoordinator
 import org.oxycblt.auxio.headunit.topway.TopwayStartCallbacks
 import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
+import org.oxycblt.auxio.music.PlaybackReadinessState
 import org.oxycblt.auxio.music.StartupReadinessController
 import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.music.resolve
@@ -120,7 +121,8 @@ private constructor(
         )
 
     private fun restoreCachedPlaybackStateIfIdle() {
-        if (playbackManager.currentSong != null) return
+        if (playbackManager.currentSong != null || playbackManager.rawPlaybackMetadata != null)
+            return
         L.i("Requesting cached saved-state restore on playback service attach")
         playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
         scheduleRestoreWatchdog()
@@ -181,11 +183,30 @@ private constructor(
     }
 
     private fun updateAutoStopTimer(isPlaying: Boolean) {
-        if (isPlaying) {
-            cancelAutoStop()
-        } else if (exoHolder.sessionOngoing) {
+        if (
+            PlaybackResidencyPolicy.shouldScheduleIdleStop(
+                keepPlaybackReady = playbackSettings.keepPlaybackReady,
+                isPlaying = isPlaying,
+                sessionOngoing = exoHolder.sessionOngoing,
+            )
+        ) {
             scheduleAutoStop()
+        } else {
+            cancelAutoStop()
         }
+    }
+
+    private fun restoreWithSkip(delta: Int, origin: String) {
+        L.i("$origin received with no ready queue; restoring persisted playback with skip=$delta")
+        playbackManager.playDeferred(
+            DeferredPlayback.RestoreState(play = true, fallback = DeferredPlayback.ShuffleAll())
+        )
+        if (delta > 0) {
+            repeat(delta) { playbackManager.next() }
+        } else {
+            repeat(-delta) { playbackManager.prev() }
+        }
+        scheduleRestoreWatchdog()
     }
 
     // --- MEDIASESSION CALLBACKS ---
@@ -201,13 +222,20 @@ private constructor(
         publishTopwayState("service-attach", force = true)
         reconcileTopwayProgressTicker()
         startupReadinessController.publishCapability(StartupReadinessState.PlaybackServiceReady)
+        startupReadinessController.publishPlaybackReadiness(PlaybackReadinessState.SERVICE_READY)
         restoreCachedPlaybackStateIfIdle()
         updateAutoStopTimer(playbackManager.progression.isPlaying)
         return sessionHolder.token
     }
 
     fun handleTaskRemoved() {
-        if (!playbackManager.progression.isPlaying || playbackSettings.exitOnTaskRemoval) {
+        if (
+            PlaybackResidencyPolicy.shouldEndSessionOnTaskRemoved(
+                keepPlaybackReady = playbackSettings.keepPlaybackReady,
+                isPlaying = playbackManager.progression.isPlaying,
+                exitOnTaskRemoval = playbackSettings.exitOnTaskRemoval,
+            )
+        ) {
             playbackManager.endSession()
         }
     }
@@ -220,8 +248,6 @@ private constructor(
             return
         }
 
-        // At minimum we want to ensure an active playback state.
-        // TODO: Possibly also force to go foreground?
         val startId = intent?.getIntExtra(INTENT_KEY_START_ID, -1)
         val action =
             when (startId) {
@@ -233,7 +259,6 @@ private constructor(
                     )
                 IntegerTable.START_ID_MEDIA_BUTTON -> {
                     if (!sessionHolder.tryMediaButtonIntent(intent)) {
-                        // Malformed intent, need to restore state immediately
                         DeferredPlayback.RestoreState(
                             play = true,
                             fallback = DeferredPlayback.ShuffleAll(),
@@ -242,30 +267,17 @@ private constructor(
                         null
                     }
                 }
-                IntegerTable.START_ID_TOPWAY -> {
-                    // Topway intents are handled early above. This branch remains as a
-                    // defensive no-op for any future fall-through from non-action intents
-                    // that still carry the Topway start ID.
-                    null
-                }
-                IntegerTable.START_ID_BOOT -> {
-                    // Boot receiver started the service (Activity launch was blocked).
-                    // Respect the autoplay setting for the restore action.
+                IntegerTable.START_ID_TOPWAY -> null
+                IntegerTable.START_ID_BOOT ->
                     StartupPlaybackPolicy.restoreActionForBoot(playbackSettings.autoplayOnLaunch)
-                }
-                IntegerTable.START_ID_BLUETOOTH -> {
+                IntegerTable.START_ID_BLUETOOTH ->
                     DeferredPlayback.RestoreState(
                         play = playbackSettings.headsetAutoplay,
                         fallback = DeferredPlayback.ShuffleAll(),
                     )
-                }
                 else -> {
                     L.d("Handling non-native start.")
-                    if (intent != null && sessionHolder.tryMediaButtonIntent(intent)) {
-                        // Just a media button intent, move on.
-                        return
-                    }
-                    // External services using Auxio better know what they are doing.
+                    if (intent != null && sessionHolder.tryMediaButtonIntent(intent)) return
                     DeferredPlayback.RestoreState(play = false)
                 }
             }
@@ -281,23 +293,46 @@ private constructor(
             intent,
             object : TopwayStartCallbacks {
                 override val hasCurrentSong: Boolean
-                    get() = playbackManager.currentSong != null || exoHolder.hasRawFastResume
+                    get() =
+                        playbackManager.currentSong != null ||
+                            playbackManager.rawPlaybackMetadata != null
 
                 override val currentDurationMs: Long?
                     get() =
-                        playbackManager.currentSong?.durationMs ?: exoHolder.rawFastResumeDurationMs
+                        playbackManager.currentSong?.durationMs
+                            ?: playbackManager.rawPlaybackMetadata?.durationMs
 
-                override fun previous() = playbackManager.prev()
+                override fun previous() {
+                    if (
+                        playbackManager.currentSong != null ||
+                            playbackManager.rawPlaybackMetadata != null
+                    ) {
+                        playbackManager.prev()
+                    } else {
+                        restoreWithSkip(-1, "Topway previous")
+                    }
+                }
 
-                override fun next() = playbackManager.next()
+                override fun next() {
+                    if (
+                        playbackManager.currentSong != null ||
+                            playbackManager.rawPlaybackMetadata != null
+                    ) {
+                        playbackManager.next()
+                    } else {
+                        restoreWithSkip(1, "Topway next")
+                    }
+                }
 
                 override fun playPause() {
-                    val currentSong = playbackManager.currentSong
-                    if (currentSong != null || exoHolder.hasRawFastResume) {
+                    if (
+                        playbackManager.currentSong != null ||
+                            playbackManager.rawPlaybackMetadata != null
+                    ) {
                         playbackManager.playing(!playbackManager.progression.isPlaying)
                     } else {
                         L.i(
-                            "Topway play/pause received with no current song; restoring saved playback"
+                            "Topway play/pause received with no current media; restoring saved playback"
                         )
                         playbackManager.playDeferred(
                             DeferredPlayback.RestoreState(
@@ -310,8 +345,13 @@ private constructor(
                 }
 
                 override fun widgetUpdate() {
-                    if (playbackManager.currentSong == null) {
-                        L.i("Topway update received with no current song; requesting state restore")
+                    if (
+                        playbackManager.currentSong == null &&
+                            playbackManager.rawPlaybackMetadata == null
+                    ) {
+                        L.i(
+                            "Topway update received with no current media; requesting state restore"
+                        )
                         playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
                         scheduleRestoreWatchdog()
                     }
@@ -320,6 +360,12 @@ private constructor(
                 }
 
                 override fun seekTo(positionMs: Long) {
+                    if (
+                        playbackManager.currentSong == null &&
+                            playbackManager.rawPlaybackMetadata == null
+                    ) {
+                        playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
+                    }
                     playbackManager.seekTo(positionMs)
                     publishTopwayProgress("launcher-seek", force = true)
                 }
@@ -368,7 +414,6 @@ private constructor(
     }
 
     override fun onProgressionChanged(progression: Progression) {
-        // Update timer whenever play/pause state changes
         updateAutoStopTimer(progression.isPlaying)
         val playStateChanged = lastTopwayIsPlaying != progression.isPlaying
         lastTopwayIsPlaying = progression.isPlaying
@@ -382,8 +427,6 @@ private constructor(
         ) {
             cancelRestoreWatchdog()
             startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
-            // A foreground-service start may still own the lightweight restoring placeholder.
-            // Reconcile it immediately with the real media/indexing/idle terminal state.
             foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
         }
     }

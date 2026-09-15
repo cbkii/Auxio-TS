@@ -63,23 +63,6 @@ constructor(
     private val jaroWinkler = JaroWinklerSimilarity()
     private var lastColdRestoreRequestAtMs = Long.MIN_VALUE
 
-    //    STUBS: We already automatically prepare playback.
-    //    override fun onPrepare() {
-    //        super.onPrepare()
-    //    }
-
-    //    override fun onPrepareFromMediaId(mediaId: String?, extras: Bundle?) {
-    //        super.onPrepareFromMediaId(mediaId, extras)
-    //    }
-    //
-    //    override fun onPrepareFromUri(uri: Uri?, extras: Bundle?) {
-    //        super.onPrepareFromUri(uri, extras)
-    //    }
-    //
-    //    override fun onPlayFromUri(uri: Uri?, extras: Bundle?) {
-    //        super.onPlayFromUri(uri, extras)
-    //    }
-
     override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
         super.onPlayFromMediaId(mediaId, extras)
         val uid = MediaSessionUID.fromString(mediaId ?: return) ?: return
@@ -91,7 +74,6 @@ constructor(
 
     override fun onPrepareFromSearch(query: String?, extras: Bundle?) {
         super.onPrepareFromSearch(query, extras)
-        // STUB, can't tell when this is called
     }
 
     override fun onPlayFromSearch(query: String, extras: Bundle) {
@@ -118,12 +100,9 @@ constructor(
         super.onRemoveQueueItem(description)
         val at = description.extras?.getInt(KEY_QUEUE_POS)
         if (at != null) {
-            // Direct queue item removal w/preserved extras, we can explicitly remove
-            // the correct item rather than a duplicate elsewhere.
             playbackManager.removeQueueItem(at)
             return
         }
-        // Non-queue item or queue item lost it's extras in transit, remove the first item
         val uid = MediaSessionUID.fromString(description.mediaId ?: return) ?: return
         val songUid =
             when (uid) {
@@ -165,36 +144,44 @@ constructor(
         }
         lastColdRestoreRequestAtMs = nowMs
         logTransport(command = "PLAY", result = "ADMITTED", detail = "path=cold-restore")
-        playbackManager.playDeferred(
-            DeferredPlayback.RestoreState(play = true, fallback = DeferredPlayback.ShuffleAll())
-        )
+        startColdRestore(play = true)
     }
 
     override fun onPause() {
         logTransport(
             command = "PAUSE",
             result = "ADMITTED",
-            detail = "currentSong=${playbackManager.currentSong != null}",
+            detail = "currentMedia=${hasCurrentMedia()}",
         )
-        playbackManager.playing(false)
+        if (hasCurrentMedia()) {
+            playbackManager.playing(false)
+        }
     }
 
     override fun onSkipToNext() {
         logTransport(
             command = "NEXT",
             result = "ADMITTED",
-            detail = "currentSong=${playbackManager.currentSong != null}",
+            detail = "currentMedia=${hasCurrentMedia()}",
         )
-        playbackManager.next()
+        if (hasCurrentMedia()) {
+            playbackManager.next()
+        } else {
+            startColdRestore(play = true, skipDelta = 1)
+        }
     }
 
     override fun onSkipToPrevious() {
         logTransport(
             command = "PREVIOUS",
             result = "ADMITTED",
-            detail = "currentSong=${playbackManager.currentSong != null}",
+            detail = "currentMedia=${hasCurrentMedia()}",
         )
-        playbackManager.prev()
+        if (hasCurrentMedia()) {
+            playbackManager.prev()
+        } else {
+            startColdRestore(play = true, skipDelta = -1)
+        }
     }
 
     override fun onSkipToQueueItem(id: Long) {
@@ -202,14 +189,14 @@ constructor(
     }
 
     override fun onSeekTo(position: Long) {
+        if (!hasCurrentMedia()) startColdRestore(play = false)
         playbackManager.seekTo(position)
     }
 
-    override fun onFastForward() {
-        playbackManager.next()
-    }
+    override fun onFastForward() = onSkipToNext()
 
     override fun onRewind() {
+        if (!hasCurrentMedia()) startColdRestore(play = true)
         playbackManager.seekTo(0)
         playbackManager.playing(true)
     }
@@ -234,15 +221,25 @@ constructor(
 
     override fun onStop() {
         logTransport(command = "STOP", result = "ADMITTED")
-        // Get the service to shut down with the ACTION_EXIT intent
         context.sendBroadcast(Intent(PlaybackActions.ACTION_EXIT))
     }
 
     override fun onCustomAction(action: String, extras: Bundle?) {
         super.onCustomAction(action, extras)
-        // Service already handles intents from the old notification actions, easier to
-        // plug into that system.
         context.sendBroadcast(Intent(action))
+    }
+
+    private fun hasCurrentMedia(): Boolean =
+        playbackManager.currentSong != null || playbackManager.rawPlaybackMetadata != null
+
+    private fun startColdRestore(play: Boolean, skipDelta: Int = 0) {
+        playbackManager.playDeferred(
+            DeferredPlayback.RestoreState(play = play, fallback = DeferredPlayback.ShuffleAll())
+        )
+        when {
+            skipDelta > 0 -> repeat(skipDelta) { playbackManager.next() }
+            skipDelta < 0 -> repeat(-skipDelta) { playbackManager.prev() }
+        }
     }
 
     private fun logTransport(command: String, result: String, detail: String? = null) {
@@ -274,7 +271,6 @@ constructor(
         library: Library,
     ): PlaybackCommand? {
         if (query == null) {
-            // User just wanted to 'play some music', shuffle all
             return commandFactory.all(ShuffleMode.ON)
         }
 
@@ -322,7 +318,6 @@ constructor(
         val bestMusic =
             (library.songs + library.albums + library.artists + library.genres + library.playlists)
                 .maxByOrNull { fuzzy(it.name, query) }
-        // Fallback to all songs when we can't correctly resolve the query, dont error.
         return bestMusic?.let { expandMusicIntoCommand(it, null) }
             ?: commandFactory.all(ShuffleMode.ON)
     }

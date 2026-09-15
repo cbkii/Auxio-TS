@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" app:title="@string/set_audio">
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" xmlns:tools="http://schemas.android.com/tools" app:title="@string/set_audio">
     <PreferenceCategory android:title="@string/set_starting_playback">
         <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_autoplay_on_launch" app:summary="@string/set_autoplay_on_launch_desc" app:title="@string/set_autoplay_on_launch" />
         <SwitchPreferenceCompat app:defaultValue="false" app:dependency="@string/set_key_autoplay_on_launch" app:key="@string/set_key_always_play_immediately" app:summary="@string/set_always_play_immediately_desc" app:title="@string/set_always_play_immediately" />
@@ -22,6 +22,7 @@
         <org.oxycblt.auxio.settings.ui.WrappedDialogPreference app:key="@string/set_key_pre_amp" app:summary="@string/set_pre_amp_desc" app:title="@string/set_pre_amp" />
     </PreferenceCategory>
     <PreferenceCategory android:title="@string/set_app_lifecycle">
+        <SwitchPreferenceCompat app:defaultValue="true" app:key="auxio_keep_playback_ready" app:summary="Keep the canonical TS18 playback service and prepared current track resident while paused for faster media-control response." app:title="Keep playback ready" tools:ignore="HardcodedText" />
         <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_task_exit" app:summary="@string/set_task_exit_desc" app:title="@string/set_task_exit" />
     </PreferenceCategory>
 </PreferenceScreen>
