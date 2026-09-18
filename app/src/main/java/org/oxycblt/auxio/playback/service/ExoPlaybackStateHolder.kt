@@ -171,6 +171,7 @@ class ExoPlaybackStateHolder(
     private data class PreparedPrimitivePromotion(
         val key: PrimitiveQueueHandoffGate.Key,
         val libraryGeneration: Long,
+        val library: Library,
         val songs: List<Song>,
         val currentHeapIndex: Int,
         val shuffledMapping: List<Int>,
@@ -977,11 +978,18 @@ class ExoPlaybackStateHolder(
                     primitivePromotionPreparationKey = null
                     primitivePromotionPreparationGeneration = null
                     val current = activePrimitiveWindow ?: return@withContext
-                    if (libraryGeneration != latestDeviceLibraryGeneration) {
+                    if (
+                        libraryGeneration != latestDeviceLibraryGeneration ||
+                            musicRepository.library !== library ||
+                            latestDeviceSourceOutcome != musicRepository.lastSourceScanOutcome
+                    ) {
                         L.d(
                             "Discarding stale Fast Resume library preparation " +
                                 "[preparedGeneration=$libraryGeneration " +
-                                "currentGeneration=$latestDeviceLibraryGeneration]"
+                                "currentGeneration=$latestDeviceLibraryGeneration " +
+                                "libraryCurrent=${musicRepository.library === library} " +
+                                "outcomeCurrent=" +
+                                "${latestDeviceSourceOutcome == musicRepository.lastSourceScanOutcome}]"
                         )
                         authoritativeFastResumeLibrary()?.let { currentLibrary ->
                             preparePrimitivePromotion(currentLibrary, force = true)
@@ -1021,6 +1029,7 @@ class ExoPlaybackStateHolder(
                         PreparedPrimitivePromotion(
                             key = key,
                             libraryGeneration = libraryGeneration,
+                            library = library,
                             songs = hydratedSongs,
                             currentHeapIndex = hydrated.currentHeapIndex,
                             shuffledMapping = hydrated.shuffledMapping,
@@ -1089,6 +1098,8 @@ class ExoPlaybackStateHolder(
         if (
             prepared.key != key ||
                 prepared.libraryGeneration != latestDeviceLibraryGeneration ||
+                musicRepository.library !== prepared.library ||
+                latestDeviceSourceOutcome != musicRepository.lastSourceScanOutcome ||
                 !primitiveHandoffGate.isPrepared(key) ||
                 authoritativeFastResumeLibrary() == null
         ) {
@@ -2291,12 +2302,14 @@ class ExoPlaybackStateHolder(
         sourceOutcome: SourceScanOutcome?,
     ) {
         if (
-            !FastResumeCanonicalHandoffPolicy.isAuthoritative(
-                generation = libraryGeneration,
-                expectedGeneration = latestDeviceLibraryGeneration,
-                outcome = sourceOutcome,
-                expectedOutcome = latestDeviceSourceOutcome,
-            )
+            musicRepository.library !== library ||
+                sourceOutcome != musicRepository.lastSourceScanOutcome ||
+                !FastResumeCanonicalHandoffPolicy.isAuthoritative(
+                    generation = libraryGeneration,
+                    expectedGeneration = latestDeviceLibraryGeneration,
+                    outcome = sourceOutcome,
+                    expectedOutcome = latestDeviceSourceOutcome,
+                )
         ) {
             armFastResumeCanonicalRetry()
             return
@@ -2378,7 +2391,9 @@ class ExoPlaybackStateHolder(
                     if (
                         rawFastResumeItem !== raw ||
                             libraryGeneration != latestDeviceLibraryGeneration ||
-                            sourceOutcome != latestDeviceSourceOutcome
+                            sourceOutcome != latestDeviceSourceOutcome ||
+                            musicRepository.library !== library ||
+                            sourceOutcome != musicRepository.lastSourceScanOutcome
                     ) {
                         L.d("Skipping stale TS18 raw reconciliation result")
                         return@withContext
