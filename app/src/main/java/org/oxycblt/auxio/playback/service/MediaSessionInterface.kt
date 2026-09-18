@@ -153,9 +153,7 @@ constructor(
             result = "ADMITTED",
             detail = "currentMedia=${hasCurrentMedia()}",
         )
-        if (hasCurrentMedia()) {
-            playbackManager.playing(false)
-        }
+        playbackManager.playing(false)
     }
 
     override fun onSkipToNext() {
