@@ -65,15 +65,18 @@ internal object FastResumeCanonicalHandoffPolicy {
         seekPositionMs: Long?,
     ): QueueDescriptor? {
         descriptor ?: return null
-        val target =
-            (descriptor.currentLogicalPosition.toLong() + skipDelta)
-                .coerceIn(0L, (descriptor.totalCount - 1).coerceAtLeast(0).toLong())
-                .toInt()
-        val position = seekPositionMs ?: if (skipDelta != 0) 0L else descriptor.positionMs
-        return descriptor.copy(
-            currentLogicalPosition = target,
-            positionMs = position.coerceAtLeast(0L),
-        )
+        // Keep raw identity pinned to the persisted current item. A cold skip is replayed only
+        // after that item has been reconciled into the complete canonical queue.
+        val position =
+            if (skipDelta == 0) seekPositionMs ?: descriptor.positionMs else descriptor.positionMs
+        return descriptor.copy(positionMs = position.coerceAtLeast(0L))
+    }
+
+    fun targetLogicalPosition(currentLogicalPosition: Int, totalCount: Int, skipDelta: Int): Int {
+        if (totalCount <= 0) return 0
+        return (currentLogicalPosition.toLong() + skipDelta)
+            .coerceIn(0L, (totalCount - 1).toLong())
+            .toInt()
     }
 
     fun isSameReconciliation(
@@ -85,6 +88,8 @@ internal object FastResumeCanonicalHandoffPolicy {
 
     fun rawCurrentMatchesExpected(expectedUid: Music.UID?, resolvedRawUid: Music.UID?): Boolean =
         expectedUid != null && resolvedRawUid == expectedUid
+
+    fun suppressCanonicalPersistence(rawAuthorityActive: Boolean): Boolean = rawAuthorityActive
 
     /**
      * A Fast Resume retry must perform a real source enumeration. IncrementalIndexPlanner maps
