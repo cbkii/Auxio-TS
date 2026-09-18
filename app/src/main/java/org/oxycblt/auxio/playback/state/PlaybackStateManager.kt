@@ -387,6 +387,11 @@ interface PlaybackStateManager {
     )
 }
 
+internal object DeferredPlaybackColdControlPolicy {
+    fun applyPause(pending: DeferredPlayback?): DeferredPlayback? =
+        if (pending is DeferredPlayback.RestoreState) pending.copy(play = false) else pending
+}
+
 class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
     private data class StateMirror(
         val progression: Progression,
@@ -686,7 +691,14 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
     @Synchronized
     override fun playing(isPlaying: Boolean) {
-        val stateHolder = stateHolder ?: return
+        val stateHolder = stateHolder
+        if (stateHolder == null) {
+            if (!isPlaying) {
+                pendingDeferredPlayback =
+                    DeferredPlaybackColdControlPolicy.applyPause(pendingDeferredPlayback)
+            }
+            return
+        }
         L.d("Updating playing state to $isPlaying")
         stateHolder.playing(isPlaying)
     }
