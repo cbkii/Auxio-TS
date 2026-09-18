@@ -98,7 +98,26 @@ class PrimitiveQueuePromotionPolicyTest {
     }
 
     @Test
-    fun unshuffledHydrationDropsMissingNonCurrentItemsAndRemapsCurrent() {
+    fun takeoverRequiresEveryPersistedQueueMemberToHydrate() {
+        val layout =
+            requireNotNull(
+                PrimitiveQueuePromotionPolicy.layout(
+                    descriptor(shuffleScope = ShuffleScope.OFF),
+                    listOf(item(0, 0), item(1, 1), item(2, 2)),
+                )
+            )
+
+        assertNull(
+            PrimitiveQueuePromotionPolicy.hydratedLayout(
+                layout = layout,
+                currentLogicalPosition = 1,
+                resolvedHeapIndices = setOf(1, 2),
+            )
+        )
+    }
+
+    @Test
+    fun completeUnshuffledHydrationPreservesEveryPersistedItem() {
         val layout =
             requireNotNull(
                 PrimitiveQueuePromotionPolicy.layout(
@@ -112,18 +131,18 @@ class PrimitiveQueuePromotionPolicyTest {
                 PrimitiveQueuePromotionPolicy.hydratedLayout(
                     layout = layout,
                     currentLogicalPosition = 1,
-                    resolvedHeapIndices = setOf(1, 2),
+                    resolvedHeapIndices = setOf(0, 1, 2),
                 )
             )
 
-        assertEquals(listOf(1, 2), hydrated.keptHeapIndices)
+        assertEquals(listOf(0, 1, 2), hydrated.keptHeapIndices)
         assertEquals(emptyList(), hydrated.shuffledMapping)
-        assertEquals(0, hydrated.currentHeapIndex)
-        assertEquals(1, hydrated.droppedCount)
+        assertEquals(1, hydrated.currentHeapIndex)
+        assertEquals(0, hydrated.droppedCount)
     }
 
     @Test
-    fun shuffledHydrationCompactsPersistedMappingAroundCurrentSong() {
+    fun completeShuffledHydrationPreservesOriginalMapping() {
         val layout =
             requireNotNull(
                 PrimitiveQueuePromotionPolicy.layout(
@@ -137,14 +156,14 @@ class PrimitiveQueuePromotionPolicyTest {
                 PrimitiveQueuePromotionPolicy.hydratedLayout(
                     layout = layout,
                     currentLogicalPosition = 1,
-                    resolvedHeapIndices = setOf(0, 2),
+                    resolvedHeapIndices = setOf(0, 1, 2),
                 )
             )
 
-        assertEquals(listOf(0, 2), hydrated.keptHeapIndices)
-        assertEquals(listOf(1, 0), hydrated.shuffledMapping)
+        assertEquals(listOf(0, 1, 2), hydrated.keptHeapIndices)
+        assertEquals(listOf(2, 0, 1), hydrated.shuffledMapping)
         assertEquals(0, hydrated.currentHeapIndex)
-        assertEquals(1, hydrated.droppedCount)
+        assertEquals(0, hydrated.droppedCount)
     }
 
     @Test

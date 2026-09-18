@@ -35,6 +35,31 @@ class PrimitiveQueuePromotionIdentityIndexTest {
     }
 
     @Test
+    fun fileUriAndPathNormalisationRemoveBenignMountFormattingDifferences() {
+        assertEquals(
+            "file:///storage/usbdisk0/Music/song.flac",
+            PrimitiveQueuePromotionIdentityIndex.normalizeUriIdentity(
+                "file:///storage//usbdisk0/Music/song.flac"
+            ),
+        )
+        assertEquals(
+            "/storage/usbdisk0/Music/song.flac",
+            PrimitiveQueuePromotionIdentityIndex.normalizePathIdentity(
+                "/storage//usbdisk0/Music/song.flac/"
+            ),
+        )
+    }
+
+    @Test
+    fun durationFallbackIsBounded() {
+        assertEquals(true, PrimitiveQueuePromotionIdentityIndex.durationMatches(180_000L, 181_000L))
+        assertEquals(
+            false,
+            PrimitiveQueuePromotionIdentityIndex.durationMatches(180_000L, 182_000L),
+        )
+    }
+
+    @Test
     fun identityRemainsAmbiguousAfterAdditionalDuplicates() {
         val index =
             PrimitiveQueuePromotionIdentityIndex.uniqueBy(listOf(1, 2, 3, 4)) { value ->
