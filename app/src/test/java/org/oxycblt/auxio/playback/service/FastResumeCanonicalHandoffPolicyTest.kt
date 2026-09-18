@@ -111,7 +111,7 @@ class FastResumeCanonicalHandoffPolicyTest {
     }
 
     @Test
-    fun rawDescriptorFoldsColdSkipAndSeekWithoutChangingQueueIdentity() {
+    fun rawDescriptorKeepsPhysicalIdentityUntilCanonicalNavigationCanRun() {
         val descriptor =
             QueueDescriptor(
                 sessionId = 42L,
@@ -134,9 +134,13 @@ class FastResumeCanonicalHandoffPolicyTest {
             )
         assertEquals(42L, skipped.sessionId)
         assertEquals(7L, skipped.revision)
-        assertEquals(5, skipped.currentLogicalPosition)
-        assertEquals(0L, skipped.positionMs)
+        assertEquals(3, skipped.currentLogicalPosition)
+        assertEquals(9_000L, skipped.positionMs)
+        assertEquals(RepeatMode.ALL, skipped.repeatMode)
         assertEquals(ShuffleScope.ALL, skipped.shuffleScope)
+        assertEquals(5, FastResumeCanonicalHandoffPolicy.targetLogicalPosition(3, 8, 2))
+        assertEquals(0, FastResumeCanonicalHandoffPolicy.targetLogicalPosition(3, 8, -99))
+        assertEquals(7, FastResumeCanonicalHandoffPolicy.targetLogicalPosition(3, 8, 99))
 
         val sought =
             requireNotNull(
@@ -148,6 +152,13 @@ class FastResumeCanonicalHandoffPolicyTest {
             )
         assertEquals(3, sought.currentLogicalPosition)
         assertEquals(4_321L, sought.positionMs)
+        assertEquals(RepeatMode.ALL, sought.repeatMode)
+    }
+
+    @Test
+    fun rawAuthorityAlwaysSuppressesGenericCanonicalPersistence() {
+        assertTrue(FastResumeCanonicalHandoffPolicy.suppressCanonicalPersistence(true))
+        assertFalse(FastResumeCanonicalHandoffPolicy.suppressCanonicalPersistence(false))
     }
 
     @Test
