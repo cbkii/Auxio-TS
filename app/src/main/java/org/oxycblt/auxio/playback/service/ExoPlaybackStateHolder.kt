@@ -135,6 +135,7 @@ class ExoPlaybackStateHolder(
     private var rawFastResumeItem: RawFastResumeItem? = null
     private var rawFastResumeQueueDescriptor: QueueDescriptor? = null
     private var rawFastResumeAllowsAllSongsFallback = false
+    private var rawFastResumePendingNavigation: RawPendingNavigation? = null
     private var rawFastResumeReconciliationJob: Job? = null
     private var rawFastResumeReconciliationGeneration: Long? = null
     private var rawFastResumeReconciliationOutcome: SourceScanOutcome? = null
@@ -157,6 +158,8 @@ class ExoPlaybackStateHolder(
     private var markedFirstPlaying = false
 
     private data class CanonicalCurrentSourceLease(val song: Song)
+
+    private data class RawPendingNavigation(val skipDelta: Int, val seekPositionMs: Long?)
 
     private data class PersistedQueueHydration(
         val songs: List<Song>,
@@ -473,7 +476,7 @@ class ExoPlaybackStateHolder(
                         if (current?.hasPlayableReference != true) {
                             val snapshot = persistenceRepository.readFastResumeSnapshot()
                             if (snapshot != null) {
-                                persistenceRepository.enrichQueueItem(requested, target, snapshot)
+                                persistenceRepository.enrichQueueItem(descriptor, target, snapshot)
                                 window =
                                     persistenceRepository.readQueueWindowAround(requested, target)
                                 current = window?.currentItem
@@ -846,7 +849,10 @@ class ExoPlaybackStateHolder(
         PrimitiveQueueHandoffGate.Key(descriptor.sessionId, descriptor.revision)
 
     private fun authoritativeFastResumeLibrary(): Library? {
-        if (!FastResumeCanonicalHandoffPolicy.isAuthoritative(latestDeviceSourceOutcome)) {
+        if (
+            latestDeviceSourceOutcome != musicRepository.lastSourceScanOutcome ||
+                !FastResumeCanonicalHandoffPolicy.isAuthoritative(latestDeviceSourceOutcome)
+        ) {
             return null
         }
         return musicRepository.library?.takeIf { !it.empty() }
@@ -1097,6 +1103,7 @@ class ExoPlaybackStateHolder(
         val currentUriBefore = player.currentMediaItem?.localConfiguration?.uri
 
         Ts18FirstAudioLatency.mark("canonical_commit_start")
+        activePrimitiveWindow = null
         if (
             !installCanonicalQueueAroundCurrentSource(
                 songs = prepared.songs,
@@ -2038,7 +2045,7 @@ class ExoPlaybackStateHolder(
     }
 
     override fun onMusicChanges(changes: MusicRepository.Changes) {
-        if (!changes.deviceLibrary) return
+        if (!changes.deviceLibrary && !changes.deviceSourceAuthority) return
         if (Looper.myLooper() != Looper.getMainLooper()) {
             mainScope.launch { handleDeviceLibraryChange(changes) }
             return
@@ -2092,6 +2099,7 @@ class ExoPlaybackStateHolder(
             return
         }
 
+        if (!changes.deviceLibrary) return
         if (library == null) return
         pendingLibraryRestoreAfterRawFailure?.let {
             L.d("Library obtained after raw fast-resume miss; replaying saved-state restore")
@@ -2150,13 +2158,12 @@ class ExoPlaybackStateHolder(
                         play = shouldPlayImmediately(finalIntent.play),
                         descriptor = rawDescriptor,
                         allowAllSongsFallback = rawDescriptor == null,
+                        pendingNavigation =
+                            RawPendingNavigation(
+                                skipDelta = finalIntent.skipDelta,
+                                seekPositionMs = finalIntent.seekPositionMs,
+                            ),
                     )
-                    rawDescriptor
-                        ?.positionMs
-                        ?.takeIf {
-                            finalIntent.seekPositionMs != null || finalIntent.skipDelta != 0
-                        }
-                        ?.let(player::seekTo)
                     optionalWorkGate.onRestoreFinished()
                     playbackManager.notifyRestoreOutcome(RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
                 }
@@ -2195,6 +2202,7 @@ class ExoPlaybackStateHolder(
         play: Boolean,
         descriptor: QueueDescriptor?,
         allowAllSongsFallback: Boolean,
+        pendingNavigation: RawPendingNavigation? = null,
     ) {
         Ts18FirstAudioLatency.mark("raw_media_item_set")
         clearPrimitiveQueueState()
@@ -2202,10 +2210,25 @@ class ExoPlaybackStateHolder(
         rawFastResumeItem = item
         rawFastResumeQueueDescriptor = descriptor
         rawFastResumeAllowsAllSongsFallback = allowAllSongsFallback
+        rawFastResumePendingNavigation = pendingNavigation
         parent = null
         player.shuffleModeEnabled = false
+        descriptor?.repeatMode?.let { persistedRepeat ->
+            player.repeatMode =
+                when (persistedRepeat) {
+                    RepeatMode.NONE -> Player.REPEAT_MODE_OFF
+                    RepeatMode.ALL -> Player.REPEAT_MODE_ALL
+                    RepeatMode.TRACK -> Player.REPEAT_MODE_ONE
+                }
+        }
         player.setMediaItems(listOf(item.buildMediaItem()))
-        player.seekTo(0, descriptor?.positionMs ?: item.positionMs)
+        val rawPositionMs =
+            descriptor?.positionMs
+                ?: pendingNavigation
+                    ?.takeIf { it.skipDelta == 0 }
+                    ?.seekPositionMs
+                ?: item.positionMs
+        player.seekTo(0, rawPositionMs.coerceAtLeast(0L))
         Ts18FirstAudioLatency.mark("raw_seek")
         Ts18FirstAudioLatency.mark("player_prepare")
         player.prepare()
@@ -2227,6 +2250,7 @@ class ExoPlaybackStateHolder(
         rawFastResumeItem = null
         rawFastResumeQueueDescriptor = null
         rawFastResumeAllowsAllSongsFallback = false
+        rawFastResumePendingNavigation = null
         if (cancelReconciliation) rawFastResumeReconciliationJob?.cancel()
         rawFastResumeReconciliationJob = null
         rawFastResumeReconciliationGeneration = null
@@ -2280,6 +2304,7 @@ class ExoPlaybackStateHolder(
         val raw = rawFastResumeItem ?: return
         val descriptor = rawFastResumeQueueDescriptor
         val allowAllSongsFallback = rawFastResumeAllowsAllSongsFallback
+        val pendingNavigation = rawFastResumePendingNavigation
         if (
             rawFastResumeReconciliationJob?.isActive == true &&
                 FastResumeCanonicalHandoffPolicy.isSameReconciliation(
@@ -2369,6 +2394,38 @@ class ExoPlaybackStateHolder(
                         return@withContext
                     }
 
+                    val pendingTarget =
+                        pendingNavigation?.takeIf { it.skipDelta != 0 }?.let { navigation ->
+                            val currentLogicalPosition =
+                                descriptor?.currentLogicalPosition ?: hydration.currentHeapIndex
+                            val targetLogicalPosition =
+                                FastResumeCanonicalHandoffPolicy.targetLogicalPosition(
+                                    currentLogicalPosition = currentLogicalPosition,
+                                    totalCount = hydration.songs.size,
+                                    skipDelta = navigation.skipDelta,
+                                )
+                            val targetHeapIndex =
+                                if (hydration.shuffledMapping.isEmpty()) {
+                                    targetLogicalPosition
+                                } else {
+                                    hydration.shuffledMapping.getOrNull(targetLogicalPosition)
+                                }
+                            if (
+                                targetHeapIndex == null ||
+                                    targetHeapIndex !in hydration.songs.indices
+                            ) {
+                                L.w(
+                                    "Unable to map pending cold navigation into canonical queue " +
+                                        "[logical=$targetLogicalPosition count=${hydration.songs.size}]"
+                                )
+                                rawFastResumeReconciliationJob = null
+                                armFastResumeCanonicalRetry()
+                                return@withContext
+                            }
+                            targetHeapIndex to
+                                (navigation.seekPositionMs ?: 0L).coerceAtLeast(0L)
+                        }
+
                     val positionBefore = player.currentPosition.coerceAtLeast(0L)
                     val audioSessionBefore = player.audioSessionId
                     if (
@@ -2391,6 +2448,9 @@ class ExoPlaybackStateHolder(
                         return@withContext
                     }
 
+                    pendingTarget?.let { (targetIndex, targetPositionMs) ->
+                        player.seekTo(targetIndex, targetPositionMs)
+                    }
                     currentSaveJob?.cancel()
                     currentSaveJob = null
                     clearRawFastResumeState(cancelReconciliation = false)
@@ -2406,8 +2466,9 @@ class ExoPlaybackStateHolder(
                     )
                     deferSave()
                     L.i(
-                        "Reconciled raw Fast Resume to canonical authority without current-source " +
-                            "reset [persisted=${descriptor != null} count=${hydration.songs.size} " +
+                        "Reconciled raw Fast Resume to canonical authority " +
+                            "[persisted=${descriptor != null} pendingSkip=${pendingNavigation?.skipDelta ?: 0} " +
+                            "count=${hydration.songs.size} " +
                             "positionBefore=$positionBefore positionAfter=${player.currentPosition} " +
                             "audioSessionBefore=$audioSessionBefore " +
                             "audioSessionAfter=${player.audioSessionId}]"
@@ -2544,20 +2605,23 @@ class ExoPlaybackStateHolder(
             return
         }
 
-        val rawState =
-            withContext(Dispatchers.Main) {
-                rawFastResumeQueueDescriptor?.let {
-                    Triple(it, player.currentPosition.coerceAtLeast(0L), repeatMode)
+        val rawAuthorityActive = withContext(Dispatchers.Main) { rawFastResumeItem != null }
+        if (FastResumeCanonicalHandoffPolicy.suppressCanonicalPersistence(rawAuthorityActive)) {
+            val rawState =
+                withContext(Dispatchers.Main) {
+                    rawFastResumeQueueDescriptor?.let {
+                        Triple(it, player.currentPosition.coerceAtLeast(0L), repeatMode)
+                    }
                 }
+            if (rawState != null) {
+                val (descriptor, positionMs, rawRepeatMode) = rawState
+                persistenceRepository.updateQueuePosition(
+                    descriptor = descriptor,
+                    logicalPosition = descriptor.currentLogicalPosition,
+                    positionMs = positionMs,
+                    repeatMode = rawRepeatMode,
+                )
             }
-        if (rawState != null) {
-            val (descriptor, positionMs, rawRepeatMode) = rawState
-            persistenceRepository.updateQueuePosition(
-                descriptor = descriptor,
-                logicalPosition = descriptor.currentLogicalPosition,
-                positionMs = positionMs,
-                repeatMode = rawRepeatMode,
-            )
             return
         }
 

@@ -50,6 +50,21 @@ class DeviceLibraryAuthorityPolicyTest {
     }
 
     @Test
+    fun stalePublishedSuccessIsRejectedWhenCurrentSourceOutcomeChanged() {
+        val success = SourceScanOutcome.Success(setOf("internal", "usb"))
+        val unavailable = SourceScanOutcome.TemporarilyUnavailable(setOf("usb"))
+        val snapshot =
+            DeviceLibraryAuthorityPolicy.coherentSnapshot(
+                currentGeneration = 9L,
+                published = DeviceLibraryAuthority(9L, success),
+                currentSourceOutcome = unavailable,
+            )
+
+        assertEquals(9L, snapshot.generation)
+        assertNull(snapshot.sourceScanOutcome)
+    }
+
+    @Test
     fun currentPartialOutcomeRemainsNonAuthoritativeForLateListener() {
         val partial = SourceScanOutcome.Partial(setOf("internal"), setOf("usb"))
         val snapshot =
