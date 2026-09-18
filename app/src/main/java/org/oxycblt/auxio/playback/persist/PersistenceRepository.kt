@@ -80,7 +80,7 @@ interface PersistenceRepository {
         repeatMode: org.oxycblt.auxio.playback.state.RepeatMode,
     ): Boolean
 
-    /** Fill missing primitive playback metadata without replacing logical queue order. */
+    /** Fill missing metadata for the exact persisted current item only. */
     suspend fun enrichQueueItem(
         descriptor: QueueDescriptor,
         logicalPosition: Int,
@@ -248,16 +248,32 @@ constructor(
         snapshot: FastResumeSnapshot,
     ): Boolean =
         try {
-            queueDao.enrichQueueItem(
-                sessionId = descriptor.sessionId,
-                logicalPosition = logicalPosition,
-                uri = snapshot.uri.takeIf { it.isNotBlank() },
-                pathFallback = snapshot.path,
-                titleFallback = snapshot.title,
-                artistFallback = snapshot.artist,
-                albumFallback = snapshot.album,
-                durationMs = snapshot.durationMs.coerceAtLeast(0L),
-            ) == 1
+            if (
+                !PrimitiveQueueIntegrityPolicy.canEnrichCurrentItem(
+                    descriptorCurrentPosition = descriptor.currentLogicalPosition,
+                    logicalPosition = logicalPosition,
+                )
+            ) {
+                L.w(
+                    "Refusing Fast Resume snapshot enrichment for non-current queue item " +
+                        "[session=${descriptor.sessionId} revision=${descriptor.revision} " +
+                        "descriptorCurrent=${descriptor.currentLogicalPosition} logical=$logicalPosition]"
+                )
+                false
+            } else {
+                queueDao.enrichQueueItem(
+                    sessionId = descriptor.sessionId,
+                    logicalPosition = logicalPosition,
+                    expectedRevision = descriptor.revision,
+                    expectedCurrentLogicalPosition = descriptor.currentLogicalPosition,
+                    uri = snapshot.uri.takeIf { it.isNotBlank() },
+                    pathFallback = snapshot.path,
+                    titleFallback = snapshot.title,
+                    artistFallback = snapshot.artist,
+                    albumFallback = snapshot.album,
+                    durationMs = snapshot.durationMs.coerceAtLeast(0L),
+                ) == 1
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
