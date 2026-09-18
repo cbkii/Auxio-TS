@@ -365,6 +365,7 @@ private constructor(
                             playbackManager.rawPlaybackMetadata == null
                     ) {
                         playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
+                        scheduleRestoreWatchdog()
                     }
                     playbackManager.seekTo(positionMs)
                     publishTopwayProgress("launcher-seek", force = true)
