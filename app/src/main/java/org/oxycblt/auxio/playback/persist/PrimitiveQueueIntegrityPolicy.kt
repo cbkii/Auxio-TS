@@ -25,4 +25,7 @@ internal object PrimitiveQueueIntegrityPolicy {
         if (currentPosition !in 0 until declaredCount) return null
         return declaredCount
     }
+
+    fun canEnrichCurrentItem(descriptorCurrentPosition: Int, logicalPosition: Int): Boolean =
+        logicalPosition == descriptorCurrentPosition
 }
