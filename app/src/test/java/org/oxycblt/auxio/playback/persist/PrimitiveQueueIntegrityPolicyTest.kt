@@ -63,4 +63,26 @@ class PrimitiveQueueIntegrityPolicyTest {
             )
         )
     }
+
+    @Test
+    fun fastResumeSnapshotMayOnlyEnrichExactPersistedCurrentItem() {
+        assertEquals(
+            true,
+            PrimitiveQueueIntegrityPolicy.canEnrichCurrentItem(
+                descriptorCurrentPosition = 3,
+                logicalPosition = 3,
+            ),
+        )
+    }
+
+    @Test
+    fun coldSkipTargetCannotInheritPreviousCurrentSnapshot() {
+        assertEquals(
+            false,
+            PrimitiveQueueIntegrityPolicy.canEnrichCurrentItem(
+                descriptorCurrentPosition = 3,
+                logicalPosition = 4,
+            ),
+        )
+    }
 }
