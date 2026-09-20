@@ -149,6 +149,87 @@ class StartupMacrobenchmark {
     }
 
     @Test
+    fun hotPausedMediaSessionPlayToFirstAudio() =
+        hotPausedJourneyBenchmark(
+            traceMetric(
+                CriticalJourneys.TRACE_HOT_PAUSED_MEDIA_SESSION_TO_FIRST_AUDIO,
+                "hotPausedMediaSessionToFirstAudio",
+            )
+        ) {
+            CriticalJourneys.run { exerciseHotPausedMediaSessionPlay() }
+        }
+
+    @Test
+    fun hotPausedExportedMediaButtonPlayToFirstAudio() =
+        hotPausedJourneyBenchmark(
+            traceMetric(
+                CriticalJourneys.TRACE_HOT_PAUSED_MEDIA_BUTTON_TO_FIRST_AUDIO,
+                "hotPausedMediaButtonToFirstAudio",
+            )
+        ) {
+            CriticalJourneys.run { exerciseHotPausedExportedMediaButtonPlay() }
+        }
+
+    @Test
+    fun hotPausedTopwayPlayPauseToFirstAudio() =
+        hotPausedJourneyBenchmark(
+            traceMetric(
+                CriticalJourneys.TRACE_HOT_PAUSED_TOPWAY_TO_FIRST_AUDIO,
+                "hotPausedTopwayToFirstAudio",
+            )
+        ) {
+            CriticalJourneys.run { exerciseHotPausedTopwayPlayPause() }
+        }
+
+    @Test
+    fun warmServicePrepareToFirstAudio() =
+        journeyBenchmark(
+            autoplayOnLaunch = false,
+            metrics =
+                listOf(
+                    traceMetric(
+                        CriticalJourneys.TRACE_WARM_PREPARE_TO_FIRST_AUDIO,
+                        "warmPrepareToFirstAudio",
+                    )
+                ),
+        ) {
+            CriticalJourneys.run { exerciseWarmPrepareThenPlay() }
+        }
+
+    @Test
+    fun coldPlayThenImmediateNext() =
+        journeyBenchmark(
+            autoplayOnLaunch = false,
+            metrics =
+                listOf(
+                    traceMetric(
+                        CriticalJourneys.TRACE_COLD_PLAY_NEXT_TO_FIRST_AUDIO,
+                        "coldPlayNextToFirstAudio",
+                    )
+                ),
+        ) {
+            CriticalJourneys.run { exerciseColdPlayThenImmediateNext() }
+        }
+
+    @Test
+    fun repeatedNextPreviousJourney() =
+        journeyBenchmark {
+            CriticalJourneys.run {
+                launchFastStart()
+                exerciseRepeatedNextPrevious()
+            }
+        }
+
+    @Test
+    fun fiveHundredSongSavedSessionResume() = fixedSavedSessionResumeBenchmark(500)
+
+    @Test
+    fun bootAutoplayOffPreparesSilently() =
+        journeyBenchmark(autoplayOnLaunch = false) {
+            CriticalJourneys.run { exerciseBootPreparedPaused() }
+        }
+
+    @Test
     fun generatedPlaylistsDoNotBlockFiveThousandSongResume() =
         generatedPlaylistIsolationBenchmark(5_000)
 
@@ -304,7 +385,11 @@ class StartupMacrobenchmark {
             setupBlock = {
                 if (!seeded) {
                     BenchmarkFixtureController.run {
-                        seedCommittedFixture(fixtureSongCount, sourceMode)
+                        seedCommittedFixture(
+                            songCount = fixtureSongCount,
+                            sourceMode = sourceMode,
+                            autoplayOnLaunch = autoplayOnLaunch,
+                        )
                     }
                     seeded = true
                 }
@@ -317,6 +402,7 @@ class StartupMacrobenchmark {
 
     private fun journeyBenchmark(
         sourceMode: String = BenchmarkFixtureController.SOURCE_MODE_NORMAL,
+        autoplayOnLaunch: Boolean = true,
         metrics: List<Metric> = emptyList(),
         reportLabels: Set<String> = REQUIRED_IMMEDIATE_LABELS,
         journey: MacrobenchmarkScope.() -> Unit,
@@ -341,6 +427,62 @@ class StartupMacrobenchmark {
             measureBlock = journey,
         )
         captureReport(reportLabels)
+    }
+
+    private fun hotPausedJourneyBenchmark(
+        metric: Metric,
+        journey: MacrobenchmarkScope.() -> Unit,
+    ) {
+        var seeded = false
+        benchmarkRule.measureRepeated(
+            packageName = BuildConfig.TARGET_PACKAGE,
+            metrics = startupMetrics(metric),
+            compilationMode =
+                CompilationMode.Partial(baselineProfileMode = BaselineProfileMode.Require),
+            startupMode = StartupMode.HOT,
+            iterations = iterations,
+            setupBlock = {
+                if (!seeded) {
+                    BenchmarkFixtureController.run {
+                        seedCommittedFixture(
+                            songCount = fixtureSongCount,
+                            autoplayOnLaunch = false,
+                        )
+                    }
+                    seeded = true
+                }
+                CriticalJourneys.run { prepareHotPaused() }
+            },
+            measureBlock = journey,
+        )
+        captureReport(REQUIRED_HOT_PAUSED_LABELS)
+    }
+
+    private fun fixedSavedSessionResumeBenchmark(songCount: Int) {
+        var seeded = false
+        benchmarkRule.measureRepeated(
+            packageName = BuildConfig.TARGET_PACKAGE,
+            metrics =
+                startupMetrics(
+                    traceMetric(
+                        CriticalJourneys.TRACE_SAVED_SESSION_TO_FIRST_AUDIO,
+                        "fixedSavedSessionToFirstAudio",
+                    )
+                ),
+            compilationMode =
+                CompilationMode.Partial(baselineProfileMode = BaselineProfileMode.Require),
+            startupMode = StartupMode.COLD,
+            iterations = iterations,
+            setupBlock = {
+                if (!seeded) {
+                    BenchmarkFixtureController.run { seedCommittedFixture(songCount = songCount) }
+                    seeded = true
+                }
+                pressHome()
+            },
+            measureBlock = { CriticalJourneys.run { exerciseSavedSessionResume() } },
+        )
+        captureReport(REQUIRED_IMMEDIATE_LABELS)
     }
 
     private fun generatedPlaylistIsolationBenchmark(songCount: Int) {
@@ -406,6 +548,12 @@ class StartupMacrobenchmark {
                 "startup.capability.QUEUE_READY",
                 "startup.fast_home_first_rows",
             )
+        val REQUIRED_HOT_PAUSED_LABELS =
+            REQUIRED_IMMEDIATE_LABELS +
+                setOf(
+                    "startup.playbackReadiness.HOT_PAUSED",
+                    "startup.audio.audio_position_advancing",
+                )
         val REQUIRED_COMPLETE_LIBRARY_LABELS =
             REQUIRED_IMMEDIATE_LABELS +
                 setOf(
