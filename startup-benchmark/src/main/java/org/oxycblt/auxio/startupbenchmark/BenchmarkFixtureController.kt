@@ -87,6 +87,32 @@ internal object BenchmarkFixtureController {
         return report
     }
 
+    fun eventCount(report: String, label: String): Int {
+        val escaped = Regex.escape(label)
+        return Regex("""(?m)^[0-9]{3} .* label=$escaped(?: |$)""").findAll(report).count()
+    }
+
+    fun awaitAdditionalEvent(
+        device: UiDevice,
+        label: String,
+        previousCount: Int,
+        timeoutMs: Long = 10_000L,
+    ): String {
+        require(previousCount >= 0)
+        require(timeoutMs > 0L)
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+        var lastReport = ""
+        while (System.nanoTime() < deadline) {
+            lastReport = captureRawStartupReport(device)
+            if (eventCount(lastReport, label) > previousCount) return lastReport
+            Thread.sleep(REPORT_POLL_MS)
+        }
+        error(
+            "Startup report did not add label=$label beyond count=$previousCount within " +
+                "${timeoutMs}ms. Last report:\n$lastReport"
+        )
+    }
+
     fun awaitStartupReport(
         device: UiDevice,
         requiredLabels: Set<String>,
