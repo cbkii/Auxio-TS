@@ -2464,7 +2464,9 @@ constructor(
                         it.generation == currentGeneration &&
                             it.sourceScanOutcome == lastSourceScanOutcome
                     }
-                    ?.let { return }
+                    ?.let {
+                        return
+                    }
                 DeviceLibraryAuthority(
                         generation = deviceLibraryGeneration.incrementAndGet(),
                         sourceScanOutcome = lastSourceScanOutcome,
