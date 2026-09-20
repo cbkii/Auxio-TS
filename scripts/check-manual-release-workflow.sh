@@ -167,6 +167,9 @@ required = (
     'explicit_new_tag',
     'resume_latest_tag_without_release',
     'resume_latest_draft_release',
+    'Configure Android SDK',
+    'command -v sdkmanager',
+    "printf 'sdk.dir=%s\\n'",
 )
 for token in required:
     if token not in surface:
@@ -182,6 +185,7 @@ for forbidden in (
     'git push origin ":refs/tags/',
     '--force refs/tags/',
     'partial triplets require explicit replacement',
+    'android-actions/setup-android@',
 ):
     if forbidden in surface:
         raise SystemExit(f'Forbidden brittle Manual Release behaviour remains: {forbidden}')
@@ -210,7 +214,6 @@ for pin in (
     'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10',
     'actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95',
     'gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c',
-    'android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699',
     'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
 ):
     if pin not in text:
