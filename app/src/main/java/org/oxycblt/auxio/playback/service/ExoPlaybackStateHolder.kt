@@ -2235,9 +2235,7 @@ class ExoPlaybackStateHolder(
         player.setMediaItems(listOf(item.buildMediaItem()))
         val rawPositionMs =
             descriptor?.positionMs
-                ?: pendingNavigation
-                    ?.takeIf { it.skipDelta == 0 }
-                    ?.seekPositionMs
+                ?: pendingNavigation?.takeIf { it.skipDelta == 0 }?.seekPositionMs
                 ?: item.positionMs
         player.seekTo(0, rawPositionMs.coerceAtLeast(0L))
         Ts18FirstAudioLatency.mark("raw_seek")
@@ -2410,36 +2408,38 @@ class ExoPlaybackStateHolder(
                     }
 
                     val pendingTarget =
-                        pendingNavigation?.takeIf { it.skipDelta != 0 }?.let { navigation ->
-                            val currentLogicalPosition =
-                                descriptor?.currentLogicalPosition ?: hydration.currentHeapIndex
-                            val targetLogicalPosition =
-                                FastResumeCanonicalHandoffPolicy.targetLogicalPosition(
-                                    currentLogicalPosition = currentLogicalPosition,
-                                    totalCount = hydration.songs.size,
-                                    skipDelta = navigation.skipDelta,
-                                )
-                            val targetHeapIndex =
-                                if (hydration.shuffledMapping.isEmpty()) {
-                                    targetLogicalPosition
-                                } else {
-                                    hydration.shuffledMapping.getOrNull(targetLogicalPosition)
+                        pendingNavigation
+                            ?.takeIf { it.skipDelta != 0 }
+                            ?.let { navigation ->
+                                    val currentLogicalPosition =
+                                    descriptor?.currentLogicalPosition ?: hydration.currentHeapIndex
+                                val targetLogicalPosition =
+                                    FastResumeCanonicalHandoffPolicy.targetLogicalPosition(
+                                        currentLogicalPosition = currentLogicalPosition,
+                                        totalCount = hydration.songs.size,
+                                        skipDelta = navigation.skipDelta,
+                                    )
+                                val targetHeapIndex =
+                                    if (hydration.shuffledMapping.isEmpty()) {
+                                        targetLogicalPosition
+                                    } else {
+                                        hydration.shuffledMapping.getOrNull(targetLogicalPosition)
+                                    }
+                                if (
+                                    targetHeapIndex == null ||
+                                        targetHeapIndex !in hydration.songs.indices
+                                ) {
+                                    L.w(
+                                        "Unable to map pending cold navigation into canonical queue " +
+                                            "[logical=$targetLogicalPosition count=${hydration.songs.size}]"
+                                    )
+                                    rawFastResumeReconciliationJob = null
+                                    armFastResumeCanonicalRetry()
+                                    return@withContext
                                 }
-                            if (
-                                targetHeapIndex == null ||
-                                    targetHeapIndex !in hydration.songs.indices
-                            ) {
-                                L.w(
-                                    "Unable to map pending cold navigation into canonical queue " +
-                                        "[logical=$targetLogicalPosition count=${hydration.songs.size}]"
-                                )
-                                rawFastResumeReconciliationJob = null
-                                armFastResumeCanonicalRetry()
-                                return@withContext
+                                targetHeapIndex to
+                                    (navigation.seekPositionMs ?: 0L).coerceAtLeast(0L)
                             }
-                            targetHeapIndex to
-                                (navigation.seekPositionMs ?: 0L).coerceAtLeast(0L)
-                        }
 
                     val positionBefore = player.currentPosition.coerceAtLeast(0L)
                     val audioSessionBefore = player.audioSessionId
