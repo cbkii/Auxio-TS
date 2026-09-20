@@ -41,6 +41,7 @@ import androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer
 import androidx.media3.exoplayer.BaseRenderer
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.RenderersFactory
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
@@ -114,6 +115,7 @@ class ExoPlaybackStateHolder(
 ) :
     PlaybackStateHolder,
     Player.Listener,
+    AnalyticsListener,
     MusicRepository.UpdateListener,
     PlaybackSettings.Listener,
     ImageSettings.Listener {
@@ -155,7 +157,7 @@ class ExoPlaybackStateHolder(
     private val primitiveMutationMutex = Mutex()
     private var pendingPrimitiveTarget: Int? = null
     private var pendingLibraryRestoreAfterRawFailure: DeferredPlayback.RestoreState? = null
-    private var markedFirstPlaying = false
+    private var markedFirstAdvancingAudio = false
 
     private data class CanonicalCurrentSourceLease(val song: Song)
 
@@ -211,6 +213,7 @@ class ExoPlaybackStateHolder(
         playbackManager.registerStateHolder(this)
         musicRepository.addUpdateListener(this)
         player.addListener(this)
+        player.addAnalyticsListener(this)
         replayGainProcessor.attach()
         playbackSettings.registerListener(this)
         imageSettings.registerListener(this)
@@ -222,6 +225,7 @@ class ExoPlaybackStateHolder(
         saveJob.cancel()
         playbackManager.unregisterStateHolder(this)
         musicRepository.removeUpdateListener(this)
+        player.removeAnalyticsListener(this)
         player.removeListener(this)
         replayGainProcessor.release()
         imageSettings.unregisterListener(this)
@@ -1917,6 +1921,17 @@ class ExoPlaybackStateHolder(
         }
     }
 
+    override fun onAudioPositionAdvancing(
+        eventTime: AnalyticsListener.EventTime,
+        playoutStartSystemTimeMs: Long,
+    ) {
+        Ts18FirstAudioLatency.mark("audio_position_advancing")
+        if (!markedFirstAdvancingAudio) {
+            markedFirstAdvancingAudio = true
+            Ts18FirstAudioLatency.mark("first_audio")
+        }
+    }
+
     override fun onAudioSessionIdChanged(audioSessionId: Int) {
         super.onAudioSessionIdChanged(audioSessionId)
         L.d("Audio session ID changed to $audioSessionId")
@@ -1956,10 +1971,6 @@ class ExoPlaybackStateHolder(
             )
             ?.let(startupReadinessController::publishPlaybackReadiness)
 
-        if (player.isPlaying && !markedFirstPlaying) {
-            markedFirstPlaying = true
-            Ts18FirstAudioLatency.mark("first_audio")
-        }
         if (
             events.containsAny(
                 Player.EVENT_PLAY_WHEN_READY_CHANGED,
