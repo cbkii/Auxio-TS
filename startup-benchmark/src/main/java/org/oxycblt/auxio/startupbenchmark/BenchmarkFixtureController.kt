@@ -53,6 +53,7 @@ internal object BenchmarkFixtureController {
         songCount: Int = requestedSongCount,
         sourceMode: String = SOURCE_MODE_NORMAL,
         generatedPlaylistsEnabled: Boolean = false,
+        autoplayOnLaunch: Boolean = true,
     ) {
         require(songCount in BenchmarkFixtures.supportedSongCounts)
         require(
@@ -67,7 +68,8 @@ internal object BenchmarkFixtureController {
             device.executeShellCommand(
                 "am broadcast -W --include-stopped-packages -a $ACTION_SEED " +
                     "-n $component --ei song_count $songCount --es source_mode $sourceMode " +
-                    "--ez generated_playlists $generatedPlaylistsEnabled"
+                    "--ez generated_playlists $generatedPlaylistsEnabled " +
+                    "--ez autoplay_on_launch $autoplayOnLaunch"
             )
         check(Regex("result=-1(?:,|\\s)").containsMatchIn(output)) {
             "Fixture seed broadcast failed: $output"
