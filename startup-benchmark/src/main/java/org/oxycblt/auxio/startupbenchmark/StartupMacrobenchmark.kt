@@ -385,11 +385,7 @@ class StartupMacrobenchmark {
             setupBlock = {
                 if (!seeded) {
                     BenchmarkFixtureController.run {
-                        seedCommittedFixture(
-                            songCount = fixtureSongCount,
-                            sourceMode = sourceMode,
-                            autoplayOnLaunch = autoplayOnLaunch,
-                        )
+                        seedCommittedFixture(fixtureSongCount, sourceMode)
                     }
                     seeded = true
                 }
@@ -418,7 +414,11 @@ class StartupMacrobenchmark {
             setupBlock = {
                 if (!seeded) {
                     BenchmarkFixtureController.run {
-                        seedCommittedFixture(fixtureSongCount, sourceMode)
+                        seedCommittedFixture(
+                            songCount = fixtureSongCount,
+                            sourceMode = sourceMode,
+                            autoplayOnLaunch = autoplayOnLaunch,
+                        )
                     }
                     seeded = true
                 }
