@@ -50,8 +50,7 @@ internal object CriticalJourneys {
         "auxio.hot_paused_media_session_to_first_audio"
     const val TRACE_HOT_PAUSED_MEDIA_BUTTON_TO_FIRST_AUDIO =
         "auxio.hot_paused_media_button_to_first_audio"
-    const val TRACE_HOT_PAUSED_TOPWAY_TO_FIRST_AUDIO =
-        "auxio.hot_paused_topway_to_first_audio"
+    const val TRACE_HOT_PAUSED_TOPWAY_TO_FIRST_AUDIO = "auxio.hot_paused_topway_to_first_audio"
     const val TRACE_WARM_PREPARE_TO_FIRST_AUDIO = "auxio.warm_prepare_to_first_audio"
     const val TRACE_COLD_PLAY_NEXT_TO_FIRST_AUDIO = "auxio.cold_play_next_to_first_audio"
     const val TRACE_USB0_FOLDER_TO_FIRST_AUDIO = "auxio.usb0_folder_to_first_audio"
