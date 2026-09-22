@@ -228,7 +228,6 @@ fun Context.newBroadcastPendingIntent(action: String): PendingIntent =
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-
 /**
  * Create a cold-safe media-button PendingIntent that reaches the manifest receiver even when the
  * playback service/process is not already resident.
