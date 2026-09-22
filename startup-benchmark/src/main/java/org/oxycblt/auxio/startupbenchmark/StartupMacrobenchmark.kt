@@ -213,14 +213,13 @@ class StartupMacrobenchmark {
 
     @Test
     fun repeatedNextPreviousJourney() = journeyBenchmark {
-            CriticalJourneys.run {
-                launchFastStart()
-                exerciseRepeatedNextPrevious()
-            }
+        CriticalJourneys.run {
+            launchFastStart()
+            exerciseRepeatedNextPrevious()
         }
+    }
 
-    @Test
-    fun fiveHundredSongSavedSessionResume() = fixedSavedSessionResumeBenchmark(500)
+    @Test fun fiveHundredSongSavedSessionResume() = fixedSavedSessionResumeBenchmark(500)
 
     @Test
     fun bootAutoplayOffPreparesSilently() =
@@ -428,10 +427,7 @@ class StartupMacrobenchmark {
         captureReport(reportLabels)
     }
 
-    private fun hotPausedJourneyBenchmark(
-        metric: Metric,
-        journey: MacrobenchmarkScope.() -> Unit,
-    ) {
+    private fun hotPausedJourneyBenchmark(metric: Metric, journey: MacrobenchmarkScope.() -> Unit) {
         var seeded = false
         benchmarkRule.measureRepeated(
             packageName = BuildConfig.TARGET_PACKAGE,
@@ -443,10 +439,7 @@ class StartupMacrobenchmark {
             setupBlock = {
                 if (!seeded) {
                     BenchmarkFixtureController.run {
-                        seedCommittedFixture(
-                            songCount = fixtureSongCount,
-                            autoplayOnLaunch = false,
-                        )
+                        seedCommittedFixture(songCount = fixtureSongCount, autoplayOnLaunch = false)
                     }
                     seeded = true
                 }
