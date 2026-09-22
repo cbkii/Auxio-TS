@@ -212,8 +212,7 @@ class StartupMacrobenchmark {
         }
 
     @Test
-    fun repeatedNextPreviousJourney() =
-        journeyBenchmark {
+    fun repeatedNextPreviousJourney() = journeyBenchmark {
             CriticalJourneys.run {
                 launchFastStart()
                 exerciseRepeatedNextPrevious()
