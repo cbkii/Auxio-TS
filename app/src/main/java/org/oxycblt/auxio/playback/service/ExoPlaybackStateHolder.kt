@@ -1871,7 +1871,7 @@ class ExoPlaybackStateHolder(
     }
 
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-        super.onPlayWhenReadyChanged(playWhenReady, reason)
+        super<Player.Listener>.onPlayWhenReadyChanged(playWhenReady, reason)
 
         if (player.playWhenReady) {
             if (!requestAudioFocus()) {
@@ -1906,7 +1906,7 @@ class ExoPlaybackStateHolder(
     }
 
     override fun onPlaybackStateChanged(playbackState: Int) {
-        super.onPlaybackStateChanged(playbackState)
+        super<Player.Listener>.onPlaybackStateChanged(playbackState)
 
         PlaybackReadinessPolicy.fromPlayer(
                 playbackState = playbackState,
@@ -1933,13 +1933,13 @@ class ExoPlaybackStateHolder(
     }
 
     override fun onAudioSessionIdChanged(audioSessionId: Int) {
-        super.onAudioSessionIdChanged(audioSessionId)
+        super<Player.Listener>.onAudioSessionIdChanged(audioSessionId)
         L.d("Audio session ID changed to $audioSessionId")
         playbackManager.ack(this, StateAck.AudioSessionIdChanged(audioSessionId))
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-        super.onMediaItemTransition(mediaItem, reason)
+        super<Player.Listener>.onMediaItemTransition(mediaItem, reason)
 
         if (activePrimitiveWindow != null) {
             synchronizePrimitivePositionFromPlayer()
@@ -1962,7 +1962,7 @@ class ExoPlaybackStateHolder(
     }
 
     override fun onEvents(player: Player, events: Player.Events) {
-        super.onEvents(player, events)
+        super<Player.Listener>.onEvents(player, events)
 
         PlaybackReadinessPolicy.fromPlayer(
                 playbackState = player.playbackState,
@@ -2422,7 +2422,7 @@ class ExoPlaybackStateHolder(
                         pendingNavigation
                             ?.takeIf { it.skipDelta != 0 }
                             ?.let { navigation ->
-                                    val currentLogicalPosition =
+                                val currentLogicalPosition =
                                     descriptor?.currentLogicalPosition ?: hydration.currentHeapIndex
                                 val targetLogicalPosition =
                                     FastResumeCanonicalHandoffPolicy.targetLogicalPosition(
