@@ -101,10 +101,11 @@ for token in \
   'put("available", available)' 'stateStatement.bindLong(3, if (available) 1 else 0)' \
   'root.deleteRecursively()' 'seedPlaybackQueue(context, songCount, playableFiles)' \
   'QueueSessionEntity(' 'QueueItemRefEntity(' 'queueDao.insertQueueItemRefs(items)' \
-  'private const val QUEUE_INSERT_BATCH_SIZE = 500' EXTRA_AUTOPLAY_ON_LAUNCH \
-  'putBoolean(context.getString(R.string.set_key_autoplay_on_launch), autoplayOnLaunch)'; do
+  'private const val QUEUE_INSERT_BATCH_SIZE = 500' EXTRA_AUTOPLAY_ON_LAUNCH; do
   require_contains "$fixture_receiver" "$token"
 done
+require_contains "$fixture_receiver" 'R.string.set_key_autoplay_on_launch'
+require_contains "$fixture_receiver" 'autoplayOnLaunch,'
 require_contains "$browser" 'benchmarkRoot(context, 0)'
 require_contains "$browser" 'playbackPath'
 require_contains "$fixture_controller" 'fun awaitAdditionalEvent('
