@@ -246,7 +246,10 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
                     context.getString(R.string.set_key_generated_playlists),
                     generatedPlaylistsEnabled,
                 )
-                .putBoolean(context.getString(R.string.set_key_autoplay_on_launch), autoplayOnLaunch)
+                .putBoolean(
+                    context.getString(R.string.set_key_autoplay_on_launch),
+                    autoplayOnLaunch,
+                )
                 .commit()
         ) {
             "Unable to persist deterministic benchmark startup settings"
