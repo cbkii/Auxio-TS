@@ -34,6 +34,8 @@ class RestoreIntentArbiterTest {
         assertFalse(arbiter.begin(DeferredPlayback.RestoreState(play = true)))
 
         assertTrue(arbiter.snapshot().play)
+        assertFalse(arbiter.begin(DeferredPlayback.RestoreState(play = false)))
+        assertFalse(arbiter.snapshot().play)
     }
 
     @Test

@@ -262,11 +262,17 @@ interface QueueDao {
             "artistFallback = COALESCE(:artistFallback, artistFallback), " +
             "albumFallback = COALESCE(:albumFallback, albumFallback), " +
             "durationMs = CASE WHEN :durationMs > 0 THEN :durationMs ELSE durationMs END " +
-            "WHERE sessionId = :sessionId AND logicalPosition = :logicalPosition"
+            "WHERE sessionId = :sessionId AND logicalPosition = :logicalPosition " +
+            "AND logicalPosition = :expectedCurrentLogicalPosition " +
+            "AND EXISTS (SELECT 1 FROM QueueSessionEntity " +
+            "WHERE id = :sessionId AND revision = :expectedRevision " +
+            "AND currentLogicalPosition = :expectedCurrentLogicalPosition)"
     )
     suspend fun enrichQueueItem(
         sessionId: Long,
         logicalPosition: Int,
+        expectedRevision: Long,
+        expectedCurrentLogicalPosition: Int,
         uri: String?,
         pathFallback: String?,
         titleFallback: String?,

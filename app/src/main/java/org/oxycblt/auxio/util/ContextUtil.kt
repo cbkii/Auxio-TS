@@ -41,6 +41,7 @@ import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.MainActivity
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
+import org.oxycblt.auxio.playback.service.MediaButtonIntentFactory
 import org.oxycblt.auxio.playback.service.PendingIntentRequestCodePolicy
 
 /**
@@ -226,3 +227,17 @@ fun Context.newBroadcastPendingIntent(action: String): PendingIntent =
         Intent(action).setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
+
+/**
+ * Create a cold-safe media-button PendingIntent that reaches the manifest receiver even when the
+ * playback service/process is not already resident.
+ */
+fun Context.newMediaButtonPendingIntent(keyCode: Int): PendingIntent {
+    val requestKey = "${Intent.ACTION_MEDIA_BUTTON}:$keyCode"
+    return PendingIntent.getBroadcast(
+        this,
+        PendingIntentRequestCodePolicy.forAction(requestKey),
+        MediaButtonIntentFactory.receiverIntent(this, keyCode),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+}

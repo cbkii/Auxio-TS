@@ -26,6 +26,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.SizeF
+import android.view.KeyEvent
 import android.view.View
 import android.widget.RemoteViews
 import org.oxycblt.auxio.BuildConfig
@@ -37,6 +38,7 @@ import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.ui.UISettingsImpl
 import org.oxycblt.auxio.util.isLandscape
 import org.oxycblt.auxio.util.newBroadcastPendingIntent
+import org.oxycblt.auxio.util.newMediaButtonPendingIntent
 import org.oxycblt.auxio.util.newNowPlayingPendingIntent
 import timber.log.Timber as L
 
@@ -410,7 +412,7 @@ class WidgetProvider : AppWidgetProvider() {
         // by PlaybackService.
         setOnClickPendingIntent(
             R.id.widget_play_pause,
-            context.newBroadcastPendingIntent(PlaybackActions.ACTION_PLAY_PAUSE),
+            context.newMediaButtonPendingIntent(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE),
         )
 
         // Set up the play/pause button appearance. Like the Android 13 media controls, use
@@ -445,11 +447,11 @@ class WidgetProvider : AppWidgetProvider() {
         // by PlaybackService.
         setOnClickPendingIntent(
             R.id.widget_skip_prev,
-            context.newBroadcastPendingIntent(PlaybackActions.ACTION_SKIP_PREV),
+            context.newMediaButtonPendingIntent(KeyEvent.KEYCODE_MEDIA_PREVIOUS),
         )
         setOnClickPendingIntent(
             R.id.widget_skip_next,
-            context.newBroadcastPendingIntent(PlaybackActions.ACTION_SKIP_NEXT),
+            context.newMediaButtonPendingIntent(KeyEvent.KEYCODE_MEDIA_NEXT),
         )
         return this
     }

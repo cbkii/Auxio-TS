@@ -212,6 +212,8 @@ class PersistenceCancellationTest {
         override suspend fun enrichQueueItem(
             sessionId: Long,
             logicalPosition: Int,
+            expectedRevision: Long,
+            expectedCurrentLogicalPosition: Int,
             uri: String?,
             pathFallback: String?,
             titleFallback: String?,

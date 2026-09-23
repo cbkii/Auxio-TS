@@ -53,4 +53,18 @@ internal object SeamlessQueueHandoffPolicy {
             appendCount = canonicalItemCount - targetCurrentIndex - 1,
         )
     }
+
+    fun installedMatches(
+        expectedItemCount: Int,
+        expectedCurrentIndex: Int,
+        sourceUriBefore: String?,
+        actualItemCount: Int,
+        actualCurrentIndex: Int,
+        sourceUriAfter: String?,
+        nonCurrentItemsMatch: Boolean,
+    ): Boolean =
+        actualItemCount == expectedItemCount &&
+            actualCurrentIndex == expectedCurrentIndex &&
+            sourceUriAfter == sourceUriBefore &&
+            nonCurrentItemsMatch
 }

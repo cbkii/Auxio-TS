@@ -44,15 +44,6 @@ class MediaButtonActionMapperTest {
                 isFocusHeld = true,
             )
         )
-        assertTrue(
-            MediaButtonActionMapper.shouldForward(
-                action = KeyEvent.ACTION_DOWN,
-                keyCode = KeyEvent.KEYCODE_HEADSETHOOK,
-                repeatCount = 0,
-                hasCurrentSong = true,
-                isFocusHeld = true,
-            )
-        )
     }
 
     @Test
@@ -84,35 +75,35 @@ class MediaButtonActionMapperTest {
                 isFocusHeld = true,
             )
         )
-        assertFalse(
-            MediaButtonActionMapper.shouldForward(
-                action = KeyEvent.ACTION_DOWN,
-                keyCode = KeyEvent.KEYCODE_HEADSETHOOK,
-                repeatCount = 1,
-                hasCurrentSong = true,
-                isFocusHeld = true,
-            )
-        )
-        assertFalse(
-            MediaButtonActionMapper.shouldForward(
-                action = KeyEvent.ACTION_UP,
-                keyCode = KeyEvent.KEYCODE_HEADSETHOOK,
-                repeatCount = 0,
-                hasCurrentSong = true,
-                isFocusHeld = true,
-            )
-        )
     }
 
     @Test
-    fun `pause and stop are ignored when queue is inert but play actions still forward`() {
+    fun `cold queue admits play next and previous but never pause or stop`() {
+        for (keyCode in
+            listOf(
+                KeyEvent.KEYCODE_MEDIA_PLAY,
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+                KeyEvent.KEYCODE_HEADSETHOOK,
+                KeyEvent.KEYCODE_MEDIA_NEXT,
+                KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+            )) {
+            assertTrue(
+                MediaButtonActionMapper.shouldForward(
+                    action = KeyEvent.ACTION_DOWN,
+                    keyCode = keyCode,
+                    repeatCount = 0,
+                    hasCurrentSong = false,
+                    isFocusHeld = false,
+                )
+            )
+        }
         assertFalse(
             MediaButtonActionMapper.shouldForward(
                 action = KeyEvent.ACTION_DOWN,
                 keyCode = KeyEvent.KEYCODE_MEDIA_PAUSE,
                 repeatCount = 0,
                 hasCurrentSong = false,
-                isFocusHeld = true,
+                isFocusHeld = false,
             )
         )
         assertFalse(
@@ -121,82 +112,19 @@ class MediaButtonActionMapperTest {
                 keyCode = KeyEvent.KEYCODE_MEDIA_STOP,
                 repeatCount = 0,
                 hasCurrentSong = false,
-                isFocusHeld = true,
-            )
-        )
-        assertTrue(
-            MediaButtonActionMapper.shouldForward(
-                action = KeyEvent.ACTION_DOWN,
-                keyCode = KeyEvent.KEYCODE_MEDIA_PLAY,
-                repeatCount = 0,
-                hasCurrentSong = false,
-                isFocusHeld = true,
-            )
-        )
-        assertTrue(
-            MediaButtonActionMapper.shouldForward(
-                action = KeyEvent.ACTION_DOWN,
-                keyCode = KeyEvent.KEYCODE_HEADSETHOOK,
-                repeatCount = 0,
-                hasCurrentSong = false,
-                isFocusHeld = true,
+                isFocusHeld = false,
             )
         )
     }
 
     @Test
-    fun `allows cold play and stop but focus gates exported navigation`() {
-        assertTrue(
-            MediaButtonActionMapper.shouldForward(
-                action = KeyEvent.ACTION_DOWN,
-                keyCode = KeyEvent.KEYCODE_MEDIA_PLAY,
-                repeatCount = 0,
-                hasCurrentSong = false,
-                isFocusHeld = false,
-            )
-        )
-        assertTrue(
-            MediaButtonActionMapper.shouldForward(
-                action = KeyEvent.ACTION_DOWN,
-                keyCode = KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
-                repeatCount = 0,
-                hasCurrentSong = true,
-                isFocusHeld = false,
-            )
-        )
+    fun `stop remains available for existing paused media without focus`() {
         assertTrue(
             MediaButtonActionMapper.shouldForward(
                 action = KeyEvent.ACTION_DOWN,
                 keyCode = KeyEvent.KEYCODE_MEDIA_STOP,
                 repeatCount = 0,
                 hasCurrentSong = true,
-                isFocusHeld = false,
-            )
-        )
-        assertFalse(
-            MediaButtonActionMapper.shouldForward(
-                action = KeyEvent.ACTION_DOWN,
-                keyCode = KeyEvent.KEYCODE_MEDIA_NEXT,
-                repeatCount = 0,
-                hasCurrentSong = true,
-                isFocusHeld = false,
-            )
-        )
-        assertFalse(
-            MediaButtonActionMapper.shouldForward(
-                action = KeyEvent.ACTION_DOWN,
-                keyCode = KeyEvent.KEYCODE_MEDIA_PREVIOUS,
-                repeatCount = 0,
-                hasCurrentSong = true,
-                isFocusHeld = false,
-            )
-        )
-        assertFalse(
-            MediaButtonActionMapper.shouldForward(
-                action = KeyEvent.ACTION_DOWN,
-                keyCode = KeyEvent.KEYCODE_MEDIA_PAUSE,
-                repeatCount = 0,
-                hasCurrentSong = false,
                 isFocusHeld = false,
             )
         )

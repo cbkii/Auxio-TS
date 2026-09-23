@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.startupbenchmark
 
 import android.content.ComponentName
+import android.content.Intent
 import android.os.Bundle
 import android.os.Trace
 import android.support.v4.media.MediaBrowserCompat
@@ -45,6 +46,13 @@ internal object CriticalJourneys {
     const val TRACE_BOOT_RESTORE_TO_FIRST_AUDIO = "auxio.boot_restore_to_first_audio"
     const val TRACE_RESTORE_BURST_TO_FIRST_AUDIO = "auxio.restore_burst_to_first_audio"
     const val TRACE_NEXT_COMMAND_TO_NEXT_AUDIO = "auxio.next_command_to_next_audio"
+    const val TRACE_HOT_PAUSED_MEDIA_SESSION_TO_FIRST_AUDIO =
+        "auxio.hot_paused_media_session_to_first_audio"
+    const val TRACE_HOT_PAUSED_MEDIA_BUTTON_TO_FIRST_AUDIO =
+        "auxio.hot_paused_media_button_to_first_audio"
+    const val TRACE_HOT_PAUSED_TOPWAY_TO_FIRST_AUDIO = "auxio.hot_paused_topway_to_first_audio"
+    const val TRACE_WARM_PREPARE_TO_FIRST_AUDIO = "auxio.warm_prepare_to_first_audio"
+    const val TRACE_COLD_PLAY_NEXT_TO_FIRST_AUDIO = "auxio.cold_play_next_to_first_audio"
     const val TRACE_USB0_FOLDER_TO_FIRST_AUDIO = "auxio.usb0_folder_to_first_audio"
     const val TRACE_USB1_FOLDER_TO_FIRST_AUDIO = "auxio.usb1_folder_to_first_audio"
     const val TRACE_FIRST_SONGS_PAGE = "auxio.first_songs_page"
@@ -110,6 +118,126 @@ internal object CriticalJourneys {
                 PlaybackStateCompat.STATE_PLAYING,
             )
             waitForMediaFingerprint(controller, excluded = second)
+        }
+    }
+
+    fun MacrobenchmarkScope.prepareHotPaused() {
+        startRestoreService(START_ID_BOOT)
+        withMediaController { controller ->
+            waitForPlaybackState(controller, PlaybackStateCompat.STATE_PAUSED)
+            waitForMediaFingerprint(controller)
+        }
+        BenchmarkFixtureController.awaitStartupReport(
+            device,
+            setOf(HOT_PAUSED_LABEL),
+            timeoutMs = AUDIO_TIMEOUT_MS,
+        )
+    }
+
+    fun MacrobenchmarkScope.exerciseHotPausedMediaSessionPlay() {
+        val before = eventCount(AUDIO_ADVANCING_LABEL)
+        traceSection(TRACE_HOT_PAUSED_MEDIA_SESSION_TO_FIRST_AUDIO) {
+            withMediaController { controller ->
+                mainThreadValue { controller.transportControls.play() }
+                waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
+            }
+            awaitAdditionalAudioEvent(before)
+        }
+    }
+
+    fun MacrobenchmarkScope.exerciseHotPausedExportedMediaButtonPlay() {
+        val before = eventCount(AUDIO_ADVANCING_LABEL)
+        traceSection(TRACE_HOT_PAUSED_MEDIA_BUTTON_TO_FIRST_AUDIO) {
+            withMediaController { controller ->
+                sendExportedMediaButton(KeyEvent.KEYCODE_MEDIA_PLAY)
+                waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
+            }
+            awaitAdditionalAudioEvent(before)
+        }
+    }
+
+    fun MacrobenchmarkScope.exerciseHotPausedTopwayPlayPause() {
+        val before = eventCount(AUDIO_ADVANCING_LABEL)
+        traceSection(TRACE_HOT_PAUSED_TOPWAY_TO_FIRST_AUDIO) {
+            withMediaController { controller ->
+                sendTopwayPlayPause()
+                waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
+            }
+            awaitAdditionalAudioEvent(before)
+        }
+    }
+
+    fun MacrobenchmarkScope.exerciseWarmPrepareThenPlay() {
+        startRestoreService(START_ID_ACTIVITY)
+        val before = eventCount(AUDIO_ADVANCING_LABEL)
+        traceSection(TRACE_WARM_PREPARE_TO_FIRST_AUDIO) {
+            withMediaController { controller ->
+                mainThreadValue { controller.transportControls.play() }
+                waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
+            }
+            awaitAdditionalAudioEvent(before)
+        }
+    }
+
+    fun MacrobenchmarkScope.exerciseColdPlayThenImmediateNext() {
+        startRestoreService(START_ID_ACTIVITY)
+        val before = eventCount(AUDIO_ADVANCING_LABEL)
+        traceSection(TRACE_COLD_PLAY_NEXT_TO_FIRST_AUDIO) {
+            withMediaController { controller ->
+                mainThreadValue {
+                    controller.transportControls.play()
+                    controller.transportControls.skipToNext()
+                }
+                waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
+                val finalItem = waitForMediaFingerprint(controller)
+                check(finalItem.title?.contains("00011") == true) {
+                    "Cold Play+Next did not converge to the persisted next item: $finalItem"
+                }
+            }
+            awaitAdditionalAudioEvent(before)
+        }
+    }
+
+    fun MacrobenchmarkScope.exerciseRepeatedNextPrevious() {
+        withMediaController { controller ->
+            mainThreadValue { controller.transportControls.play() }
+            waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
+            var current = waitForMediaFingerprint(controller)
+            repeat(3) { index ->
+                dispatchMediaKey(
+                    controller,
+                    KeyEvent.KEYCODE_MEDIA_NEXT,
+                    "Repeated Next #${index + 1}",
+                    PlaybackStateCompat.STATE_PLAYING,
+                )
+                current = waitForMediaFingerprint(controller, excluded = current)
+            }
+            repeat(2) { index ->
+                dispatchMediaKey(
+                    controller,
+                    KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+                    "Repeated Previous #${index + 1}",
+                    PlaybackStateCompat.STATE_PLAYING,
+                )
+                current = waitForMediaFingerprint(controller, excluded = current)
+            }
+        }
+    }
+
+    fun MacrobenchmarkScope.exerciseBootPreparedPaused() {
+        startRestoreService(START_ID_BOOT)
+        withMediaController { controller ->
+            waitForPlaybackState(controller, PlaybackStateCompat.STATE_PAUSED)
+            waitForMediaFingerprint(controller)
+        }
+        val report =
+            BenchmarkFixtureController.awaitStartupReport(
+                device,
+                setOf(HOT_PAUSED_LABEL),
+                timeoutMs = AUDIO_TIMEOUT_MS,
+            )
+        check(BenchmarkFixtureController.eventCount(report, AUDIO_ADVANCING_LABEL) == 0) {
+            "Autoplay-off boot advanced audio unexpectedly:\n$report"
         }
     }
 
@@ -382,6 +510,48 @@ internal object CriticalJourneys {
         device.waitForIdle()
     }
 
+    private fun MacrobenchmarkScope.eventCount(label: String): Int =
+        BenchmarkFixtureController.eventCount(
+            BenchmarkFixtureController.captureStartupReport(device, emptySet()),
+            label,
+        )
+
+    private fun MacrobenchmarkScope.awaitAdditionalAudioEvent(previousCount: Int) {
+        BenchmarkFixtureController.awaitAdditionalEvent(
+            device,
+            AUDIO_ADVANCING_LABEL,
+            previousCount,
+            timeoutMs = AUDIO_TIMEOUT_MS,
+        )
+    }
+
+    private fun sendExportedMediaButton(keyCode: Int) {
+        val context = InstrumentationRegistry.getInstrumentation().context
+        val intent =
+            Intent(Intent.ACTION_MEDIA_BUTTON)
+                .setComponent(
+                    ComponentName(
+                        BuildConfig.TARGET_PACKAGE,
+                        "org.oxycblt.auxio.playback.service.MediaButtonReceiver",
+                    )
+                )
+                .putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+        context.sendBroadcast(intent)
+    }
+
+    private fun sendTopwayPlayPause() {
+        val context = InstrumentationRegistry.getInstrumentation().context
+        val intent =
+            Intent(TOPWAY_PLAY_PAUSE_ACTION)
+                .setComponent(
+                    ComponentName(
+                        BuildConfig.TARGET_PACKAGE,
+                        "org.oxycblt.auxio.headunit.topway.TopwayMusicBridgeReceiver",
+                    )
+                )
+        context.sendBroadcast(intent)
+    }
+
     private fun MacrobenchmarkScope.startRestoreService(startId: Int) {
         val packageName = BuildConfig.TARGET_PACKAGE
         val output =
@@ -574,10 +744,14 @@ internal object CriticalJourneys {
     private fun serviceComponent() =
         ComponentName(BuildConfig.TARGET_PACKAGE, "org.oxycblt.auxio.AuxioService")
 
+    private const val START_ID_ACTIVITY = 0xA050
     private const val START_ID_BOOT = 0xA054
     private const val START_ID_BLUETOOTH = 0xA055
     private const val RESTORE_SEEK_POSITION_MS = 4_000L
     private const val SEEK_TOLERANCE_MS = 750L
+    private const val AUDIO_ADVANCING_LABEL = "startup.audio.audio_position_advancing"
+    private const val HOT_PAUSED_LABEL = "startup.playbackReadiness.HOT_PAUSED"
+    private const val TOPWAY_PLAY_PAUSE_ACTION = "com.tw.music.action.pp"
 
     private data class PlaybackFingerprint(
         val mediaId: String?,

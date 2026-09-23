@@ -53,6 +53,7 @@ internal object BenchmarkFixtureController {
         songCount: Int = requestedSongCount,
         sourceMode: String = SOURCE_MODE_NORMAL,
         generatedPlaylistsEnabled: Boolean = false,
+        autoplayOnLaunch: Boolean = true,
     ) {
         require(songCount in BenchmarkFixtures.supportedSongCounts)
         require(
@@ -67,7 +68,8 @@ internal object BenchmarkFixtureController {
             device.executeShellCommand(
                 "am broadcast -W --include-stopped-packages -a $ACTION_SEED " +
                     "-n $component --ei song_count $songCount --es source_mode $sourceMode " +
-                    "--ez generated_playlists $generatedPlaylistsEnabled"
+                    "--ez generated_playlists $generatedPlaylistsEnabled " +
+                    "--ez autoplay_on_launch $autoplayOnLaunch"
             )
         check(Regex("result=-1(?:,|\\s)").containsMatchIn(output)) {
             "Fixture seed broadcast failed: $output"
@@ -83,6 +85,32 @@ internal object BenchmarkFixtureController {
         val report = captureRawStartupReport(device)
         requiredLabels.forEach { label -> check(report.contains("label=$label")) { report } }
         return report
+    }
+
+    fun eventCount(report: String, label: String): Int {
+        val escaped = Regex.escape(label)
+        return Regex("""(?m)^[0-9]{3} .* label=$escaped(?: |$)""").findAll(report).count()
+    }
+
+    fun awaitAdditionalEvent(
+        device: UiDevice,
+        label: String,
+        previousCount: Int,
+        timeoutMs: Long = 10_000L,
+    ): String {
+        require(previousCount >= 0)
+        require(timeoutMs > 0L)
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+        var lastReport = ""
+        while (System.nanoTime() < deadline) {
+            lastReport = captureRawStartupReport(device)
+            if (eventCount(lastReport, label) > previousCount) return lastReport
+            Thread.sleep(REPORT_POLL_MS)
+        }
+        error(
+            "Startup report did not add label=$label beyond count=$previousCount within " +
+                "${timeoutMs}ms. Last report:\n$lastReport"
+        )
     }
 
     fun awaitStartupReport(

@@ -167,6 +167,7 @@ required = (
     'explicit_new_tag',
     'resume_latest_tag_without_release',
     'resume_latest_draft_release',
+    'packages: platform-tools',
 )
 for token in required:
     if token not in surface:

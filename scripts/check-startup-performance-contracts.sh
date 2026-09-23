@@ -21,7 +21,11 @@ macrobenchmark=startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmar
 journeys=startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/CriticalJourneys.kt
 fixture=startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/BenchmarkFixture.kt
 fixture_receiver=app/src/benchmark/java/org/oxycblt/auxio/benchmark/BenchmarkFixtureReceiver.kt
+fixture_controller=startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/BenchmarkFixtureController.kt
 browser=app/src/main/java/org/oxycblt/auxio/headunit/ts18/FastStartDirectFolderBrowser.kt
+playback_holder=app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt
+widget_provider=app/src/main/java/org/oxycblt/auxio/widgets/WidgetProvider.kt
+context_util=app/src/main/java/org/oxycblt/auxio/util/ContextUtil.kt
 perf_timer=app/src/main/java/org/oxycblt/auxio/util/PerfTimer.kt
 music_repository=app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt
 music_settings=app/src/main/java/org/oxycblt/auxio/music/MusicSettings.kt
@@ -43,7 +47,8 @@ benchmark_workflow=.github/workflows/startup-benchmarks.yml
 for path in \
   "$baseline_profile" "$startup_profile" startup-benchmark/build.gradle \
   "$baseline_generator" "$macrobenchmark" "$journeys" "$fixture" "$fixture_receiver" \
-  "$browser" "$perf_timer" "$music_repository" "$music_settings" \
+  "$fixture_controller" "$browser" "$playback_holder" "$widget_provider" "$context_util" \
+  "$perf_timer" "$music_repository" "$music_settings" \
   "$deferred_startup_test" "$capture_restore_test" \
   "$startup_validation" "$android_workflow" "$quality_workflow" "$release_workflow" \
   "$benchmark_workflow" scripts/ci-scope.sh scripts/check-product-contracts.sh \
@@ -96,11 +101,22 @@ for token in \
   'put("available", available)' 'stateStatement.bindLong(3, if (available) 1 else 0)' \
   'root.deleteRecursively()' 'seedPlaybackQueue(context, songCount, playableFiles)' \
   'QueueSessionEntity(' 'QueueItemRefEntity(' 'queueDao.insertQueueItemRefs(items)' \
-  'private const val QUEUE_INSERT_BATCH_SIZE = 500'; do
+  'private const val QUEUE_INSERT_BATCH_SIZE = 500' EXTRA_AUTOPLAY_ON_LAUNCH; do
   require_contains "$fixture_receiver" "$token"
 done
+require_contains "$fixture_receiver" 'R.string.set_key_autoplay_on_launch'
+require_contains "$fixture_receiver" 'autoplayOnLaunch,'
 require_contains "$browser" 'benchmarkRoot(context, 0)'
 require_contains "$browser" 'playbackPath'
+require_contains "$fixture_controller" 'fun awaitAdditionalEvent('
+require_contains "$fixture_controller" '--ez autoplay_on_launch $autoplayOnLaunch'
+require_contains "$playback_holder" 'player.addAnalyticsListener(this)'
+require_contains "$playback_holder" 'override fun onAudioPositionAdvancing('
+require_contains "$playback_holder" 'Ts18FirstAudioLatency.mark("first_audio")'
+require_contains "$widget_provider" 'newMediaButtonPendingIntent(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)'
+require_contains "$widget_provider" 'newMediaButtonPendingIntent(KeyEvent.KEYCODE_MEDIA_PREVIOUS)'
+require_contains "$widget_provider" 'newMediaButtonPendingIntent(KeyEvent.KEYCODE_MEDIA_NEXT)'
+require_contains "$context_util" 'MediaButtonIntentFactory.receiverIntent(this, keyCode)'
 require_contains "$perf_timer" 'BuildConfig.BUILD_TYPE == "benchmark"'
 
 require_contains "$music_repository" 'deferCachedLoad = true'
@@ -111,7 +127,8 @@ require_absent "$music_repository" 'persist.tw.storage.switch'
 require_contains "$music_settings" 'PerfTimer.configure(performanceCaptureEnabled)'
 require_contains "$deferred_startup_test" 'cached-library-hydration-deferred'
 require_contains "$capture_restore_test" 'settings construction restores persisted performance capture preference'
-require_contains "$fixture_receiver" 'seedBenchmarkStartupPreferences(context, generatedPlaylistsEnabled)'
+require_contains "$fixture_receiver" 'seedBenchmarkStartupPreferences('
+require_contains "$fixture_receiver" 'generatedPlaylistsEnabled, autoplayOnLaunch'
 require_contains "$fixture_receiver" 'FIXTURE_LIBRARY_REVISION'
 require_contains "$fixture_receiver" 'LibraryState.USABLE.name'
 require_contains "$fixture_receiver" 'IntegerTable.LOCATION_MODE_DIRECT_FS'
@@ -150,8 +167,11 @@ for journey in \
   generatedPlaylistsDoNotBlockTwentyThousandSongResume \
   primitiveQueueControlsJourney findAndPlayJourney usbFolderPlaybackJourney \
   secondUsbFolderPlaybackJourney pagedLibraryJourney earlyMediaBrowserJourney \
-  coldStartupWithUnavailableSecondUsb coldStartupWithInterruptedPendingGeneration \
-  completeLibraryMilestonesRemainNonBlocking; do
+  hotPausedMediaSessionPlayToFirstAudio hotPausedExportedMediaButtonPlayToFirstAudio \
+  hotPausedTopwayPlayPauseToFirstAudio warmServicePrepareToFirstAudio \
+  coldPlayThenImmediateNext repeatedNextPreviousJourney fiveHundredSongSavedSessionResume \
+  bootAutoplayOffPreparesSilently coldStartupWithUnavailableSecondUsb \
+  coldStartupWithInterruptedPendingGeneration completeLibraryMilestonesRemainNonBlocking; do
   require_contains "$macrobenchmark" "$journey"
 done
 for token in \
@@ -160,7 +180,10 @@ for token in \
   'exerciseUsbFolder(sourceIndex: Int = 0)' waitForAudioPlayback 'Required UI object not found' \
   TRACE_NEXT_COMMAND_TO_NEXT_AUDIO TRACE_MEDIA_BROWSER_FIRST_PAGE \
   TRACE_BOOT_RESTORE_TO_FIRST_AUDIO TRACE_RESTORE_BURST_TO_FIRST_AUDIO \
-  'Next after Quick Find' 'first Album track'; do
+  TRACE_HOT_PAUSED_MEDIA_SESSION_TO_FIRST_AUDIO TRACE_HOT_PAUSED_MEDIA_BUTTON_TO_FIRST_AUDIO \
+  TRACE_HOT_PAUSED_TOPWAY_TO_FIRST_AUDIO TRACE_WARM_PREPARE_TO_FIRST_AUDIO \
+  TRACE_COLD_PLAY_NEXT_TO_FIRST_AUDIO prepareHotPaused exerciseRepeatedNextPrevious \
+  exerciseBootPreparedPaused 'Next after Quick Find' 'first Album track'; do
   require_contains "$journeys" "$token"
 done
 require_absent "$journeys" 'clickIfPresent'

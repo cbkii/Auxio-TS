@@ -64,6 +64,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         val songCount = intent.getIntExtra(EXTRA_SONG_COUNT, DEFAULT_SONG_COUNT)
         val sourceMode = intent.getStringExtra(EXTRA_SOURCE_MODE) ?: SOURCE_MODE_NORMAL
         val generatedPlaylistsEnabled = intent.getBooleanExtra(EXTRA_GENERATED_PLAYLISTS, false)
+        val autoplayOnLaunch = intent.getBooleanExtra(EXTRA_AUTOPLAY_ON_LAUNCH, true)
         if (songCount !in SUPPORTED_SONG_COUNTS || sourceMode !in SUPPORTED_SOURCE_MODES) {
             resultCode = Activity.RESULT_CANCELED
             resultData = "Unsupported fixture request: songs=$songCount sourceMode=$sourceMode"
@@ -73,10 +74,17 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         val pending = goAsync()
         thread(name = "auxio-benchmark-fixture") {
             try {
-                seed(context.applicationContext, songCount, sourceMode, generatedPlaylistsEnabled)
+                seed(
+                    context.applicationContext,
+                    songCount,
+                    sourceMode,
+                    generatedPlaylistsEnabled,
+                    autoplayOnLaunch,
+                )
                 pending.resultCode = Activity.RESULT_OK
                 pending.resultData =
-                    "Seeded $songCount committed rows and primitive queue ($sourceMode)"
+                    "Seeded $songCount committed rows and primitive queue " +
+                        "($sourceMode autoplay=$autoplayOnLaunch)"
             } catch (error: Throwable) {
                 pending.resultCode = Activity.RESULT_CANCELED
                 pending.resultData = error.stackTraceToString().take(MAX_RESULT_LENGTH)
@@ -105,6 +113,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         songCount: Int,
         sourceMode: String,
         generatedPlaylistsEnabled: Boolean,
+        autoplayOnLaunch: Boolean,
     ) {
         val databaseFile = context.getDatabasePath(DATABASE_NAME)
         require(databaseFile.isFile) {
@@ -129,7 +138,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
                 }
             }
         seedPlaybackQueue(context, songCount, playableFiles)
-        seedBenchmarkStartupPreferences(context, generatedPlaylistsEnabled)
+        seedBenchmarkStartupPreferences(context, generatedPlaylistsEnabled, autoplayOnLaunch)
         context
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
@@ -211,6 +220,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
     private fun seedBenchmarkStartupPreferences(
         context: Context,
         generatedPlaylistsEnabled: Boolean,
+        autoplayOnLaunch: Boolean,
     ) {
         check(
             PreferenceManager.getDefaultSharedPreferences(context)
@@ -236,7 +246,10 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
                     context.getString(R.string.set_key_generated_playlists),
                     generatedPlaylistsEnabled,
                 )
-                .putBoolean(context.getString(R.string.set_key_autoplay_on_launch), true)
+                .putBoolean(
+                    context.getString(R.string.set_key_autoplay_on_launch),
+                    autoplayOnLaunch,
+                )
                 .commit()
         ) {
             "Unable to persist deterministic benchmark startup settings"
@@ -585,6 +598,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         const val EXTRA_SONG_COUNT = "song_count"
         const val EXTRA_SOURCE_MODE = "source_mode"
         const val EXTRA_GENERATED_PLAYLISTS = "generated_playlists"
+        const val EXTRA_AUTOPLAY_ON_LAUNCH = "autoplay_on_launch"
         const val SOURCE_MODE_NORMAL = "normal"
         const val SOURCE_MODE_USB1_ABSENT = "usb1_absent"
         const val SOURCE_MODE_PENDING = "pending_generation"
