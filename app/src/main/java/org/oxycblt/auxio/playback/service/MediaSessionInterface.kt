@@ -21,7 +21,6 @@ package org.oxycblt.auxio.playback.service
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.os.SystemClock
 import android.provider.MediaStore
 import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.session.MediaSessionCompat
@@ -61,7 +60,6 @@ constructor(
     private val launcherTelemetry: LauncherIntegrationTelemetry,
 ) : MediaSessionCompat.Callback() {
     private val jaroWinkler = JaroWinklerSimilarity()
-    private var lastColdRestoreRequestAtMs = Long.MIN_VALUE
 
     override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) {
         super.onPlayFromMediaId(mediaId, extras)
@@ -74,6 +72,13 @@ constructor(
 
     override fun onPrepareFromSearch(query: String?, extras: Bundle?) {
         super.onPrepareFromSearch(query, extras)
+    }
+
+    override fun onPrepare() {
+        logTransport(command = "PREPARE", result = "ADMITTED", detail = "currentMedia=${hasCurrentMedia()}")
+        if (!hasCurrentMedia()) {
+            startColdRestore(play = false, fallback = null)
+        }
     }
 
     override fun onPlayFromSearch(query: String, extras: Bundle) {
@@ -122,7 +127,6 @@ constructor(
                 hasRawPlaybackMetadata = hasRawPlaybackMetadata,
             )
         ) {
-            lastColdRestoreRequestAtMs = Long.MIN_VALUE
             logTransport(
                 command = "PLAY",
                 result = "ADMITTED",
@@ -132,17 +136,6 @@ constructor(
             playbackManager.playing(true)
             return
         }
-
-        val nowMs = SystemClock.elapsedRealtime()
-        if (!shouldRequestColdRestore(lastColdRestoreRequestAtMs, nowMs)) {
-            logTransport(
-                command = "PLAY",
-                result = "SUPPRESSED",
-                detail = "path=cold-restore-rate-limit",
-            )
-            return
-        }
-        lastColdRestoreRequestAtMs = nowMs
         logTransport(command = "PLAY", result = "ADMITTED", detail = "path=cold-restore")
         startColdRestore(play = true)
     }
@@ -187,7 +180,7 @@ constructor(
     }
 
     override fun onSeekTo(position: Long) {
-        if (!hasCurrentMedia()) startColdRestore(play = false)
+        if (!hasCurrentMedia()) startColdRestore(play = false, fallback = null)
         playbackManager.seekTo(position)
     }
 
@@ -230,9 +223,13 @@ constructor(
     private fun hasCurrentMedia(): Boolean =
         playbackManager.currentSong != null || playbackManager.rawPlaybackMetadata != null
 
-    private fun startColdRestore(play: Boolean, skipDelta: Int = 0) {
+    private fun startColdRestore(
+        play: Boolean,
+        skipDelta: Int = 0,
+        fallback: DeferredPlayback? = DeferredPlayback.ShuffleAll(play = play),
+    ) {
         playbackManager.playDeferred(
-            DeferredPlayback.RestoreState(play = play, fallback = DeferredPlayback.ShuffleAll())
+            DeferredPlayback.RestoreState(play = play, fallback = fallback)
         )
         when {
             skipDelta > 0 -> repeat(skipDelta) { playbackManager.next() }
@@ -350,8 +347,9 @@ constructor(
         const val ACTIONS =
             PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
                 PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH or
-                PlaybackStateCompat.ACTION_PLAY or
-                PlaybackStateCompat.ACTION_PAUSE or
+            PlaybackStateCompat.ACTION_PREPARE or
+            PlaybackStateCompat.ACTION_PLAY or
+            PlaybackStateCompat.ACTION_PAUSE or
                 PlaybackStateCompat.ACTION_PLAY_PAUSE or
                 PlaybackStateCompat.ACTION_SET_REPEAT_MODE or
                 PlaybackStateCompat.ACTION_SET_SHUFFLE_MODE or
@@ -362,16 +360,9 @@ constructor(
                 PlaybackStateCompat.ACTION_REWIND or
                 PlaybackStateCompat.ACTION_STOP
 
-        private const val COLD_RESTORE_RETRY_INTERVAL_MS = 5_000L
-
         internal fun shouldResumeExistingPlayback(
             hasCurrentSong: Boolean,
             hasRawPlaybackMetadata: Boolean,
         ): Boolean = hasCurrentSong || hasRawPlaybackMetadata
-
-        internal fun shouldRequestColdRestore(lastRequestAtMs: Long, nowMs: Long): Boolean =
-            lastRequestAtMs == Long.MIN_VALUE ||
-                nowMs < lastRequestAtMs ||
-                nowMs - lastRequestAtMs >= COLD_RESTORE_RETRY_INTERVAL_MS
     }
 }

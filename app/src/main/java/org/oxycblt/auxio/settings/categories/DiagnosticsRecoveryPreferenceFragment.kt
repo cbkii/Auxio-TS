@@ -20,6 +20,7 @@ package org.oxycblt.auxio.settings.categories
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ComponentName
 import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
@@ -41,6 +42,7 @@ import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.root.dofun.Ts18DofunIntegrationResolver
 import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
 import org.oxycblt.auxio.music.MusicSettings
+import org.oxycblt.auxio.playback.service.MediaSessionInterface
 import org.oxycblt.auxio.playback.service.PlaybackNotificationChannel
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.settings.BasePreferenceFragment
@@ -171,11 +173,26 @@ class DiagnosticsRecoveryPreferenceFragment :
                 val channel = PlaybackNotificationChannel.inspect(ctx)
                 val hasCurrentSong = playbackManager.currentSong != null
                 val hasRawPlaybackState = playbackManager.rawPlaybackMetadata != null
+                val hasPrimitiveQueue = playbackManager.queueWindow != null
                 val hasPlayableSessionState =
                     hasCurrentSong ||
                         hasRawPlaybackState ||
                         playbackManager.queue.isNotEmpty() ||
-                        playbackManager.queueWindow != null
+                        hasPrimitiveQueue
+                val playbackAuthority =
+                    when {
+                        hasCurrentSong -> "canonical"
+                        hasRawPlaybackState -> "raw"
+                        hasPrimitiveQueue -> "primitive"
+                        else -> "idle"
+                    }
+                val exportedMusicService =
+                    ctx.packageManager.resolveService(
+                        android.content.Intent().setComponent(
+                            ComponentName(ctx.packageName, "com.tw.music.MusicService")
+                        ),
+                        0,
+                    )?.serviceInfo
 
                 val sb = StringBuilder()
                 sb.appendLine("Root state: ${report.rootState}")
@@ -205,9 +222,32 @@ class DiagnosticsRecoveryPreferenceFragment :
                     "playbackNotificationFirstRequestElapsedMs=" +
                         (channel.firstPublicationRequestedElapsedMs ?: "not-requested")
                 )
+                sb.appendLine("exportedMusicServicePresent=${exportedMusicService != null}")
+                sb.appendLine("exportedMusicServiceEnabled=${exportedMusicService?.enabled}")
+                sb.appendLine("exportedMusicServiceExported=${exportedMusicService?.exported}")
+                sb.appendLine(
+                    "prepareActionAdvertised=" +
+                        ((MediaSessionInterface.ACTIONS and
+                            android.support.v4.media.session.PlaybackStateCompat.ACTION_PREPARE) != 0L)
+                )
+                sb.appendLine("restoreOutcome=${playbackManager.restoreOutcome}")
+                sb.appendLine("playbackAuthority=$playbackAuthority")
                 sb.appendLine("hasCurrentSong=$hasCurrentSong")
                 sb.appendLine("hasRawPlaybackState=$hasRawPlaybackState")
+                sb.appendLine("hasPrimitiveQueue=$hasPrimitiveQueue")
                 sb.appendLine("hasPlayableSessionState=$hasPlayableSessionState")
+                sb.appendLine("queueSize=${playbackManager.queue.size}")
+                sb.appendLine("queueWindowSize=${playbackManager.queueWindow?.items?.size ?: 0}")
+                sb.appendLine("currentIndex=${playbackManager.index}")
+                sb.appendLine("currentSongUid=${playbackManager.currentSong?.uid ?: "none"}")
+                sb.appendLine(
+                    "restorableItem=" +
+                        (playbackManager.currentSong?.uid?.toString()
+                            ?: playbackManager.rawPlaybackMetadata?.uriString
+                            ?: "none")
+                )
+                sb.appendLine("playing=${playbackManager.progression.isPlaying}")
+                sb.appendLine("audioFocusHeld=${playbackManager.isAudioFocusHeld}")
                 sb.appendLine("topwayBroadcasts=${launcherMode.sendsTopwayBroadcasts}")
                 sb.appendLine(
                     "legacyAndroidMediaBroadcasts=${launcherMode.publishesLegacyAndroidMediaBroadcasts}"

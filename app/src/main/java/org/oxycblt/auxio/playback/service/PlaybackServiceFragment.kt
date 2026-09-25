@@ -206,7 +206,6 @@ private constructor(
         } else {
             repeat(-delta) { playbackManager.prev() }
         }
-        scheduleRestoreWatchdog()
     }
 
     // --- MEDIASESSION CALLBACKS ---
@@ -270,6 +269,8 @@ private constructor(
                 IntegerTable.START_ID_TOPWAY -> null
                 IntegerTable.START_ID_BOOT ->
                     StartupPlaybackPolicy.restoreActionForBoot(playbackSettings.autoplayOnLaunch)
+                IntegerTable.START_ID_BACKGROUND_READY ->
+                    StartupPlaybackPolicy.restoreActionForBackgroundReady()
                 IntegerTable.START_ID_BLUETOOTH ->
                     DeferredPlayback.RestoreState(
                         play = playbackSettings.headsetAutoplay,
@@ -284,7 +285,6 @@ private constructor(
         if (action != null) {
             L.d("Initing service fragment using action $action")
             playbackManager.playDeferred(action)
-            if (action is DeferredPlayback.RestoreState) scheduleRestoreWatchdog()
         }
     }
 
@@ -340,7 +340,6 @@ private constructor(
                                 fallback = DeferredPlayback.ShuffleAll(),
                             )
                         )
-                        scheduleRestoreWatchdog()
                     }
                 }
 
@@ -353,7 +352,6 @@ private constructor(
                             "Topway update received with no current media; requesting state restore"
                         )
                         playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
-                        scheduleRestoreWatchdog()
                     }
                     publishTopwayState("cmd-update", force = true)
                     widgetComponent.update(force = true)
@@ -365,7 +363,6 @@ private constructor(
                             playbackManager.rawPlaybackMetadata == null
                     ) {
                         playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
-                        scheduleRestoreWatchdog()
                     }
                     playbackManager.seekTo(positionMs)
                     publishTopwayProgress("launcher-seek", force = true)
@@ -423,9 +420,11 @@ private constructor(
 
     override fun onRestoreOutcomeChanged(outcome: RestoreOutcome) {
         if (
-            outcome != RestoreOutcome.WAITING_FOR_PLAYER &&
-                outcome != RestoreOutcome.WAITING_FOR_LIBRARY
+            outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
+                outcome == RestoreOutcome.WAITING_FOR_LIBRARY
         ) {
+            scheduleRestoreWatchdog()
+        } else {
             cancelRestoreWatchdog()
             startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
             foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)

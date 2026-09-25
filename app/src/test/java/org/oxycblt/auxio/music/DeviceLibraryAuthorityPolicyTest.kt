@@ -76,4 +76,18 @@ class DeviceLibraryAuthorityPolicyTest {
         assertEquals(9L, snapshot.generation)
         assertEquals(partial, snapshot.sourceScanOutcome)
     }
+
+    @Test
+    fun sourceOutcomeMayChangeWithoutAdvancingLibraryGeneration() {
+        val unavailable = SourceScanOutcome.TemporarilyUnavailable(setOf("usb"))
+        val snapshot =
+            DeviceLibraryAuthorityPolicy.coherentSnapshot(
+                currentGeneration = 9L,
+                published = DeviceLibraryAuthority(9L, unavailable),
+                currentSourceOutcome = unavailable,
+            )
+
+        assertEquals(9L, snapshot.generation)
+        assertEquals(unavailable, snapshot.sourceScanOutcome)
+    }
 }

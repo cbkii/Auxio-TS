@@ -24,6 +24,7 @@ import android.content.Intent
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
+import org.oxycblt.auxio.headunit.BootStartupMode
 import org.oxycblt.auxio.headunit.overlay.FloatingOnlyStartupCoordinator
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.playback.PlaybackSettings
@@ -48,11 +49,7 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
 
-        val launchRoute =
-            BootLaunchPolicy.route(
-                playbackSettings.autostartOnBoot,
-                playbackSettings.autostartFloatingOnly,
-            )
+        val launchRoute = BootLaunchPolicy.route(BootStartupMode.resolve(context))
         if (launchRoute == BootLaunchPolicy.Route.DISABLED) {
             L.d("Autostart disabled, ignoring boot")
             return
@@ -104,17 +101,16 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
 
-        // Full-player boot must initialise the one canonical playback/library service even when
-        // autoplay is disabled. START_ID_BOOT keeps initialisation separate from playback policy.
-        // It restores paused when autoplay is off and may restore playback when it is on.
-        // MainActivity below is presentation-only because Android 10+ may block background starts.
-        // Android 15+ also restricts starting mediaPlayback foreground services from BOOT_COMPLETED
-        // for apps targeting API 35+, so this remains fail-open.
+        // Background Ready and Full-player both initialise the one canonical playback/library
+        // service. Background Ready always restores paused and never launches MainActivity.
+        // Full-player keeps the historical presentation path while preserving playback ownership in
+        // the service itself. Android 15+ may restrict BOOT_COMPLETED mediaPlayback foreground
+        // starts for API 35+, so both paths remain fail-open.
         if (BootLaunchPolicy.shouldStartCanonicalServiceDirectly(launchRoute)) {
             journal.log(
                 DiagnosticJournal.CAT_BOOT,
                 "Playback restore path",
-                "service=true autoplay=${playbackSettings.autoplayOnLaunch} floatingOnly=false",
+                "service=true autoplay=${playbackSettings.autoplayOnLaunch} route=$launchRoute",
             )
             try {
                 val serviceClass =
@@ -122,15 +118,26 @@ class BootReceiver : BroadcastReceiver() {
                 val serviceIntent =
                     Intent(context, serviceClass)
                         .setAction(AuxioService.ACTION_START)
-                        .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BOOT)
+                        .putExtra(
+                            AuxioService.INTENT_KEY_START_ID,
+                            if (launchRoute == BootLaunchPolicy.Route.BACKGROUND_READY) {
+                                IntegerTable.START_ID_BACKGROUND_READY
+                            } else {
+                                IntegerTable.START_ID_BOOT
+                            },
+                        )
                 ForegroundServiceStartContract.start(context, serviceIntent)
                 L.d(
-                    "Started AuxioService from boot [autoplay=${playbackSettings.autoplayOnLaunch}, floatingOnly=false]"
+                    "Started AuxioService from boot [autoplay=${playbackSettings.autoplayOnLaunch}, route=$launchRoute]"
                 )
             } catch (e: Exception) {
                 L.w("Cannot start AuxioService from boot: $e")
                 journal.log(DiagnosticJournal.CAT_BOOT, "Playback restore failed", e.toString())
             }
+        }
+
+        if (launchRoute == BootLaunchPolicy.Route.BACKGROUND_READY) {
+            return
         }
 
         // Attempt to show the activity UI for head-unit use. Background activity starts may be
@@ -150,20 +157,23 @@ class BootReceiver : BroadcastReceiver() {
 internal object BootLaunchPolicy {
     enum class Route {
         DISABLED,
+        BACKGROUND_READY,
         FLOATING_CONTROLS_ONLY,
         FULL_PLAYER,
     }
 
-    fun route(autostartOnBoot: Boolean, floatingOnly: Boolean): Route =
-        when {
-            !autostartOnBoot -> Route.DISABLED
-            floatingOnly -> Route.FLOATING_CONTROLS_ONLY
-            else -> Route.FULL_PLAYER
+    fun route(mode: BootStartupMode): Route =
+        when (mode) {
+            BootStartupMode.DISABLED -> Route.DISABLED
+            BootStartupMode.BACKGROUND_READY -> Route.BACKGROUND_READY
+            BootStartupMode.FULL_PLAYER -> Route.FULL_PLAYER
+            BootStartupMode.FLOATING_CONTROLS_ONLY -> Route.FLOATING_CONTROLS_ONLY
         }
 
     /** Whether this boot route requires Auxio's existing canonical service/library authority. */
     fun shouldStartCanonicalService(route: Route): Boolean = route != Route.DISABLED
 
     /** Whether BootReceiver itself owns the canonical service start for this route. */
-    fun shouldStartCanonicalServiceDirectly(route: Route): Boolean = route == Route.FULL_PLAYER
+    fun shouldStartCanonicalServiceDirectly(route: Route): Boolean =
+        route == Route.FULL_PLAYER || route == Route.BACKGROUND_READY
 }

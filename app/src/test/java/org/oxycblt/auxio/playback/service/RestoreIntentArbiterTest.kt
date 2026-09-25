@@ -27,7 +27,7 @@ import org.oxycblt.auxio.playback.state.DeferredPlayback
 
 class RestoreIntentArbiterTest {
     @Test
-    fun `duplicate restore coalesces and latest play state wins`() {
+    fun `duplicate restore coalesces and play requests upgrade eventual intent`() {
         val arbiter = RestoreIntentArbiter()
 
         assertTrue(arbiter.begin(DeferredPlayback.RestoreState(play = false)))
@@ -35,6 +35,18 @@ class RestoreIntentArbiterTest {
 
         assertTrue(arbiter.snapshot().play)
         assertFalse(arbiter.begin(DeferredPlayback.RestoreState(play = false)))
+        assertTrue(arbiter.snapshot().play)
+    }
+
+    @Test
+    fun `prepare cannot downgrade pending play without explicit pause`() {
+        val arbiter = RestoreIntentArbiter()
+
+        arbiter.begin(DeferredPlayback.RestoreState(play = true))
+        arbiter.begin(DeferredPlayback.RestoreState(play = false))
+        assertTrue(arbiter.snapshot().play)
+
+        assertTrue(arbiter.updatePlay(false))
         assertFalse(arbiter.snapshot().play)
     }
 
