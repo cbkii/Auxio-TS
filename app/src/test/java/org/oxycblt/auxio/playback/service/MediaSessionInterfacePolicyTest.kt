@@ -54,4 +54,10 @@ class MediaSessionInterfacePolicyTest {
     fun `standard prepare action is advertised`() {
         assertTrue((MediaSessionInterface.ACTIONS and PlaybackStateCompat.ACTION_PREPARE) != 0L)
     }
+
+    @Test
+    fun `cold skip fallback still requests playback`() {
+        assertTrue(MediaSessionInterface.shouldPlayFallbackAfterColdRestore(play = false, skipDelta = 1))
+        assertFalse(MediaSessionInterface.shouldPlayFallbackAfterColdRestore(play = false, skipDelta = 0))
+    }
 }
