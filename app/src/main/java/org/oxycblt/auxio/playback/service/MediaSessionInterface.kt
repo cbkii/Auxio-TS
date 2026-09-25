@@ -226,8 +226,7 @@ constructor(
     private fun startColdRestore(
         play: Boolean,
         skipDelta: Int = 0,
-        fallback: DeferredPlayback? =
-            DeferredPlayback.ShuffleAll(play = shouldPlayFallbackAfterColdRestore(play, skipDelta)),
+        fallback: DeferredPlayback? = fallbackForColdRestore(play, skipDelta),
     ) {
         playbackManager.playDeferred(
             DeferredPlayback.RestoreState(play = play, fallback = fallback)
@@ -368,5 +367,12 @@ constructor(
 
         internal fun shouldPlayFallbackAfterColdRestore(play: Boolean, skipDelta: Int): Boolean =
             play || skipDelta != 0
+
+        internal fun fallbackForColdRestore(play: Boolean, skipDelta: Int): DeferredPlayback? =
+            if (shouldPlayFallbackAfterColdRestore(play, skipDelta)) {
+                DeferredPlayback.ShuffleAll(play = true)
+            } else {
+                null
+            }
     }
 }
