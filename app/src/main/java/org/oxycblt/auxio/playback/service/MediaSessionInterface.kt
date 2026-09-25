@@ -370,7 +370,7 @@ constructor(
 
         internal fun fallbackForColdRestore(play: Boolean, skipDelta: Int): DeferredPlayback? =
             if (shouldPlayFallbackAfterColdRestore(play, skipDelta)) {
-                DeferredPlayback.ShuffleAll(play = true)
+                DeferredPlayback.ShuffleAll(play = play)
             } else {
                 null
             }

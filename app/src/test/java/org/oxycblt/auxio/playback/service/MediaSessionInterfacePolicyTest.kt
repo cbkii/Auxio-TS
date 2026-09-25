@@ -60,11 +60,11 @@ class MediaSessionInterfacePolicyTest {
 
     @Test
     fun `cold skip fallback still requests playback`() {
-        assertTrue(MediaSessionInterface.shouldPlayFallbackAfterColdRestore(play = false, skipDelta = 1))
+        assertTrue(MediaSessionInterface.shouldPlayFallbackAfterColdRestore(play = true, skipDelta = 1))
         assertFalse(MediaSessionInterface.shouldPlayFallbackAfterColdRestore(play = false, skipDelta = 0))
         assertEquals(
             DeferredPlayback.ShuffleAll(play = true),
-            MediaSessionInterface.fallbackForColdRestore(play = false, skipDelta = 1),
+            MediaSessionInterface.fallbackForColdRestore(play = true, skipDelta = 1),
         )
         assertNull(MediaSessionInterface.fallbackForColdRestore(play = false, skipDelta = 0))
     }
