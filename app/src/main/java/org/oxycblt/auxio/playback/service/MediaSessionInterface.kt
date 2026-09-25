@@ -75,6 +75,7 @@ constructor(
     }
 
     override fun onPrepare() {
+        super.onPrepare()
         logTransport(command = "PREPARE", result = "ADMITTED", detail = "currentMedia=${hasCurrentMedia()}")
         if (!hasCurrentMedia()) {
             startColdRestore(play = false)
@@ -237,12 +238,8 @@ constructor(
         fallback: DeferredPlayback? = fallbackForColdRestore(play, skipDelta),
     ) {
         playbackManager.playDeferred(
-            DeferredPlayback.RestoreState(play = play, fallback = fallback)
+            DeferredPlayback.RestoreState(play = play, skipDelta = skipDelta, fallback = fallback)
         )
-        when {
-            skipDelta > 0 -> repeat(skipDelta) { playbackManager.next() }
-            skipDelta < 0 -> repeat(-skipDelta) { playbackManager.prev() }
-        }
     }
 
     private fun logTransport(command: String, result: String, detail: String? = null) {

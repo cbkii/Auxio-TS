@@ -323,7 +323,11 @@ data class QueueChange(val type: Type, val instructions: UpdateInstructions) {
 /** Possible long-running background tasks handled by the background playback task. */
 sealed interface DeferredPlayback {
     /** Restore the previously saved playback state. */
-    data class RestoreState(val play: Boolean, val fallback: DeferredPlayback? = null) :
+    data class RestoreState(
+        val play: Boolean,
+        val skipDelta: Int = 0,
+        val fallback: DeferredPlayback? = null,
+    ) :
         DeferredPlayback
 
     /**

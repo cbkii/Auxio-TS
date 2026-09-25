@@ -55,6 +55,13 @@ internal class RestoreIntentArbiter(private val maxAbsoluteSkip: Int = DEFAULT_M
             play = false
         }
         play = play || action.play
+        if (action.skipDelta != 0) {
+            skipDelta =
+                (skipDelta.toLong() + action.skipDelta)
+                    .coerceIn(-maxAbsoluteSkip.toLong(), maxAbsoluteSkip.toLong())
+                    .toInt()
+            seekPositionMs = null
+        }
         if (action.fallback != null) fallback = action.fallback
         version += 1
         return started

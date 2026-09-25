@@ -53,7 +53,7 @@ class RestoreIntentArbiterTest {
     @Test
     fun `seek and skip burst stay bounded with latest seek semantics`() {
         val arbiter = RestoreIntentArbiter(maxAbsoluteSkip = 3)
-        arbiter.begin(DeferredPlayback.RestoreState(play = false))
+        arbiter.begin(DeferredPlayback.RestoreState(play = false, skipDelta = 1))
         repeat(20) { arbiter.addSkip(1) }
         arbiter.updateSeek(9_000L)
         arbiter.addSkip(-1)
@@ -75,5 +75,14 @@ class RestoreIntentArbiterTest {
         assertEquals(fallback, finished.fallback)
         assertEquals(4_000L, finished.seekPositionMs)
         assertFalse(arbiter.snapshot().active)
+    }
+
+    @Test
+    fun `initial restore action seeds cold skip intent`() {
+        val arbiter = RestoreIntentArbiter()
+
+        arbiter.begin(DeferredPlayback.RestoreState(play = false, skipDelta = -1))
+
+        assertEquals(-1, arbiter.snapshot().skipDelta)
     }
 }
