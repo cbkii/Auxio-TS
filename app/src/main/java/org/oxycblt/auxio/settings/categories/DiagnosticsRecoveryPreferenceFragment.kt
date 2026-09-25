@@ -167,8 +167,9 @@ class DiagnosticsRecoveryPreferenceFragment :
                 val ctx = context ?: return@launch
                 val prefs = PreferenceManager.getDefaultSharedPreferences(ctx)
                 val launcherMode =
-                    Ts18LauncherIntegrationMode.fromPreference(
-                        prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null)
+                    Ts18LauncherIntegrationMode.resolveEffectiveMode(
+                        prefs = prefs,
+                        topwayProduct = BuildConfig.TOPWAY_COMPAT_ENABLED,
                     )
                 val channel = PlaybackNotificationChannel.inspect(ctx)
                 val hasCurrentSong = playbackManager.currentSong != null

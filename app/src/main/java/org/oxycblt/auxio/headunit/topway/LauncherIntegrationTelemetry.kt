@@ -65,9 +65,10 @@ constructor(
 
         val mode =
             if (BuildConfig.TOPWAY_COMPAT_ENABLED) {
-                Ts18LauncherIntegrationMode.fromPreference(
-                        prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null)
-                    )
+                Ts18LauncherIntegrationMode.resolveEffectiveMode(
+                    prefs = prefs,
+                    topwayProduct = BuildConfig.TOPWAY_COMPAT_ENABLED,
+                )
                     .name
             } else {
                 Ts18LauncherIntegrationMode.AndroidMediaSessionOnly.name

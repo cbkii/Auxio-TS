@@ -107,7 +107,12 @@ private constructor(
     private var topwayProgressTickerJob: Job? = null
     private val launcherModePreferenceListener =
         SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key != Ts18LauncherIntegrationMode.PREF_KEY) return@OnSharedPreferenceChangeListener
+            if (
+                key != Ts18LauncherIntegrationMode.PREF_KEY &&
+                    key != Ts18LauncherIntegrationMode.STANDARD_PREF_KEY
+            ) {
+                return@OnSharedPreferenceChangeListener
+            }
             scope.launch { reconcileTopwayProgressTicker() }
         }
     private val exoHolder = exoHolderFactory.create()

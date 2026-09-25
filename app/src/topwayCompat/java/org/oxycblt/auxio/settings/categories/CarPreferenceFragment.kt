@@ -19,7 +19,6 @@
 package org.oxycblt.auxio.settings.categories
 
 import android.content.Intent
-import androidx.core.content.edit
 import androidx.navigation.fragment.findNavController
 import androidx.preference.ListPreference
 import androidx.preference.Preference
@@ -88,6 +87,8 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
             getString(R.string.set_key_head_unit_startup_mode) -> setupStartupMode(preference)
             getString(R.string.set_key_overlay_permission) -> setupOverlayPermission(preference)
             getString(R.string.set_key_launcher_integration) -> setupLauncherIntegration(preference)
+            getString(R.string.set_key_ts18_launcher_integration_mode) ->
+                setupLauncherIntegrationAdvancedOverride(preference)
             getString(R.string.set_key_playback_notification_access) ->
                 setupPlaybackNotificationAccess(preference)
             "open_diagnostics" -> {
@@ -106,6 +107,8 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         findPreference<Preference>(getString(R.string.set_key_overlay_permission))
             ?.let(::setupOverlayPermission)
         findPreference<Preference>(KEY_CAR_OVERLAY_ENABLED)?.let(::setupCarOverlayEnabled)
+        findPreference<Preference>(getString(R.string.set_key_launcher_integration))
+            ?.let(::setupLauncherIntegration)
         findPreference<Preference>(getString(R.string.set_key_playback_notification_access))
             ?.let(::setupPlaybackNotificationAccess)
     }
@@ -153,16 +156,17 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         val list = preference as? ListPreference ?: return
         val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
         val current =
-            Ts18LauncherIntegrationMode.fromPreference(
-                prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null)
+            Ts18LauncherIntegrationMode.resolveEffectiveMode(
+                prefs = prefs,
+                topwayProduct = BuildConfig.TOPWAY_COMPAT_ENABLED,
+            )
+        val standard =
+            Ts18LauncherIntegrationMode.resolveStandardMode(
+                prefs = prefs,
+                topwayProduct = BuildConfig.TOPWAY_COMPAT_ENABLED,
             )
         list.isPersistent = false
-        list.value =
-            if (current.usesGenericDofunProfile) {
-                Ts18LauncherIntegrationMode.GenericDofunMedia.name
-            } else {
-                Ts18LauncherIntegrationMode.AndroidMediaSessionOnly.name
-            }
+        list.value = standard.name
         list.summary =
             when (current) {
                 Ts18LauncherIntegrationMode.GenericDofunMedia ->
@@ -182,13 +186,29 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
                         it == Ts18LauncherIntegrationMode.GenericDofunMedia ||
                             it == Ts18LauncherIntegrationMode.AndroidMediaSessionOnly
                     } ?: return@OnPreferenceChangeListener false
-                prefs.edit().putString(Ts18LauncherIntegrationMode.PREF_KEY, mode.name).apply()
+                Ts18LauncherIntegrationMode.persistStandardMode(prefs, mode)
                 (pref as? ListPreference)?.summary =
                     if (mode == Ts18LauncherIntegrationMode.GenericDofunMedia) {
                         getString(R.string.set_launcher_integration_standard_generic)
                     } else {
                         getString(R.string.set_launcher_integration_standard_android)
                     }
+                true
+            }
+    }
+
+    private fun setupLauncherIntegrationAdvancedOverride(preference: Preference) {
+        val list = preference as? ListPreference ?: return
+        val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        list.onPreferenceChangeListener =
+            Preference.OnPreferenceChangeListener { _, newValue ->
+                val mode =
+                    Ts18LauncherIntegrationMode.fromPreference(newValue as String)
+                if (mode.isStandardMode) {
+                    Ts18LauncherIntegrationMode.persistStandardMode(prefs, mode)
+                }
+                findPreference<Preference>(getString(R.string.set_key_launcher_integration))
+                    ?.let(::setupLauncherIntegration)
                 true
             }
     }
