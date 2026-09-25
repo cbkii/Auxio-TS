@@ -20,7 +20,6 @@ package org.oxycblt.auxio.settings.categories
 
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.ComponentName
 import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
@@ -40,6 +39,7 @@ import org.oxycblt.auxio.headunit.compat.HeadUnitCompatManager
 import org.oxycblt.auxio.headunit.compat.NativePrivateIntegrationStatus
 import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.root.dofun.Ts18DofunIntegrationResolver
+import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.playback.service.MediaSessionInterface
@@ -188,8 +188,11 @@ class DiagnosticsRecoveryPreferenceFragment :
                     }
                 val exportedMusicService =
                     ctx.packageManager.resolveService(
-                        android.content.Intent().setComponent(
-                            ComponentName(ctx.packageName, "com.tw.music.MusicService")
+                        android.content.Intent(
+                            ctx,
+                            TopwayServiceBridge.resolveCompatServiceClass(
+                                org.oxycblt.auxio.AuxioService::class.java
+                            ),
                         ),
                         0,
                     )?.serviceInfo
