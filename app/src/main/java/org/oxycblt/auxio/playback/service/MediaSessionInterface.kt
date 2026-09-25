@@ -77,7 +77,7 @@ constructor(
     override fun onPrepare() {
         logTransport(command = "PREPARE", result = "ADMITTED", detail = "currentMedia=${hasCurrentMedia()}")
         if (!hasCurrentMedia()) {
-            startColdRestore(play = false, fallback = null)
+            startColdRestore(play = false)
         }
     }
 
