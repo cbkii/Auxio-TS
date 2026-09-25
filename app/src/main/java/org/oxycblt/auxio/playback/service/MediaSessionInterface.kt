@@ -158,7 +158,11 @@ constructor(
         if (hasCurrentMedia()) {
             playbackManager.next()
         } else {
-            startColdRestore(play = true, skipDelta = 1)
+            startColdRestore(
+                play = true,
+                skipDelta = 1,
+                fallback = DeferredPlayback.ShuffleAll(play = true),
+            )
         }
     }
 
@@ -171,7 +175,11 @@ constructor(
         if (hasCurrentMedia()) {
             playbackManager.prev()
         } else {
-            startColdRestore(play = true, skipDelta = -1)
+            startColdRestore(
+                play = true,
+                skipDelta = -1,
+                fallback = DeferredPlayback.ShuffleAll(play = true),
+            )
         }
     }
 
