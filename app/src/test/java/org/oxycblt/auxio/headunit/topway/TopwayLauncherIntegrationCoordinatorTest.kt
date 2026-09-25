@@ -207,6 +207,25 @@ class TopwayLauncherIntegrationCoordinatorTest {
         )
     }
 
+    @Test
+    fun `setting coordinator mode to standard clears advanced override`() {
+        val context = RecordingContext(baseContext)
+        val coordinator = coordinator(context, Ts18LauncherIntegrationMode.TopwayCommandOnly)
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+
+        coordinator.mode = Ts18LauncherIntegrationMode.AndroidMediaSessionOnly
+
+        assertEquals(
+            Ts18LauncherIntegrationMode.AndroidMediaSessionOnly,
+            coordinator.mode,
+        )
+        assertEquals(
+            Ts18LauncherIntegrationMode.AndroidMediaSessionOnly.name,
+            prefs.getString(Ts18LauncherIntegrationMode.STANDARD_PREF_KEY, null),
+        )
+        assertEquals(null, prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null))
+    }
+
     private fun coordinator(
         context: Context,
         mode: Ts18LauncherIntegrationMode,

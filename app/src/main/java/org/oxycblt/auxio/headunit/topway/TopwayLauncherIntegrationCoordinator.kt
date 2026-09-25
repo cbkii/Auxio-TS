@@ -59,6 +59,7 @@ constructor(
             prefs.edit {
                 if (value.isStandardMode) {
                     putString(Ts18LauncherIntegrationMode.STANDARD_PREF_KEY, value.name)
+                    remove(Ts18LauncherIntegrationMode.PREF_KEY)
                 } else {
                     putString(Ts18LauncherIntegrationMode.PREF_KEY, value.name)
                 }
