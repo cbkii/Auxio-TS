@@ -132,7 +132,9 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         list.summary = list.entries?.getOrNull(currentIdx)
         list.onPreferenceChangeListener =
             Preference.OnPreferenceChangeListener { pref, newValue ->
-                val mode = BootStartupMode.fromPersisted(newValue as String) ?: return@OnPreferenceChangeListener false
+                val mode =
+                    BootStartupMode.fromPersisted(newValue as String)
+                        ?: return@OnPreferenceChangeListener false
                 BootStartupMode.persist(prefs, requireContext(), mode)
                 val lp = pref as? ListPreference
                 val newIndex = lp?.findIndexOfValue(mode.persistedValue) ?: -1
@@ -173,11 +175,7 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
                     getString(R.string.set_launcher_integration_standard_generic)
                 Ts18LauncherIntegrationMode.AndroidMediaSessionOnly ->
                     getString(R.string.set_launcher_integration_standard_android)
-                else ->
-                    getString(
-                        R.string.set_launcher_integration_advanced_summary,
-                        current.name,
-                    )
+                else -> getString(R.string.set_launcher_integration_advanced_summary, current.name)
             }
         list.onPreferenceChangeListener =
             Preference.OnPreferenceChangeListener { pref, newValue ->
@@ -202,8 +200,7 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
         list.onPreferenceChangeListener =
             Preference.OnPreferenceChangeListener { _, newValue ->
-                val mode =
-                    Ts18LauncherIntegrationMode.fromPreference(newValue as String)
+                val mode = Ts18LauncherIntegrationMode.fromPreference(newValue as String)
                 if (mode.isStandardMode) {
                     Ts18LauncherIntegrationMode.persistStandardMode(prefs, mode)
                 }

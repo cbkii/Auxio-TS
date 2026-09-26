@@ -176,7 +176,8 @@ class TopwayLauncherIntegrationCoordinatorTest {
     @Test
     fun `standard launcher selection does not overwrite advanced override`() {
         val prefs = PreferenceManager.getDefaultSharedPreferences(baseContext)
-        prefs.edit()
+        prefs
+            .edit()
             .putString(
                 Ts18LauncherIntegrationMode.STANDARD_PREF_KEY,
                 Ts18LauncherIntegrationMode.AndroidMediaSessionOnly.name,
@@ -215,10 +216,7 @@ class TopwayLauncherIntegrationCoordinatorTest {
 
         coordinator.mode = Ts18LauncherIntegrationMode.AndroidMediaSessionOnly
 
-        assertEquals(
-            Ts18LauncherIntegrationMode.AndroidMediaSessionOnly,
-            coordinator.mode,
-        )
+        assertEquals(Ts18LauncherIntegrationMode.AndroidMediaSessionOnly, coordinator.mode)
         assertEquals(
             Ts18LauncherIntegrationMode.AndroidMediaSessionOnly.name,
             prefs.getString(Ts18LauncherIntegrationMode.STANDARD_PREF_KEY, null),

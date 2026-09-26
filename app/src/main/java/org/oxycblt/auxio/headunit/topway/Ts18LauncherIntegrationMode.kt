@@ -95,12 +95,14 @@ enum class Ts18LauncherIntegrationMode {
             topwayProduct: Boolean,
         ): Ts18LauncherIntegrationMode {
             val persistedStandard =
-                entries.firstOrNull { it.name == prefs.getString(STANDARD_PREF_KEY, null) }
+                entries
+                    .firstOrNull { it.name == prefs.getString(STANDARD_PREF_KEY, null) }
                     ?.takeIf(Ts18LauncherIntegrationMode::isStandardMode)
             if (persistedStandard != null) return persistedStandard
 
             val legacyStandard =
-                entries.firstOrNull { it.name == prefs.getString(PREF_KEY, null) }
+                entries
+                    .firstOrNull { it.name == prefs.getString(PREF_KEY, null) }
                     ?.takeIf(Ts18LauncherIntegrationMode::isStandardMode)
                     ?: defaultFor(topwayProduct)
             val migrationComplete = prefs.getBoolean(PREF_GENERIC_DEFAULT_MIGRATED, false)
@@ -118,7 +120,8 @@ enum class Ts18LauncherIntegrationMode {
             topwayProduct: Boolean,
         ): Ts18LauncherIntegrationMode {
             val override =
-                entries.firstOrNull { it.name == prefs.getString(PREF_KEY, null) }
+                entries
+                    .firstOrNull { it.name == prefs.getString(PREF_KEY, null) }
                     ?.takeUnless(Ts18LauncherIntegrationMode::isStandardMode)
             return override ?: resolveStandardMode(prefs, topwayProduct)
         }

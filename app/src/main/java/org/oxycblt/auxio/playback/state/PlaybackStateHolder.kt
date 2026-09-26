@@ -327,8 +327,7 @@ sealed interface DeferredPlayback {
         val play: Boolean,
         val skipDelta: Int = 0,
         val fallback: DeferredPlayback? = null,
-    ) :
-        DeferredPlayback
+    ) : DeferredPlayback
 
     /**
      * Start shuffled playback of the entire music library. Analogous to the "Shuffle All" shortcut.

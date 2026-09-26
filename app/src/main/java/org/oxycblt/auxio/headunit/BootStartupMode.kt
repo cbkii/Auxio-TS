@@ -35,16 +35,27 @@ enum class BootStartupMode(val persistedValue: String) {
             entries.firstOrNull { it.persistedValue == value }
 
         fun resolve(context: Context): BootStartupMode =
-            resolve(PreferenceManager.getDefaultSharedPreferences(context.applicationContext), context)
+            resolve(
+                PreferenceManager.getDefaultSharedPreferences(context.applicationContext),
+                context,
+            )
 
         fun resolve(preferences: SharedPreferences, context: Context): BootStartupMode {
-            val explicit = fromPersisted(preferences.getString(context.getString(R.string.set_key_head_unit_startup_mode), null))
+            val explicit =
+                fromPersisted(
+                    preferences.getString(
+                        context.getString(R.string.set_key_head_unit_startup_mode),
+                        null,
+                    )
+                )
             if (explicit != null) return explicit
 
             val legacy =
                 when {
-                    !preferences.getBoolean(context.getString(R.string.set_key_autostart_on_boot), false) ->
-                        DISABLED
+                    !preferences.getBoolean(
+                        context.getString(R.string.set_key_autostart_on_boot),
+                        false,
+                    ) -> DISABLED
                     preferences.getBoolean(
                         context.getString(R.string.set_key_autostart_floating_only),
                         false,
@@ -61,10 +72,7 @@ enum class BootStartupMode(val persistedValue: String) {
                     context.getString(R.string.set_key_head_unit_startup_mode),
                     mode.persistedValue,
                 )
-                putBoolean(
-                    context.getString(R.string.set_key_autostart_on_boot),
-                    mode != DISABLED,
-                )
+                putBoolean(context.getString(R.string.set_key_autostart_on_boot), mode != DISABLED)
                 putBoolean(
                     context.getString(R.string.set_key_autostart_floating_only),
                     mode == FLOATING_CONTROLS_ONLY,

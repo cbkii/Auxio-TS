@@ -18,12 +18,12 @@
 
 package org.oxycblt.auxio.playback.service
 
+import android.support.v4.media.session.PlaybackStateCompat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import android.support.v4.media.session.PlaybackStateCompat
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 
 class MediaSessionInterfacePolicyTest {
@@ -60,9 +60,15 @@ class MediaSessionInterfacePolicyTest {
 
     @Test
     fun `cold skip fallback still requests playback`() {
-        assertTrue(MediaSessionInterface.shouldPlayFallbackAfterColdRestore(play = true, skipDelta = 1))
-        assertTrue(MediaSessionInterface.shouldPlayFallbackAfterColdRestore(play = false, skipDelta = 1))
-        assertFalse(MediaSessionInterface.shouldPlayFallbackAfterColdRestore(play = false, skipDelta = 0))
+        assertTrue(
+            MediaSessionInterface.shouldPlayFallbackAfterColdRestore(play = true, skipDelta = 1)
+        )
+        assertTrue(
+            MediaSessionInterface.shouldPlayFallbackAfterColdRestore(play = false, skipDelta = 1)
+        )
+        assertFalse(
+            MediaSessionInterface.shouldPlayFallbackAfterColdRestore(play = false, skipDelta = 0)
+        )
         assertEquals(
             DeferredPlayback.ShuffleAll(play = true),
             MediaSessionInterface.fallbackForColdRestore(play = true, skipDelta = 1),

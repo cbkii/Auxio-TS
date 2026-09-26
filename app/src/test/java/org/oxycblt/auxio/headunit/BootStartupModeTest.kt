@@ -63,7 +63,10 @@ class BootStartupModeTest {
     fun `legacy floating-only choice is preserved`() {
         prefs.edit().clear().putBoolean(bootKey, true).putBoolean(floatingKey, true).commit()
 
-        assertEquals(BootStartupMode.FLOATING_CONTROLS_ONLY, BootStartupMode.resolve(prefs, context))
+        assertEquals(
+            BootStartupMode.FLOATING_CONTROLS_ONLY,
+            BootStartupMode.resolve(prefs, context),
+        )
         assertEquals("floating_only", prefs.getString(startupKey, null))
     }
 }

@@ -76,7 +76,11 @@ constructor(
 
     override fun onPrepare() {
         super.onPrepare()
-        logTransport(command = "PREPARE", result = "ADMITTED", detail = "currentMedia=${hasCurrentMedia()}")
+        logTransport(
+            command = "PREPARE",
+            result = "ADMITTED",
+            detail = "currentMedia=${hasCurrentMedia()}",
+        )
         if (!hasCurrentMedia()) {
             startColdRestore(play = false)
         }
@@ -352,9 +356,9 @@ constructor(
         const val ACTIONS =
             PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
                 PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH or
-            PlaybackStateCompat.ACTION_PREPARE or
-            PlaybackStateCompat.ACTION_PLAY or
-            PlaybackStateCompat.ACTION_PAUSE or
+                PlaybackStateCompat.ACTION_PREPARE or
+                PlaybackStateCompat.ACTION_PLAY or
+                PlaybackStateCompat.ACTION_PAUSE or
                 PlaybackStateCompat.ACTION_PLAY_PAUSE or
                 PlaybackStateCompat.ACTION_SET_REPEAT_MODE or
                 PlaybackStateCompat.ACTION_SET_SHUFFLE_MODE or

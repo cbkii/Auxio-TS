@@ -188,15 +188,17 @@ class DiagnosticsRecoveryPreferenceFragment :
                         else -> "idle"
                     }
                 val exportedMusicService =
-                    ctx.packageManager.resolveService(
-                        android.content.Intent(
-                            ctx,
-                            TopwayServiceBridge.resolveCompatServiceClass(
-                                org.oxycblt.auxio.AuxioService::class.java
+                    ctx.packageManager
+                        .resolveService(
+                            android.content.Intent(
+                                ctx,
+                                TopwayServiceBridge.resolveCompatServiceClass(
+                                    org.oxycblt.auxio.AuxioService::class.java
+                                ),
                             ),
-                        ),
-                        0,
-                    )?.serviceInfo
+                            0,
+                        )
+                        ?.serviceInfo
 
                 val sb = StringBuilder()
                 sb.appendLine("Root state: ${report.rootState}")
@@ -232,7 +234,8 @@ class DiagnosticsRecoveryPreferenceFragment :
                 sb.appendLine(
                     "prepareActionAdvertised=" +
                         ((MediaSessionInterface.ACTIONS and
-                            android.support.v4.media.session.PlaybackStateCompat.ACTION_PREPARE) != 0L)
+                            android.support.v4.media.session.PlaybackStateCompat.ACTION_PREPARE) !=
+                            0L)
                 )
                 sb.appendLine("restoreOutcome=${playbackManager.restoreOutcome}")
                 sb.appendLine("playbackAuthority=$playbackAuthority")
