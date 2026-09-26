@@ -44,8 +44,8 @@ class CarPreferencesContractTest {
         )
         assertTrue(
             "keepPlaybackReady should stay in the advanced car section",
-            "app:key=\"settings_category_car_advanced\"" in carXml &&
-                carXml.indexOf("app:key=\"settings_category_car_advanced\"") <
+            "<PreferenceCategory app:title=\"@string/set_advanced\">" in carXml &&
+                carXml.indexOf("<PreferenceCategory app:title=\"@string/set_advanced\">") <
                     carXml.indexOf(keyMarker),
         )
         assertFalse(
