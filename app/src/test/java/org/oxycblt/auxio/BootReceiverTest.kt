@@ -22,37 +22,47 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.headunit.BootStartupMode
 import org.oxycblt.auxio.headunit.overlay.FloatingOnlyStartupCoordinator
 import org.oxycblt.auxio.playback.StartupPlaybackPolicy
 
 class BootReceiverTest {
     @Test
-    fun `disabled autostart does not launch even when floating-only remains set`() {
-        val route = BootLaunchPolicy.route(autostartOnBoot = false, floatingOnly = true)
+    fun `disabled startup does not launch`() {
+        val route = BootLaunchPolicy.route(BootStartupMode.DISABLED)
         assertEquals(BootLaunchPolicy.Route.DISABLED, route)
         assertFalse(BootLaunchPolicy.shouldStartCanonicalService(route))
         assertFalse(BootLaunchPolicy.shouldStartCanonicalServiceDirectly(route))
     }
 
     @Test
-    fun `floating-only autostart owns the headless coordinator route`() {
-        val route = BootLaunchPolicy.route(autostartOnBoot = true, floatingOnly = true)
+    fun `floating-only startup owns the headless coordinator route`() {
+        val route = BootLaunchPolicy.route(BootStartupMode.FLOATING_CONTROLS_ONLY)
         assertEquals(BootLaunchPolicy.Route.FLOATING_CONTROLS_ONLY, route)
         assertTrue(BootLaunchPolicy.shouldStartCanonicalService(route))
         assertFalse(BootLaunchPolicy.shouldStartCanonicalServiceDirectly(route))
     }
 
     @Test
-    fun `normal autostart owns the direct full-player service route`() {
-        val route = BootLaunchPolicy.route(autostartOnBoot = true, floatingOnly = false)
+    fun `full-player startup owns the direct service route`() {
+        val route = BootLaunchPolicy.route(BootStartupMode.FULL_PLAYER)
         assertEquals(BootLaunchPolicy.Route.FULL_PLAYER, route)
         assertTrue(BootLaunchPolicy.shouldStartCanonicalService(route))
         assertTrue(BootLaunchPolicy.shouldStartCanonicalServiceDirectly(route))
     }
 
     @Test
+    fun `background-ready startup owns a paused direct service route`() {
+        val route = BootLaunchPolicy.route(BootStartupMode.BACKGROUND_READY)
+        assertEquals(BootLaunchPolicy.Route.BACKGROUND_READY, route)
+        assertTrue(BootLaunchPolicy.shouldStartCanonicalService(route))
+        assertTrue(BootLaunchPolicy.shouldStartCanonicalServiceDirectly(route))
+        assertFalse(StartupPlaybackPolicy.restoreActionForBackgroundReady().play)
+    }
+
+    @Test
     fun `full-player boot keeps service initialisation independent from autoplay`() {
-        val route = BootLaunchPolicy.route(autostartOnBoot = true, floatingOnly = false)
+        val route = BootLaunchPolicy.route(BootStartupMode.FULL_PLAYER)
         assertTrue(BootLaunchPolicy.shouldStartCanonicalServiceDirectly(route))
         assertFalse(StartupPlaybackPolicy.restoreActionForBoot(autoplayOnLaunch = false).play)
         assertTrue(StartupPlaybackPolicy.restoreActionForBoot(autoplayOnLaunch = true).play)

@@ -130,6 +130,14 @@
         <item>@string/set_ts18_launcher_integration_mode_diagnostics_only</item>
         <item>@string/set_ts18_launcher_integration_mode_disabled</item>
     </string-array>
+    <string-array name="entries_launcher_integration_standard_mode">
+        <item>@string/set_launcher_integration_standard_android</item>
+        <item>@string/set_launcher_integration_standard_generic</item>
+    </string-array>
+    <string-array name="values_launcher_integration_standard_mode" translatable="false">
+        <item>AndroidMediaSessionOnly</item>
+        <item>GenericDofunMedia</item>
+    </string-array>
     <string-array name="values_ts18_launcher_integration_mode" translatable="false">
         <item>GenericDofunMedia</item>
         <item>AndroidMediaSessionOnly</item>
@@ -257,11 +265,13 @@
 
     <string-array name="entries_head_unit_startup_mode">
         <item>@string/set_startup_do_nothing</item>
+        <item>@string/set_startup_background_ready</item>
         <item>@string/set_startup_open_auxio</item>
         <item>@string/set_startup_restore_overlay</item>
     </string-array>
     <string-array name="values_head_unit_startup_mode" translatable="false">
         <item>none</item>
+        <item>background_ready</item>
         <item>open_auxio</item>
         <item>floating_only</item>
     </string-array>

@@ -173,14 +173,71 @@ class TopwayLauncherIntegrationCoordinatorTest {
         )
     }
 
+    @Test
+    fun `standard launcher selection does not overwrite advanced override`() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(baseContext)
+        prefs
+            .edit()
+            .putString(
+                Ts18LauncherIntegrationMode.STANDARD_PREF_KEY,
+                Ts18LauncherIntegrationMode.AndroidMediaSessionOnly.name,
+            )
+            .putString(
+                Ts18LauncherIntegrationMode.PREF_KEY,
+                Ts18LauncherIntegrationMode.TopwayCommandOnly.name,
+            )
+            .putBoolean(Ts18LauncherIntegrationMode.PREF_GENERIC_DEFAULT_MIGRATED, true)
+            .commit()
+
+        Ts18LauncherIntegrationMode.persistStandardMode(
+            prefs,
+            Ts18LauncherIntegrationMode.GenericDofunMedia,
+        )
+
+        assertEquals(
+            Ts18LauncherIntegrationMode.TopwayCommandOnly,
+            Ts18LauncherIntegrationMode.resolveEffectiveMode(prefs, topwayProduct = true),
+        )
+        assertEquals(
+            Ts18LauncherIntegrationMode.GenericDofunMedia.name,
+            prefs.getString(Ts18LauncherIntegrationMode.STANDARD_PREF_KEY, null),
+        )
+        assertEquals(
+            Ts18LauncherIntegrationMode.TopwayCommandOnly.name,
+            prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null),
+        )
+    }
+
+    @Test
+    fun `setting coordinator mode to standard clears advanced override`() {
+        val context = RecordingContext(baseContext)
+        val coordinator = coordinator(context, Ts18LauncherIntegrationMode.TopwayCommandOnly)
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+
+        coordinator.mode = Ts18LauncherIntegrationMode.AndroidMediaSessionOnly
+
+        assertEquals(Ts18LauncherIntegrationMode.AndroidMediaSessionOnly, coordinator.mode)
+        assertEquals(
+            Ts18LauncherIntegrationMode.AndroidMediaSessionOnly.name,
+            prefs.getString(Ts18LauncherIntegrationMode.STANDARD_PREF_KEY, null),
+        )
+        assertEquals(null, prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null))
+    }
+
     private fun coordinator(
         context: Context,
         mode: Ts18LauncherIntegrationMode,
     ): TopwayLauncherIntegrationCoordinator {
         PreferenceManager.getDefaultSharedPreferences(context)
             .edit()
-            .putString(Ts18LauncherIntegrationMode.PREF_KEY, mode.name)
-            .putBoolean(Ts18LauncherIntegrationMode.PREF_GENERIC_DEFAULT_MIGRATED, true)
+            .apply {
+                if (mode.isStandardMode) {
+                    putString(Ts18LauncherIntegrationMode.STANDARD_PREF_KEY, mode.name)
+                } else {
+                    putString(Ts18LauncherIntegrationMode.PREF_KEY, mode.name)
+                }
+                putBoolean(Ts18LauncherIntegrationMode.PREF_GENERIC_DEFAULT_MIGRATED, true)
+            }
             .commit()
         return TopwayLauncherIntegrationCoordinator(context, DiagnosticJournal())
     }

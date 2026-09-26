@@ -27,7 +27,7 @@ import org.oxycblt.auxio.playback.state.DeferredPlayback
 
 class RestoreIntentArbiterTest {
     @Test
-    fun `duplicate restore coalesces and latest play state wins`() {
+    fun `duplicate restore coalesces and play requests upgrade eventual intent`() {
         val arbiter = RestoreIntentArbiter()
 
         assertTrue(arbiter.begin(DeferredPlayback.RestoreState(play = false)))
@@ -35,13 +35,25 @@ class RestoreIntentArbiterTest {
 
         assertTrue(arbiter.snapshot().play)
         assertFalse(arbiter.begin(DeferredPlayback.RestoreState(play = false)))
+        assertTrue(arbiter.snapshot().play)
+    }
+
+    @Test
+    fun `prepare cannot downgrade pending play without explicit pause`() {
+        val arbiter = RestoreIntentArbiter()
+
+        arbiter.begin(DeferredPlayback.RestoreState(play = true))
+        arbiter.begin(DeferredPlayback.RestoreState(play = false))
+        assertTrue(arbiter.snapshot().play)
+
+        assertTrue(arbiter.updatePlay(false))
         assertFalse(arbiter.snapshot().play)
     }
 
     @Test
     fun `seek and skip burst stay bounded with latest seek semantics`() {
         val arbiter = RestoreIntentArbiter(maxAbsoluteSkip = 3)
-        arbiter.begin(DeferredPlayback.RestoreState(play = false))
+        arbiter.begin(DeferredPlayback.RestoreState(play = false, skipDelta = 1))
         repeat(20) { arbiter.addSkip(1) }
         arbiter.updateSeek(9_000L)
         arbiter.addSkip(-1)
@@ -63,5 +75,14 @@ class RestoreIntentArbiterTest {
         assertEquals(fallback, finished.fallback)
         assertEquals(4_000L, finished.seekPositionMs)
         assertFalse(arbiter.snapshot().active)
+    }
+
+    @Test
+    fun `initial restore action seeds cold skip intent`() {
+        val arbiter = RestoreIntentArbiter()
+
+        arbiter.begin(DeferredPlayback.RestoreState(play = false, skipDelta = -1))
+
+        assertEquals(-1, arbiter.snapshot().skipDelta)
     }
 }

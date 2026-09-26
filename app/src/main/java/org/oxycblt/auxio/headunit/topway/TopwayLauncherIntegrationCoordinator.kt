@@ -51,12 +51,18 @@ constructor(
 
     var mode: Ts18LauncherIntegrationMode
         get() =
-            Ts18LauncherIntegrationMode.fromPreference(
-                prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null)
+            Ts18LauncherIntegrationMode.resolveEffectiveMode(
+                prefs = prefs,
+                topwayProduct = BuildConfig.TOPWAY_COMPAT_ENABLED,
             )
         set(value) {
             prefs.edit {
-                putString(Ts18LauncherIntegrationMode.PREF_KEY, value.name)
+                if (value.isStandardMode) {
+                    putString(Ts18LauncherIntegrationMode.STANDARD_PREF_KEY, value.name)
+                    remove(Ts18LauncherIntegrationMode.PREF_KEY)
+                } else {
+                    putString(Ts18LauncherIntegrationMode.PREF_KEY, value.name)
+                }
                 putBoolean(Ts18LauncherIntegrationMode.PREF_GENERIC_DEFAULT_MIGRATED, true)
             }
             refreshWidgetControls("coordinator-set")
@@ -68,6 +74,10 @@ constructor(
                 prefs = prefs,
                 topwayProduct = BuildConfig.TOPWAY_COMPAT_ENABLED,
             )
+        Ts18LauncherIntegrationMode.resolveStandardMode(
+            prefs = prefs,
+            topwayProduct = BuildConfig.TOPWAY_COMPAT_ENABLED,
+        )
         if (!decision.markComplete && decision.persistMode == null) return
         logJournalAndTimber(
             DiagnosticJournal.CAT_TOPWAY_BROADCAST,

@@ -123,6 +123,84 @@ class PersistenceCancellationTest {
     }
 
     @Test
+    fun `stale queue revision cannot overwrite newer queue position`() = runBlocking {
+        val repository = repository(database.queueDao())
+        database
+            .queueDao()
+            .insertQueueSession(
+                QueueSessionEntity(
+                    id = 1L,
+                    totalCount = 3,
+                    currentLogicalPosition = 2,
+                    positionMs = 500L,
+                    repeatMode = RepeatMode.ALL,
+                    shuffleScope = ShuffleScope.OFF,
+                    revision = 2L,
+                    updatedAtMs = 99L,
+                )
+            )
+
+        val updated =
+            repository.updateQueuePosition(
+                descriptor = descriptor(),
+                logicalPosition = 0,
+                positionMs = 123L,
+                repeatMode = RepeatMode.NONE,
+            )
+
+        assertEquals(false, updated)
+        assertEquals(
+            2,
+            requireNotNull(database.queueDao().getQueueSession()).currentLogicalPosition,
+        )
+    }
+
+    @Test
+    fun `repeated queue position updates succeed while layout revision is unchanged`() =
+        runBlocking {
+            val repository = repository(database.queueDao())
+            database
+                .queueDao()
+                .insertQueueSession(
+                    QueueSessionEntity(
+                        id = 1L,
+                        totalCount = 3,
+                        currentLogicalPosition = 0,
+                        positionMs = 0L,
+                        repeatMode = RepeatMode.NONE,
+                        shuffleScope = ShuffleScope.OFF,
+                        revision = 1L,
+                        updatedAtMs = 99L,
+                    )
+                )
+
+            assertEquals(
+                true,
+                repository.updateQueuePosition(
+                    descriptor = descriptor(),
+                    logicalPosition = 1,
+                    positionMs = 123L,
+                    repeatMode = RepeatMode.ALL,
+                ),
+            )
+            assertEquals(
+                true,
+                repository.updateQueuePosition(
+                    descriptor = descriptor(),
+                    logicalPosition = 2,
+                    positionMs = 456L,
+                    repeatMode = RepeatMode.NONE,
+                ),
+            )
+
+            val session = requireNotNull(database.queueDao().getQueueSession())
+            assertEquals(2, session.currentLogicalPosition)
+            assertEquals(456L, session.positionMs)
+            assertEquals(RepeatMode.NONE, session.repeatMode)
+            assertEquals(1L, session.revision)
+        }
+
+    @Test
     fun `enrichQueueItem rethrows cancellation`() {
         val repository = repository(ThrowingQueueDao { CancellationException("cancelled") })
         assertFailsWith<CancellationException> {
@@ -203,6 +281,7 @@ class PersistenceCancellationTest {
 
         override suspend fun updateQueuePosition(
             sessionId: Long,
+            expectedRevision: Long,
             logicalPosition: Int,
             positionMs: Long,
             repeatMode: RepeatMode,

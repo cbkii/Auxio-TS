@@ -25,6 +25,8 @@ import android.os.Build
 import android.os.Environment
 import android.os.SystemClock
 import android.support.v4.media.MediaBrowserCompat
+import android.support.v4.media.session.MediaControllerCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.preference.PreferenceManager
@@ -168,7 +170,32 @@ class Android10CompatibilitySmokeTest {
         }
 
         assertTrue("MediaBrowser callback timed out", completed.await(30, TimeUnit.SECONDS))
-        instrumentation.runOnMainSync { browser.disconnect() }
+        lateinit var controller: MediaControllerCompat
+        instrumentation.runOnMainSync {
+            controller = MediaControllerCompat(context, browser.sessionToken)
+            val actions = controller.playbackState?.actions ?: 0L
+            assertTrue(actions and PlaybackStateCompat.ACTION_PREPARE != 0L)
+            controller.transportControls.prepare()
+            assertTrue(browser.isConnected)
+            browser.disconnect()
+        }
+
+        val reconnect = CountDownLatch(1)
+        lateinit var secondBrowser: MediaBrowserCompat
+        instrumentation.runOnMainSync {
+            secondBrowser =
+                MediaBrowserCompat(
+                    context,
+                    ComponentName(context, MusicService::class.java),
+                    object : MediaBrowserCompat.ConnectionCallback() {
+                        override fun onConnected() = reconnect.countDown()
+                    },
+                    null,
+                )
+            secondBrowser.connect()
+        }
+        assertTrue("MediaBrowser reconnect timed out", reconnect.await(30, TimeUnit.SECONDS))
+        instrumentation.runOnMainSync { secondBrowser.disconnect() }
         assertNull(failure.get(), failure.get())
     }
 
