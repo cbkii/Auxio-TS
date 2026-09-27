@@ -65,7 +65,10 @@ constructor(
     private var preferenceListenerRegistered = false
     private val modePreferenceListener =
         SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == Ts18LauncherIntegrationMode.PREF_KEY) {
+            if (
+                key == Ts18LauncherIntegrationMode.PREF_KEY ||
+                    key == Ts18LauncherIntegrationMode.STANDARD_PREF_KEY
+            ) {
                 mainHandler.post(::reconcileMode)
             }
         }

@@ -71,6 +71,7 @@ class ForegroundServiceStartContractTest {
         val externalStartIds =
             listOf(
                 IntegerTable.START_ID_BOOT,
+                IntegerTable.START_ID_BACKGROUND_READY,
                 IntegerTable.START_ID_BLUETOOTH,
                 IntegerTable.START_ID_MEDIA_BUTTON,
                 IntegerTable.START_ID_TOPWAY,

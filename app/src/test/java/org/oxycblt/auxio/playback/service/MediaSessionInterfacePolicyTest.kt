@@ -18,9 +18,13 @@
 
 package org.oxycblt.auxio.playback.service
 
+import android.support.v4.media.session.PlaybackStateCompat
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.playback.state.DeferredPlayback
 
 class MediaSessionInterfacePolicyTest {
     @Test
@@ -50,16 +54,29 @@ class MediaSessionInterfacePolicyTest {
     }
 
     @Test
-    fun `rapid repeated cold play requests are coalesced but retry remains bounded`() {
-        assertTrue(MediaSessionInterface.shouldRequestColdRestore(Long.MIN_VALUE, nowMs = 100L))
+    fun `standard prepare action is advertised`() {
+        assertTrue((MediaSessionInterface.ACTIONS and PlaybackStateCompat.ACTION_PREPARE) != 0L)
+    }
+
+    @Test
+    fun `cold skip fallback still requests playback`() {
+        assertTrue(
+            MediaSessionInterface.shouldPlayFallbackAfterColdRestore(play = true, skipDelta = 1)
+        )
+        assertTrue(
+            MediaSessionInterface.shouldPlayFallbackAfterColdRestore(play = false, skipDelta = 1)
+        )
         assertFalse(
-            MediaSessionInterface.shouldRequestColdRestore(lastRequestAtMs = 100L, nowMs = 101L)
+            MediaSessionInterface.shouldPlayFallbackAfterColdRestore(play = false, skipDelta = 0)
         )
-        assertTrue(
-            MediaSessionInterface.shouldRequestColdRestore(lastRequestAtMs = 100L, nowMs = 5_100L)
+        assertEquals(
+            DeferredPlayback.ShuffleAll(play = true),
+            MediaSessionInterface.fallbackForColdRestore(play = true, skipDelta = 1),
         )
-        assertTrue(
-            MediaSessionInterface.shouldRequestColdRestore(lastRequestAtMs = 10_000L, nowMs = 5L)
+        assertEquals(
+            DeferredPlayback.ShuffleAll(play = false),
+            MediaSessionInterface.fallbackForColdRestore(play = false, skipDelta = 1),
         )
+        assertNull(MediaSessionInterface.fallbackForColdRestore(play = false, skipDelta = 0))
     }
 }

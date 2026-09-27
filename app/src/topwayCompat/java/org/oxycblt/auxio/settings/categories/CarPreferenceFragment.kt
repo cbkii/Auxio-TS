@@ -30,9 +30,11 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.car.overlay.CarOverlayActivity
 import org.oxycblt.auxio.car.overlay.CarOverlayPermissionActivity
 import org.oxycblt.auxio.car.overlay.CarOverlaySettings
+import org.oxycblt.auxio.headunit.BootStartupMode
 import org.oxycblt.auxio.headunit.compat.HeadUnitCompatManager
 import org.oxycblt.auxio.headunit.compat.NativePrivateIntegrationStatus
 import org.oxycblt.auxio.headunit.overlay.CarOverlayContract
+import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
 import org.oxycblt.auxio.playback.service.PlaybackChannelState
 import org.oxycblt.auxio.playback.service.PlaybackNotificationChannel
 import org.oxycblt.auxio.settings.BasePreferenceFragment
@@ -85,6 +87,8 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
             getString(R.string.set_key_head_unit_startup_mode) -> setupStartupMode(preference)
             getString(R.string.set_key_overlay_permission) -> setupOverlayPermission(preference)
             getString(R.string.set_key_launcher_integration) -> setupLauncherIntegration(preference)
+            getString(R.string.set_key_ts18_launcher_integration_mode) ->
+                setupLauncherIntegrationAdvancedOverride(preference)
             getString(R.string.set_key_playback_notification_access) ->
                 setupPlaybackNotificationAccess(preference)
             "open_diagnostics" -> {
@@ -103,6 +107,8 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         findPreference<Preference>(getString(R.string.set_key_overlay_permission))
             ?.let(::setupOverlayPermission)
         findPreference<Preference>(KEY_CAR_OVERLAY_ENABLED)?.let(::setupCarOverlayEnabled)
+        findPreference<Preference>(getString(R.string.set_key_launcher_integration))
+            ?.let(::setupLauncherIntegration)
         findPreference<Preference>(getString(R.string.set_key_playback_notification_access))
             ?.let(::setupPlaybackNotificationAccess)
     }
@@ -119,32 +125,19 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         }
         val list = preference as? ListPreference ?: return
         val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
-        val autostart = prefs.getBoolean(getString(R.string.set_key_autostart_on_boot), false)
-        val floatingOnly =
-            prefs.getBoolean(getString(R.string.set_key_autostart_floating_only), false)
-        val current =
-            when {
-                !autostart -> STARTUP_NONE
-                floatingOnly -> STARTUP_FLOATING_ONLY
-                else -> STARTUP_OPEN_AUXIO
-            }
+        val current = BootStartupMode.resolve(prefs, requireContext()).persistedValue
         list.isPersistent = false
         list.value = current
         val currentIdx = list.findIndexOfValue(current)
         list.summary = list.entries?.getOrNull(currentIdx)
         list.onPreferenceChangeListener =
             Preference.OnPreferenceChangeListener { pref, newValue ->
-                val mode = newValue as String
-                prefs
-                    .edit()
-                    .putBoolean(getString(R.string.set_key_autostart_on_boot), mode != STARTUP_NONE)
-                    .putBoolean(
-                        getString(R.string.set_key_autostart_floating_only),
-                        mode == STARTUP_FLOATING_ONLY,
-                    )
-                    .apply()
+                val mode =
+                    BootStartupMode.fromPersisted(newValue as String)
+                        ?: return@OnPreferenceChangeListener false
+                BootStartupMode.persist(prefs, requireContext(), mode)
                 val lp = pref as? ListPreference
-                val newIndex = lp?.findIndexOfValue(mode) ?: -1
+                val newIndex = lp?.findIndexOfValue(mode.persistedValue) ?: -1
                 lp?.entries?.getOrNull(newIndex)?.let { lp.summary = it }
                 true
             }
@@ -162,11 +155,59 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
     }
 
     private fun setupLauncherIntegration(preference: Preference) {
-        preference.setOnPreferenceClickListener {
-            findNavController()
-                .navigateSafe(CarPreferenceFragmentDirections.diagnosticsPreferences())
-            true
-        }
+        val list = preference as? ListPreference ?: return
+        val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        val current =
+            Ts18LauncherIntegrationMode.resolveEffectiveMode(
+                prefs = prefs,
+                topwayProduct = BuildConfig.TOPWAY_COMPAT_ENABLED,
+            )
+        val standard =
+            Ts18LauncherIntegrationMode.resolveStandardMode(
+                prefs = prefs,
+                topwayProduct = BuildConfig.TOPWAY_COMPAT_ENABLED,
+            )
+        list.isPersistent = false
+        list.value = standard.name
+        list.summary =
+            when (current) {
+                Ts18LauncherIntegrationMode.GenericDofunMedia ->
+                    getString(R.string.set_launcher_integration_standard_generic)
+                Ts18LauncherIntegrationMode.AndroidMediaSessionOnly ->
+                    getString(R.string.set_launcher_integration_standard_android)
+                else -> getString(R.string.set_launcher_integration_advanced_summary, current.name)
+            }
+        list.onPreferenceChangeListener =
+            Preference.OnPreferenceChangeListener { pref, newValue ->
+                val mode =
+                    Ts18LauncherIntegrationMode.fromPreference(newValue as String).takeIf {
+                        it == Ts18LauncherIntegrationMode.GenericDofunMedia ||
+                            it == Ts18LauncherIntegrationMode.AndroidMediaSessionOnly
+                    } ?: return@OnPreferenceChangeListener false
+                Ts18LauncherIntegrationMode.persistStandardMode(prefs, mode)
+                (pref as? ListPreference)?.summary =
+                    if (mode == Ts18LauncherIntegrationMode.GenericDofunMedia) {
+                        getString(R.string.set_launcher_integration_standard_generic)
+                    } else {
+                        getString(R.string.set_launcher_integration_standard_android)
+                    }
+                true
+            }
+    }
+
+    private fun setupLauncherIntegrationAdvancedOverride(preference: Preference) {
+        val list = preference as? ListPreference ?: return
+        val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        list.onPreferenceChangeListener =
+            Preference.OnPreferenceChangeListener { _, newValue ->
+                val mode = Ts18LauncherIntegrationMode.fromPreference(newValue as String)
+                if (mode.isStandardMode) {
+                    Ts18LauncherIntegrationMode.persistStandardMode(prefs, mode)
+                }
+                findPreference<Preference>(getString(R.string.set_key_launcher_integration))
+                    ?.let(::setupLauncherIntegration)
+                true
+            }
     }
 
     private fun setupPlaybackNotificationAccess(preference: Preference) {
@@ -246,8 +287,5 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         const val KEY_CAR_OVERLAY_ENABLED = CarOverlayContract.KEY_ENABLED
         const val KEY_CAR_OVERLAY_LAUNCH_NOW = "car_overlay_launch_now"
         const val KEY_CAR_OVERLAY_RESET_POSITION = "car_overlay_reset_position"
-        const val STARTUP_NONE = "none"
-        const val STARTUP_OPEN_AUXIO = "open_auxio"
-        const val STARTUP_FLOATING_ONLY = "floating_only"
     }
 }

@@ -152,7 +152,12 @@ private constructor(
     private var lastLauncherMode = launcherCoordinator.mode
     private val modePreferenceListener =
         SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key != Ts18LauncherIntegrationMode.PREF_KEY) return@OnSharedPreferenceChangeListener
+            if (
+                key != Ts18LauncherIntegrationMode.PREF_KEY &&
+                    key != Ts18LauncherIntegrationMode.STANDARD_PREF_KEY
+            ) {
+                return@OnSharedPreferenceChangeListener
+            }
             mainHandler.post {
                 if (!attached) return@post
                 val previousMode = lastLauncherMode

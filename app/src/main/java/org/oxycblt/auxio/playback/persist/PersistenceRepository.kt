@@ -230,6 +230,7 @@ constructor(
         try {
             queueDao.updateQueuePosition(
                 sessionId = descriptor.sessionId,
+                expectedRevision = descriptor.revision,
                 logicalPosition = logicalPosition.coerceIn(0, descriptor.totalCount - 1),
                 positionMs = positionMs.coerceAtLeast(0L),
                 repeatMode = repeatMode,

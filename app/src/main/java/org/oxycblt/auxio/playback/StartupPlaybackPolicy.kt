@@ -53,6 +53,10 @@ object StartupPlaybackPolicy {
             fallback = DeferredPlayback.ShuffleAll(play = autoplayOnLaunch),
         )
 
+    /** Service-only background readiness always restores paused and never synthesizes playback. */
+    fun restoreActionForBackgroundReady(): DeferredPlayback.RestoreState =
+        DeferredPlayback.RestoreState(play = false)
+
     /**
      * Determine whether the Now Playing panel should be opened on cold launch. We don't want to
      * open the panel if this is a first/setup launch where the library is missing/empty, as the

@@ -61,6 +61,9 @@ enum class Ts18LauncherIntegrationMode {
     val usesGenericDofunProfile: Boolean
         get() = this == GenericDofunMedia
 
+    val isStandardMode: Boolean
+        get() = this == AndroidMediaSessionOnly || this == GenericDofunMedia
+
     /**
      * Whether the canonical playback notification should use the three-action DoFun/VLC profile.
      *
@@ -75,6 +78,7 @@ enum class Ts18LauncherIntegrationMode {
 
     companion object {
         const val PREF_KEY = "auxio_ts18_launcher_integration_mode"
+        const val STANDARD_PREF_KEY = "auxio_launcher_integration"
         const val PREF_GENERIC_DEFAULT_MIGRATED = "auxio_ts18_launcher_generic_default_migrated_v1"
 
         /** Pure policy helper retained independently from distributable product flavours. */
@@ -85,6 +89,53 @@ enum class Ts18LauncherIntegrationMode {
 
         fun fromPreference(value: String?): Ts18LauncherIntegrationMode =
             entries.firstOrNull { it.name == value } ?: default()
+
+        fun resolveStandardMode(
+            prefs: SharedPreferences,
+            topwayProduct: Boolean,
+        ): Ts18LauncherIntegrationMode {
+            val persistedStandard =
+                entries
+                    .firstOrNull { it.name == prefs.getString(STANDARD_PREF_KEY, null) }
+                    ?.takeIf(Ts18LauncherIntegrationMode::isStandardMode)
+            if (persistedStandard != null) return persistedStandard
+
+            val legacyStandard =
+                entries
+                    .firstOrNull { it.name == prefs.getString(PREF_KEY, null) }
+                    ?.takeIf(Ts18LauncherIntegrationMode::isStandardMode)
+                    ?: defaultFor(topwayProduct)
+            val migrationComplete = prefs.getBoolean(PREF_GENERIC_DEFAULT_MIGRATED, false)
+            prefs.edit {
+                putString(STANDARD_PREF_KEY, legacyStandard.name)
+                if (topwayProduct && !migrationComplete) {
+                    putBoolean(PREF_GENERIC_DEFAULT_MIGRATED, true)
+                }
+            }
+            return legacyStandard
+        }
+
+        fun resolveEffectiveMode(
+            prefs: SharedPreferences,
+            topwayProduct: Boolean,
+        ): Ts18LauncherIntegrationMode {
+            val override =
+                entries
+                    .firstOrNull { it.name == prefs.getString(PREF_KEY, null) }
+                    ?.takeUnless(Ts18LauncherIntegrationMode::isStandardMode)
+            return override ?: resolveStandardMode(prefs, topwayProduct)
+        }
+
+        fun persistStandardMode(prefs: SharedPreferences, mode: Ts18LauncherIntegrationMode) {
+            require(mode.isStandardMode) { "Mode $mode is not a standard launcher selection" }
+            val migrationComplete = prefs.getBoolean(PREF_GENERIC_DEFAULT_MIGRATED, false)
+            prefs.edit {
+                putString(STANDARD_PREF_KEY, mode.name)
+                if (!migrationComplete) {
+                    putBoolean(PREF_GENERIC_DEFAULT_MIGRATED, true)
+                }
+            }
+        }
 
         /**
          * Resolves the one-time default migration without overwriting an explicit selection.

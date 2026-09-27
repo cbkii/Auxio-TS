@@ -284,10 +284,11 @@ interface QueueDao {
     @Query(
         "UPDATE QueueSessionEntity SET currentLogicalPosition = :logicalPosition, " +
             "positionMs = :positionMs, repeatMode = :repeatMode, updatedAtMs = :updatedAtMs " +
-            "WHERE id = :sessionId"
+            "WHERE id = :sessionId AND revision = :expectedRevision"
     )
     suspend fun updateQueuePosition(
         sessionId: Long,
+        expectedRevision: Long,
         logicalPosition: Int,
         positionMs: Long,
         repeatMode: RepeatMode,

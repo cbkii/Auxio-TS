@@ -25,7 +25,7 @@ import androidx.preference.PreferenceManager
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.IntegerTable
-import org.oxycblt.auxio.R
+import org.oxycblt.auxio.headunit.BootStartupMode
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.playback.service.ForegroundServiceStartContract
 import timber.log.Timber as L
@@ -104,13 +104,7 @@ object FloatingOnlyStartupCoordinator {
     }
 
     fun isConfigured(context: Context): Boolean {
-        val prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
-        return isConfigured(
-            autostartOnBoot =
-                prefs.getBoolean(context.getString(R.string.set_key_autostart_on_boot), false),
-            floatingOnly =
-                prefs.getBoolean(context.getString(R.string.set_key_autostart_floating_only), false),
-        )
+        return BootStartupMode.resolve(context) == BootStartupMode.FLOATING_CONTROLS_ONLY
     }
 
     internal fun isConfigured(autostartOnBoot: Boolean, floatingOnly: Boolean): Boolean =

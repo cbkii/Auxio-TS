@@ -2468,7 +2468,7 @@ constructor(
                         return
                     }
                 DeviceLibraryAuthority(
-                        generation = deviceLibraryGeneration.incrementAndGet(),
+                        generation = currentGeneration,
                         sourceScanOutcome = lastSourceScanOutcome,
                     )
                     .also { publishedDeviceLibraryAuthority = it }

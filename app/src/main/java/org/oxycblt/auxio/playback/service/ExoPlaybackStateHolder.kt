@@ -2213,7 +2213,7 @@ class ExoPlaybackStateHolder(
     }
 
     private fun RestoreIntentArbiter.Snapshot.toRestoreState() =
-        DeferredPlayback.RestoreState(play = play, fallback = fallback)
+        DeferredPlayback.RestoreState(play = play, skipDelta = skipDelta, fallback = fallback)
 
     override fun cancelDeferredRestore() {
         cancelActiveRestore("external-cancel")
