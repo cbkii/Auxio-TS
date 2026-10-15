@@ -145,9 +145,9 @@ constructor(
     }
 
     /**
-     * In-process proof that a complete, playable primitive queue was written successfully.
-     * A cold process cannot use the fast path until its first canonical full commit; external
-     * primitive edits increment the durable queue revision and invalidate the fast-path lease.
+     * In-process proof that a complete, playable primitive queue was written successfully. A cold
+     * process cannot use the fast path until its first canonical full commit; external primitive
+     * edits increment the durable queue revision and invalidate the fast-path lease.
      */
     @Volatile private var committedCanonicalQueue: CommittedCanonicalQueue? = null
 
