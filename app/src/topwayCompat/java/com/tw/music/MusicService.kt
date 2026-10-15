@@ -129,9 +129,8 @@ class MusicService : AuxioService() {
         }
         if (nowMs >= deadlineElapsedMs) return BridgeWireContract.RESULT_EXPIRED
 
-        // This is the first authenticated private request, not merely an exported bind.
-        // Keep library startup off the unauthenticated path and avoid generic restore-on-bind.
-        startBackgroundLibraryForPrivateBind()
+        // Deduplicate before initiating any cold-library work; retrying an already accepted
+        // command should have no additional service or library side effects.
         when (commandLedger.reserve(clientGeneration, commandId, nowMs)) {
             TopwayBridgeCommandLedger.Reservation.DUPLICATE_ACCEPTED ->
                 return BridgeWireContract.RESULT_DUPLICATE_ACCEPTED
@@ -140,6 +139,8 @@ class MusicService : AuxioService() {
         }
 
         return try {
+            // This is a validated, reserved private request—not an unauthenticated bind.
+            startBackgroundLibraryForPrivateBind()
             when (playbackIngress.admitResult(commandType, seekPositionMs, deadlineElapsedMs)) {
                 TopwayBridgeAdmissionResult.ACCEPTED -> {
                     commandLedger.markAccepted(
