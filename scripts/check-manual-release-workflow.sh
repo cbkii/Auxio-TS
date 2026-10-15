@@ -223,7 +223,7 @@ approved_upload_shas = {
     '043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',  # v7.0.1
     'cf430e030ddbb5b0abf93d22962f4752f3646cd9',  # v7.0.2
 }
-artifact_refs = re.findall(r'\\buses:\\s*actions/upload-artifact@([^\\s#]+)', text)
+artifact_refs = re.findall(r'\buses:\s*actions/upload-artifact@([^\s#]+)', text)
 if len(artifact_refs) != 2:
     raise SystemExit(f'Expected two pinned Manual Release artifact uploads, got {artifact_refs}')
 if any(not re.fullmatch(r'[0-9a-f]{40}', sha) or sha not in approved_upload_shas for sha in artifact_refs):
