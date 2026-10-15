@@ -21,6 +21,7 @@ package org.oxycblt.auxio.headunit.root.storage
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SourceAuthorityValidatorTest {
@@ -113,6 +114,47 @@ class SourceAuthorityValidatorTest {
             )
             assertNull(
                 SourceAuthorityValidator.classifyDirect(root.absolutePath, preparedAlias = true)
+            )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun preparedAliasContinuesPastUnreadableAudioCandidates() {
+        val root = Files.createTempDirectory("auxio-source-mixed-access").toFile()
+        try {
+            root.resolve("blocked.flac").writeBytes(byteArrayOf(1))
+            root.resolve("playable.mp3").writeBytes(byteArrayOf(2))
+            val inspected = mutableSetOf<String>()
+            val authority =
+                SourceAuthorityValidator.classifyDirectWithOpener(
+                    path = root.absolutePath,
+                    preparedAlias = true,
+                    canOpen = { file ->
+                        inspected += file.name
+                        file.name == "playable.mp3"
+                    },
+                )
+            assertEquals(SourceAuthority.PREPARED_ALIAS, authority)
+            assertTrue(inspected.contains("playable.mp3"))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun preparedAliasRejectsWhenEveryAudioCandidateIsUnreadable() {
+        val root = Files.createTempDirectory("auxio-source-all-blocked").toFile()
+        try {
+            root.resolve("one.flac").writeBytes(byteArrayOf(1))
+            root.resolve("two.mp3").writeBytes(byteArrayOf(2))
+            assertNull(
+                SourceAuthorityValidator.classifyDirectWithOpener(
+                    path = root.absolutePath,
+                    preparedAlias = true,
+                    canOpen = { false },
+                )
             )
         } finally {
             root.deleteRecursively()

@@ -137,6 +137,10 @@ jobs:
         shell: bash
         run: bash ./scripts/check-manual-release-workflow.sh
 
+      - name: Self-test Android NDK bootstrap (offline)
+        shell: bash
+        run: bash ./scripts/test-ensure-android-ndk.sh
+
       - name: Validate Dependabot YAML
         shell: bash
         run: |

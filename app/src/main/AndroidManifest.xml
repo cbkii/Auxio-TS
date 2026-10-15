@@ -229,6 +229,13 @@
                 android:value="Car floating playback controls overlay for head-unit displays" />
         </service>
 
+        <!-- User-visible confirmation; never exported to other packages. -->
+        <activity
+            android:name="org.oxycblt.auxio.car.overlay.CarOverlayEnableActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Material.Dialog.Alert" />
+
         <activity
             android:name="org.oxycblt.auxio.car.overlay.CarOverlayActivity"
             android:exported="true"

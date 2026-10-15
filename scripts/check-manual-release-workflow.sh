@@ -212,10 +212,31 @@ for pin in (
     'actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95',
     'gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c',
     'android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd',
-    'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
 ):
     if pin not in text:
         raise SystemExit(f'Missing immutable action pin: {pin}')
+
+# Treat the artifact uploader as an approved, immutable pin rather than one
+# historical version. Dependabot must be able to upgrade an approved SHA without
+# weakening the release contract or silently accepting floating tags.
+approved_upload_shas = {
+    '043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',  # v7.0.1
+    'cf430e030ddbb5b0abf93d22962f4752f3646cd9',  # v7.0.2
+}
+artifact_refs = re.findall(r'\buses:\s*actions/upload-artifact@([^\s#]+)', text)
+if len(artifact_refs) != 2:
+    raise SystemExit(f'Expected two pinned Manual Release artifact uploads, got {artifact_refs}')
+if any(not re.fullmatch(r'[0-9a-f]{40}', sha) or sha not in approved_upload_shas for sha in artifact_refs):
+    raise SystemExit(f'Unapproved or non-immutable artifact upload action: {artifact_refs}')
+for candidate, accepted in (
+    ('043fb46d1a93c77aae656e7c1c64a875d1fc6a0a', True),
+    ('cf430e030ddbb5b0abf93d22962f4752f3646cd9', True),
+    ('v7', False),
+    ('0' * 40, False),
+):
+    actual = bool(re.fullmatch(r'[0-9a-f]{40}', candidate)) and candidate in approved_upload_shas
+    if actual != accepted:
+        raise SystemExit(f'Artifact action pin policy self-test failed: {candidate}')
 
 print('OK Manual Release workflow, form, bounded scripts and transaction ordering')
 PY
