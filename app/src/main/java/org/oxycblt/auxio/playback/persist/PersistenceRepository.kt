@@ -28,7 +28,6 @@ import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.ShuffleScope
-import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.MusicParent
 import timber.log.Timber as L
 
