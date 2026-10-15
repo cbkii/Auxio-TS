@@ -571,6 +571,9 @@ constructor(
     }
 
     override suspend fun saveState(state: PlaybackStateManager.SavedState?): Boolean {
+        // Capture source authority before any suspend boundary. A library replacement while the
+        // transaction is committing must invalidate, not adopt, the previous queue signature.
+        val libraryAtStart = musicRepository.library
         val playbackState =
             state?.let {
                 PlaybackState(
@@ -625,7 +628,8 @@ constructor(
             if (
                 previous != null &&
                     previous.structure == structure &&
-                    previous.library === musicRepository.library &&
+                    previous.library === libraryAtStart &&
+                    libraryAtStart === musicRepository.library &&
                     saveCanonicalProgressOnly(session, previous.revision)
             ) {
                 return true
@@ -668,8 +672,12 @@ constructor(
                 }
             }
             committedCanonicalQueue =
-                if (structure != null && session != null) {
-                    CommittedCanonicalQueue(structure, musicRepository.library, session.revision)
+                if (
+                    structure != null &&
+                        session != null &&
+                        musicRepository.library === libraryAtStart
+                ) {
+                    CommittedCanonicalQueue(structure, libraryAtStart, session.revision)
                 } else {
                     null
                 }
