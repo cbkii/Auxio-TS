@@ -159,11 +159,7 @@ interface PlaybackStateDao {
         "UPDATE PlaybackState SET `index` = :logicalPosition, positionMs = :positionMs, " +
             "repeatMode = :repeatMode WHERE id = 0"
     )
-    suspend fun updateProgress(
-        logicalPosition: Int,
-        positionMs: Long,
-        repeatMode: RepeatMode,
-    ): Int
+    suspend fun updateProgress(logicalPosition: Int, positionMs: Long, repeatMode: RepeatMode): Int
 }
 
 @Dao
