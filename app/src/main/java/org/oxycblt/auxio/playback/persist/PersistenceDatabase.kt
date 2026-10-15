@@ -153,6 +153,17 @@ interface PlaybackStateDao {
     @Query("DELETE FROM PlaybackState") suspend fun nukeState()
 
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertState(state: PlaybackState)
+
+    /** Position-only canonical save; does not rewrite the legacy heap or item references. */
+    @Query(
+        "UPDATE PlaybackState SET `index` = :logicalPosition, positionMs = :positionMs, " +
+            "repeatMode = :repeatMode WHERE id = 0"
+    )
+    suspend fun updateProgress(
+        logicalPosition: Int,
+        positionMs: Long,
+        repeatMode: RepeatMode,
+    ): Int
 }
 
 @Dao

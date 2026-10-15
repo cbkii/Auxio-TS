@@ -28,6 +28,7 @@ import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.ShuffleScope
+import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.MusicParent
 import timber.log.Timber as L
 
@@ -143,6 +144,19 @@ constructor(
     private val fastResumePrefs by lazy {
         context.getSharedPreferences(FAST_RESUME_PREFS, Context.MODE_PRIVATE)
     }
+
+    /**
+     * In-process proof that a complete, playable primitive queue was written successfully.
+     * A cold process cannot use the fast path until its first canonical full commit; external
+     * primitive edits increment the durable queue revision and invalidate the fast-path lease.
+     */
+    @Volatile private var committedCanonicalQueue: CommittedCanonicalQueue? = null
+
+    private data class CommittedCanonicalQueue(
+        val structure: CanonicalQueueStructure,
+        val library: org.oxycblt.musikr.Library?,
+        val revision: Long,
+    )
 
     override suspend fun readQueueDescriptor(): QueueDescriptor? =
         try {
@@ -593,6 +607,31 @@ constructor(
                     updatedAtMs = System.currentTimeMillis(),
                 )
             }
+        // Position/seek/repeat changes dominate long driving sessions. When the entire queue
+        // structure and library generation match our own completed full commit, update two
+        // scalar rows transactionally rather than re-resolving thousands of media tags and
+        // rewriting every primitive queue row. All uncertain cases retain the full-save path.
+        val structure =
+            state?.let {
+                CanonicalQueueStructure(
+                    heapUids = heap.map { item -> item.uid },
+                    shuffleIndices = shuffledMapping.map { item -> item.index },
+                    parentUid = it.parent?.uid,
+                    currentSongUid = it.songUid,
+                    shuffleScope = it.shuffleScope,
+                )
+            }
+        if (state != null && structure != null && playbackState != null && session != null) {
+            val previous = committedCanonicalQueue
+            if (
+                previous != null &&
+                    previous.structure == structure &&
+                    previous.library === musicRepository.library &&
+                    saveCanonicalProgressOnly(session, previous.revision)
+            ) {
+                return true
+            }
+        }
         val primitiveItems =
             if (state == null) {
                 emptyList()
@@ -629,6 +668,12 @@ constructor(
                     queueDao.insertQueueItemRefs(primitiveItems)
                 }
             }
+            committedCanonicalQueue =
+                if (structure != null && session != null) {
+                    CommittedCanonicalQueue(structure, musicRepository.library, session.revision)
+                } else {
+                    null
+                }
             L.d("Successfully wrote playback state transaction")
             true
         } catch (e: CancellationException) {
@@ -639,6 +684,43 @@ constructor(
             false
         }
     }
+
+    private suspend fun saveCanonicalProgressOnly(
+        session: QueueSessionEntity,
+        expectedRevision: Long,
+    ): Boolean =
+        try {
+            database.withTransaction {
+                if (
+                    queueDao.updateQueuePosition(
+                        sessionId = session.id,
+                        expectedRevision = expectedRevision,
+                        logicalPosition = session.currentLogicalPosition,
+                        positionMs = session.positionMs,
+                        repeatMode = session.repeatMode,
+                        updatedAtMs = session.updatedAtMs,
+                    ) != 1
+                ) {
+                    return@withTransaction false
+                }
+                // Throw to roll back the primitive update if legacy state is not present.
+                check(
+                    playbackStateDao.updateProgress(
+                        logicalPosition = session.currentLogicalPosition,
+                        positionMs = session.positionMs,
+                        repeatMode = session.repeatMode,
+                    ) == 1
+                ) {
+                    "Legacy playback progress row missing during canonical position save"
+                }
+                true
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            L.w(e, "Canonical position-only save failed; falling back to full transaction")
+            false
+        }
 
     override suspend fun readFastResumeSnapshot(): FastResumeSnapshot? {
         return try {
