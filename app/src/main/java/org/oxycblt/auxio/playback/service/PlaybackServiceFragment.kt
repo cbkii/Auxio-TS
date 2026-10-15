@@ -558,8 +558,7 @@ internal object TopwayProgressTickerPolicy {
         playing: Boolean,
     ): TopwayProgressTickerDirective =
         when {
-            mode.sendsTopwayBroadcasts && playing && !running ->
-                TopwayProgressTickerDirective.START
+            mode.sendsTopwayBroadcasts && playing && !running -> TopwayProgressTickerDirective.START
             (!mode.sendsTopwayBroadcasts || !playing) && running ->
                 TopwayProgressTickerDirective.STOP
             else -> TopwayProgressTickerDirective.KEEP
