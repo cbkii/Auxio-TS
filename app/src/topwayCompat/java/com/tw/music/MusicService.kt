@@ -81,10 +81,9 @@ class MusicService : AuxioService() {
 
     override fun onBind(intent: Intent): IBinder? {
         if (intent.action == BridgeWireContract.ACTION_BIND_COMMAND) {
-            // onCreate() already attached the playback authority. Start only background library
-            // readiness here: AuxioService.onBind would interpret this private protocol Intent as
-            // a non-native playback start and enqueue RestoreState(play = false).
-            startBackgroundLibraryForPrivateBind()
+            // Binding is not authenticated: Android calls onBind() as part of service lifecycle,
+            // not with the requesting app's Binder identity. Do not initialise private library
+            // work until a transaction has passed the caller UID and protocol checks.
             return bridgeBinder
         }
         return super.onBind(intent)
@@ -130,6 +129,9 @@ class MusicService : AuxioService() {
         }
         if (nowMs >= deadlineElapsedMs) return BridgeWireContract.RESULT_EXPIRED
 
+        // This is the first authenticated private request, not merely an exported bind.
+        // Keep library startup off the unauthenticated path and avoid generic restore-on-bind.
+        startBackgroundLibraryForPrivateBind()
         when (commandLedger.reserve(clientGeneration, commandId, nowMs)) {
             TopwayBridgeCommandLedger.Reservation.DUPLICATE_ACCEPTED ->
                 return BridgeWireContract.RESULT_DUPLICATE_ACCEPTED
@@ -178,7 +180,7 @@ class MusicService : AuxioService() {
      * does not authenticate this Binder caller (especially for shared UID 1000), so UID is the
      * meaningful boundary here and LSPosed package scope remains a separate concern.
      */
-    private fun isTrustedCaller(): Boolean = Binder.getCallingUid() == Process.SYSTEM_UID
+    private fun isTrustedCaller(): Boolean = BridgeCallerPolicy.isTrustedUid(Binder.getCallingUid())
 
     @EntryPoint
     @InstallIn(SingletonComponent::class)
@@ -190,4 +192,9 @@ class MusicService : AuxioService() {
         const val MAX_REQUEST_LIFETIME_MS = 250L
         const val MAX_CLOCK_SKEW_MS = 1_000L
     }
+}
+
+/** Admission decision shared by private Binder ingress and its unit tests. */
+internal object BridgeCallerPolicy {
+    fun isTrustedUid(callerUid: Int): Boolean = callerUid == Process.SYSTEM_UID
 }

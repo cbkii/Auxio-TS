@@ -796,4 +796,5 @@ Unavailable or permission required: %4$s
 Last attempt: %5$s
 Last outcome: %6$s</string>
     <string name="set_source_checkpoint_none">none</string>
+    <string name="car_overlay_launcher_enable_prompt">Enable floating controls and restore the music session? You can disable the controls again in settings.</string>
 </resources>

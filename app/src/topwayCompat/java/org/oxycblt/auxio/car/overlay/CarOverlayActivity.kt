@@ -28,6 +28,14 @@ class CarOverlayActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Exported launcher aliases are callable by any app. A disabled preference must never
+        // be silently changed by an external activity launch; require an explicit confirmation.
+        if (CarOverlayLauncherPolicy.requiresConfirmation(CarOverlaySettings.isEnabled(this))) {
+            startActivity(CarOverlayEnableActivity.intent(this))
+            finish()
+            return
+        }
+
         val enabledImmediately = CarOverlaySettings.setEnabled(this, true, startRuntime = false)
         CarOverlayVisibilityHooks.isSuppressedByAuxioForeground = false
 
@@ -58,4 +66,9 @@ class CarOverlayActivity : Activity() {
         const val ACTION_LAUNCH_FLOATING_CONTROLS =
             "org.oxycblt.auxio.action.LAUNCH_FLOATING_CONTROLS"
     }
+}
+
+/** Controls whether an exported launcher request may start the persisted overlay runtime. */
+internal object CarOverlayLauncherPolicy {
+    fun requiresConfirmation(enabled: Boolean): Boolean = !enabled
 }
