@@ -44,7 +44,8 @@ object SourceAuthorityValidator {
         path: String,
         preparedAlias: Boolean,
         representativePath: String? = null,
-    ): SourceAuthority? = classifyDirectWithOpener(path, preparedAlias, representativePath, ::opensInAppProcess)
+    ): SourceAuthority? =
+        classifyDirectWithOpener(path, preparedAlias, representativePath, ::opensInAppProcess)
 
     /** Injectable opener keeps mixed-permission cases deterministic in host JVM tests. */
     internal fun classifyDirectWithOpener(
