@@ -32,7 +32,7 @@ class TopwayProgressTickerPolicyTest {
                 } else {
                     TopwayProgressTickerDirective.KEEP
                 }
-            assertEquals(mode.name, expected, TopwayProgressTickerPolicy.directive(mode, false))
+            assertEquals(mode.name, expected, TopwayProgressTickerPolicy.directive(mode, false, true))
         }
     }
 
@@ -45,7 +45,23 @@ class TopwayProgressTickerPolicyTest {
                 } else {
                     TopwayProgressTickerDirective.STOP
                 }
-            assertEquals(mode.name, expected, TopwayProgressTickerPolicy.directive(mode, true))
+            assertEquals(mode.name, expected, TopwayProgressTickerPolicy.directive(mode, true, true))
+        }
+    }
+
+    @Test
+    fun pausedPlaybackDoesNotStartTickerAndStopsAlreadyRunningTicker() {
+        for (mode in Ts18LauncherIntegrationMode.entries) {
+            assertEquals(
+                mode.name,
+                TopwayProgressTickerDirective.KEEP,
+                TopwayProgressTickerPolicy.directive(mode, false, false),
+            )
+            assertEquals(
+                mode.name,
+                TopwayProgressTickerDirective.STOP,
+                TopwayProgressTickerPolicy.directive(mode, true, false),
+            )
         }
     }
 

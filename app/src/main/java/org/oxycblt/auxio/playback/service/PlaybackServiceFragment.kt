@@ -421,6 +421,7 @@ private constructor(
         val playStateChanged = lastTopwayIsPlaying != progression.isPlaying
         lastTopwayIsPlaying = progression.isPlaying
         publishTopwayProgress("progression", force = playStateChanged)
+        if (playStateChanged) reconcileTopwayProgressTicker()
     }
 
     override fun onRestoreOutcomeChanged(outcome: RestoreOutcome) {
@@ -447,7 +448,13 @@ private constructor(
 
     private fun reconcileTopwayProgressTicker() {
         val running = topwayProgressTickerJob?.isActive == true
-        when (TopwayProgressTickerPolicy.directive(topwayCoordinator.mode, running)) {
+        when (
+            TopwayProgressTickerPolicy.directive(
+                mode = topwayCoordinator.mode,
+                running = running,
+                playing = playbackManager.progression.isPlaying,
+            )
+        ) {
             TopwayProgressTickerDirective.START -> {
                 topwayProgressTickerJob =
                     scope.launch {
@@ -548,10 +555,13 @@ internal object TopwayProgressTickerPolicy {
     fun directive(
         mode: Ts18LauncherIntegrationMode,
         running: Boolean,
+        playing: Boolean,
     ): TopwayProgressTickerDirective =
         when {
-            mode.sendsTopwayBroadcasts && !running -> TopwayProgressTickerDirective.START
-            !mode.sendsTopwayBroadcasts && running -> TopwayProgressTickerDirective.STOP
+            mode.sendsTopwayBroadcasts && playing && !running ->
+                TopwayProgressTickerDirective.START
+            (!mode.sendsTopwayBroadcasts || !playing) && running ->
+                TopwayProgressTickerDirective.STOP
             else -> TopwayProgressTickerDirective.KEEP
         }
 }
