@@ -9,7 +9,7 @@ if [[ -z "${sdk_root}" || ! -d "${sdk_root}" ]]; then
   printf 'SDK_BLOCKER: Android SDK directory does not exist.\n' >&2
   exit 1
 fi
-ndk_version="$(sed -n -E "s/^[[:space:]]*ndk_version[[:space:]]*=[[:space:]]*'([^']+)'.*/\1/p" "${repo_root}/build.gradle" | head -n 1)"
+ndk_version="$(sed -n -E 's/^[[:space:]]*ndk_version[[:space:]]*=[[:space:]]*[^0-9]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' "${repo_root}/build.gradle" | head -n 1)"
 if [[ ! "${ndk_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   printf 'SDK_BLOCKER: Unable to resolve a pinned NDK version in build.gradle.\n' >&2
   exit 1
