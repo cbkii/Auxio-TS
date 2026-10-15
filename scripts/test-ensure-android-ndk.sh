@@ -2,7 +2,7 @@
 # Offline, deterministic test of the NDK bootstrap contract.
 set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-version="$(sed -n -E "s/^[[:space:]]*ndk_version[[:space:]]*=[[:space:]]*'([^']+)'.*/\1/p" "${repo_root}/build.gradle" | head -n1)"
+version="$(sed -n -E 's/^[[:space:]]*ndk_version[[:space:]]*=[[:space:]]*[^0-9]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' "${repo_root}/build.gradle" | head -n 1)"
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "${tmp}"' EXIT
 sdk="${tmp}/sdk"
