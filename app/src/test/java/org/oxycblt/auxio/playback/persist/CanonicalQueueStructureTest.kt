@@ -33,13 +33,14 @@ class CanonicalQueueStructureTest {
     private fun structure(
         heap: List<Music.UID> = listOf(first, second),
         mapping: List<Int> = emptyList(),
-    ) = CanonicalQueueStructure(
-        heapUids = heap,
-        shuffleIndices = mapping,
-        parentUid = null,
-        currentSongUid = first,
-        shuffleScope = ShuffleScope.OFF,
-    )
+    ) =
+        CanonicalQueueStructure(
+            heapUids = heap,
+            shuffleIndices = mapping,
+            parentUid = null,
+            currentSongUid = first,
+            shuffleScope = ShuffleScope.OFF,
+        )
 
     @Test
     fun identicalQueueStructuresPermitPositionOnlyPersistence() {

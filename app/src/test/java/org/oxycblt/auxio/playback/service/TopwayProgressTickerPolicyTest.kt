@@ -32,7 +32,11 @@ class TopwayProgressTickerPolicyTest {
                 } else {
                     TopwayProgressTickerDirective.KEEP
                 }
-            assertEquals(mode.name, expected, TopwayProgressTickerPolicy.directive(mode, false, true))
+            assertEquals(
+                mode.name,
+                expected,
+                TopwayProgressTickerPolicy.directive(mode, false, true),
+            )
         }
     }
 
@@ -45,7 +49,11 @@ class TopwayProgressTickerPolicyTest {
                 } else {
                     TopwayProgressTickerDirective.STOP
                 }
-            assertEquals(mode.name, expected, TopwayProgressTickerPolicy.directive(mode, true, true))
+            assertEquals(
+                mode.name,
+                expected,
+                TopwayProgressTickerPolicy.directive(mode, true, true),
+            )
         }
     }
 
