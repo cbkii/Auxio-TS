@@ -451,8 +451,8 @@ constructor(
             // Upstream moved database/library editing away from the UI thread. Keep the
             // downstream completion and refresh on Main to preserve TS18 UI state ordering.
             withContext(Dispatchers.IO) {
-                    musicRepository.rewritePlaylist(playlist, editedPlaylist)
-                }
+                musicRepository.rewritePlaylist(playlist, editedPlaylist)
+            }
             // TODO: The user could probably press some kind of button if they were fast enough.
             //  Think of a better way to handle this state.
             _editedPlaylist.value = null
