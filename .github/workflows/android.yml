@@ -27,6 +27,7 @@ jobs:
       app_build: ${{ steps.scope.outputs.app_build }}
       compatibility_contracts: ${{ steps.scope.outputs.compatibility_contracts }}
       api29: ${{ steps.scope.outputs.api29 }}
+      benchmark: ${{ steps.scope.outputs.benchmark }}
       release: ${{ steps.scope.outputs.release }}
       full: ${{ steps.scope.outputs.full }}
       changed_count: ${{ steps.scope.outputs.changed_count }}
@@ -323,6 +324,13 @@ jobs:
         env:
           AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-debug-gradle.log
         run: bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleDebug
+
+      - name: Compile maintained benchmark instrumentation
+        if: needs.scope.outputs.benchmark == 'true' || needs.scope.outputs.full == 'true'
+        shell: bash
+        env:
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-benchmark-gradle.log
+        run: bash ./scripts/ci-gradle.sh :startup-benchmark:assembleBenchmarkBenchmark
 
       - name: Build maintained release APK
         if: github.event_name != 'pull_request' && (needs.scope.outputs.release == 'true' || needs.scope.outputs.full == 'true')

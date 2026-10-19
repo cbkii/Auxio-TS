@@ -19,8 +19,10 @@
 package org.oxycblt.auxio.playback.service
 
 import android.content.Context
+import android.media.MediaMetadata
+import android.media.session.MediaSession
 import android.support.v4.media.MediaMetadataCompat
-import android.support.v4.media.session.MediaControllerCompat
+import android.support.v4.media.session.MediaSessionCompat
 import androidx.test.core.app.ApplicationProvider
 import coil3.ImageLoader
 import java.lang.reflect.Proxy
@@ -44,16 +46,22 @@ import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.Implements
+import org.robolectric.shadow.api.Shadow
+import org.robolectric.shadows.ShadowMediaSession
+import org.robolectric.util.ReflectionHelpers
 
-/** Exercise the public transport callbacks and actual published session metadata used by ts-theme. */
+/**
+ * Exercise the public transport callbacks and actual published session metadata used by ts-theme.
+ */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [29])
+@Config(sdk = [29], shadows = [MetadataPublishingSession::class])
 class LauncherMediaSessionContractTest {
     private lateinit var context: Context
     private lateinit var imageLoader: ImageLoader
     private lateinit var holder: MediaSessionHolder
     private lateinit var callback: MediaSessionInterface
-    private lateinit var controller: MediaControllerCompat
     private var raw: RawPlaybackMetadata? = null
     private val commands = mutableListOf<Pair<String, Any?>>()
 
@@ -65,14 +73,20 @@ class LauncherMediaSessionContractTest {
         val manager =
             proxy<PlaybackStateManager> { method, args ->
                 when (method) {
-                    "getCurrentSong", "getParent", "getQueueWindow" -> null
+                    "getCurrentSong",
+                    "getParent",
+                    "getQueueWindow" -> null
                     "getRawPlaybackMetadata" -> raw
                     "getProgression" -> Progression.nil()
                     "getQueue" -> emptyList<Any>()
                     "getIndex" -> 0
                     "getRepeatMode" -> RepeatMode.NONE
                     "isShuffled" -> false
-                    "playDeferred", "playing", "next", "prev", "seekTo" -> {
+                    "playDeferred",
+                    "playing",
+                    "next",
+                    "prev",
+                    "seekTo" -> {
                         commands.add(method to args?.firstOrNull())
                         null
                     }
@@ -98,7 +112,7 @@ class LauncherMediaSessionContractTest {
                     telemetry,
                 )
                 .create(context, proxy<ForegroundListener>())
-        controller = MediaControllerCompat(context, holder.token)
+        holder.attach()
     }
 
     @After
@@ -149,10 +163,10 @@ class LauncherMediaSessionContractTest {
     fun `artwork settings retain raw title artist and identity until explicit clear`() {
         raw = rawTrack()
         holder.onRawPlaybackMetadataChanged(raw)
-        val initial = controller.metadata
-        assertEquals("Cold track", initial?.getString(MediaMetadataCompat.METADATA_KEY_TITLE))
+        val initial = publishedMetadata()
+        assertEquals("Cold track", initial.getString(MediaMetadataCompat.METADATA_KEY_TITLE))
         holder.onImageSettingsChanged()
-        val refreshed = controller.metadata
+        val refreshed = publishedMetadata()
         val keys =
             listOf(
                 MediaMetadataCompat.METADATA_KEY_TITLE,
@@ -162,11 +176,20 @@ class LauncherMediaSessionContractTest {
                 MediaMetadataCompat.METADATA_KEY_MEDIA_ID,
             )
         for (key in keys) {
-            assertEquals(key, initial?.getString(key), refreshed?.getString(key))
+            assertEquals(key, initial.getString(key), refreshed.getString(key))
         }
         raw = null
         holder.onRawPlaybackMetadataChanged(null)
-        assertEquals("", controller.metadata?.getString(MediaMetadataCompat.METADATA_KEY_TITLE))
+        assertEquals("", publishedMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE))
+    }
+
+    private fun publishedMetadata(): MediaMetadataCompat {
+        val compat = ReflectionHelpers.getField<MediaSessionCompat>(holder, "mediaSession")
+        val framework = compat.mediaSession as MediaSession
+        val publishingSession = Shadow.extract<MetadataPublishingSession>(framework)
+        return requireNotNull(
+            MediaMetadataCompat.fromMediaMetadata(publishingSession.publishedMetadata)
+        )
     }
 
     private fun rawTrack() =
@@ -187,7 +210,9 @@ class LauncherMediaSessionContractTest {
         noinline invoke: (String, Array<out Any?>?) -> Any? = { _, _ -> null }
     ): T =
         Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) {
-            instance, method, args ->
+            instance,
+            method,
+            args ->
             when (method.name) {
                 "hashCode" -> System.identityHashCode(instance)
                 "equals" -> instance === args?.firstOrNull()
@@ -195,4 +220,18 @@ class LauncherMediaSessionContractTest {
                 else -> invoke(method.name, args)
             }
         } as T
+}
+
+/**
+ * Capture the outbound framework publication; Robolectric controllers do not mirror session IPC.
+ */
+@Implements(MediaSession::class)
+class MetadataPublishingSession : ShadowMediaSession() {
+    var publishedMetadata: MediaMetadata? = null
+        private set
+
+    @Implementation
+    protected fun setMetadata(metadata: MediaMetadata?) {
+        publishedMetadata = metadata
+    }
 }

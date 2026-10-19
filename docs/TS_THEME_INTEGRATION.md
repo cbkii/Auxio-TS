@@ -45,7 +45,9 @@ explicit clearing. These checks do not claim a physical device was exercised.
   SHA policy is a prerequisite for #275; it does not accept floating action tags.
 - #275 is the independently pinned artifact action patch, not an app playback dependency.
 - #273 updates validation-only macrobenchmark RC to stable; it does not change the app's
-  runtime dependency graph.
+  runtime dependency graph. Android Build now compiles the maintained benchmark
+  instrumentation when that lane is selected, closing the prior compile-coverage gap.
+  Benchmark timing/performance execution remains NOT_RUN.
 - #277 adapts only playlist database work to IO. Repository notifications and UI completion
   stay on Main. Upstream search dispatch is already adapted; the paused-aware playback UI
   ticker is intentionally retained. Issue #274 is a monitoring report, not current product
