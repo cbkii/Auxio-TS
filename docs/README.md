@@ -16,6 +16,7 @@ Start with the document that owns the question:
 - [Advanced use and contributing](ADVANCED_AND_CONTRIBUTING.md)
 - [TS18 installation constraints](TS18_INSTALLATION_CONSTRAINTS.md)
 - [DoFun/Topway compatibility guide](DOFUN_VARIETY_COMPATIBILITY.md)
+- [ts-theme startup, transport and metadata integration](TS_THEME_INTEGRATION.md)
 - [LSPosed Track-C guide](ts18/launcher-integration/LSPOSED_API100_BRIDGE.md)
 - [Root storage fast path](ts18/ROOT_STORAGE_FASTPATH.md)
 - [Physical TS18 validation](TS18_RUNTIME_VALIDATION.md)

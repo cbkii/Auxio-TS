@@ -200,7 +200,14 @@ check_sdk() {
     SDK_BLOCKER=1
     return 1
   fi
-  dep_ok "Android SDK: ${sdk_dir}"
+  # AGP configures the vendored FFmpeg decoder even for unit/lint tasks. Hosted
+  # runners do not guarantee the pinned NDK is preinstalled; provision it before Gradle.
+  if ! bash "${SCRIPT_DIR}/ensure-android-ndk.sh" "${sdk_dir}"; then
+    dep_err "SDK_BLOCKER: project-pinned Android NDK provisioning or validation failed."
+    SDK_BLOCKER=1
+    return 1
+  fi
+  dep_ok "Android SDK and project NDK: ${sdk_dir}"
 }
 
 dep_info "--- Configuring approved git URL fallback policy ---"

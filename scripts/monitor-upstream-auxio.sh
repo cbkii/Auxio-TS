@@ -330,12 +330,14 @@ Start by classifying each upstream change as:
 
 Preserve these Auxio-TS invariants:
 
-- standard package remains `org.oxycblt.auxio`;
-- Topway/DoFun package variants and wrapper source sets remain intact;
+- the one maintained app is `com.tw.media`, with namespace `org.oxycblt.auxio`;
+- preserve the thin `com.tw.music` components inside that app, never replace genuine stock `com.tw.music`;
+- preserve one playback service/session/queue/audio-focus authority and the public MediaBrowser/PREPARE contract used by ts-theme;
 - TS18 runtime/device docs and validation flows remain accurate;
-- release workflows continue to build the intended standard and Topway APKs;
+- release workflows build the single maintained app and the separately scoped optional Track-C add-on; retired application flavours must not return;
 - private/native Topway surfaces remain evidence-gated only;
-- no automatic fork sync, merge, or cross-repo PR behaviour.
+- no automatic fork sync, merge, or cross-repo PR behaviour;
+- read current `AGENTS.md`, `docs/ARCHITECTURE.md` and `docs/TS_THEME_INTEGRATION.md` before treating historical issue text as policy.
 
 Implementation requirements:
 

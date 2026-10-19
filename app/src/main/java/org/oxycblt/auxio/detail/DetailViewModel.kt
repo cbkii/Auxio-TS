@@ -22,9 +22,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.detail.list.DiscDivider
 import org.oxycblt.auxio.detail.list.DiscHeader
@@ -446,7 +448,11 @@ constructor(
         val editedPlaylist = _editedPlaylist.value ?: return
         L.d("Committing playlist edits")
         viewModelScope.launch {
-            musicRepository.rewritePlaylist(playlist, editedPlaylist)
+            // Upstream moved database/library editing away from the UI thread. Keep the
+            // downstream completion and refresh on Main to preserve TS18 UI state ordering.
+            withContext(Dispatchers.IO) {
+                musicRepository.rewritePlaylist(playlist, editedPlaylist)
+            }
             // TODO: The user could probably press some kind of button if they were fast enough.
             //  Think of a better way to handle this state.
             _editedPlaylist.value = null

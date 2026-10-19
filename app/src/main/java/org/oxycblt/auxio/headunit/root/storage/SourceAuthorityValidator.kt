@@ -44,6 +44,15 @@ object SourceAuthorityValidator {
         path: String,
         preparedAlias: Boolean,
         representativePath: String? = null,
+    ): SourceAuthority? =
+        classifyDirectWithOpener(path, preparedAlias, representativePath, ::opensInAppProcess)
+
+    /** Injectable opener keeps mixed-permission cases deterministic in host JVM tests. */
+    internal fun classifyDirectWithOpener(
+        path: String,
+        preparedAlias: Boolean,
+        representativePath: String? = null,
+        canOpen: (File) -> Boolean,
     ): SourceAuthority? {
         val root = File(path)
         val canonicalRoot = runCatching { root.canonicalFile }.getOrNull() ?: return null
@@ -57,7 +66,7 @@ object SourceAuthorityValidator {
             hintedFile != null &&
                 hintedFile.extension.lowercase() in audioExtensions &&
                 isContainedReadableFile(hintedFile, canonicalRoot) &&
-                opensInAppProcess(hintedFile)
+                canOpen(hintedFile)
         ) {
             return SourceAuthority.PREPARED_ALIAS
         }
@@ -74,14 +83,15 @@ object SourceAuthorityValidator {
         enqueueBounded(first, 1)
 
         var visited = 0
-        var representative: File? = null
-        while (queue.isNotEmpty() && visited < MAX_VISITED && representative == null) {
+        while (queue.isNotEmpty() && visited < MAX_VISITED) {
             val (candidate, depth) = queue.removeFirst()
             visited++
             val canonical = runCatching { candidate.canonicalFile }.getOrNull() ?: continue
             if (!isWithin(canonical, canonicalRoot)) continue
             if (candidate.isFile && candidate.extension.lowercase() in audioExtensions) {
-                representative = candidate
+                // The first audio-looking file may be unreadable by the app UID. Continue the
+                // bounded search for another candidate instead of rejecting the entire volume.
+                if (canOpen(candidate)) return SourceAuthority.PREPARED_ALIAS
             } else if (candidate.isDirectory && depth < MAX_DEPTH) {
                 runCatching { candidate.listFiles() }
                     .getOrNull()
@@ -89,9 +99,7 @@ object SourceAuthorityValidator {
             }
         }
 
-        val mediaFile = representative ?: return null
-        if (!opensInAppProcess(mediaFile)) return null
-        return SourceAuthority.PREPARED_ALIAS
+        return null
     }
 
     private fun isContainedReadableFile(candidate: File, canonicalRoot: File): Boolean {

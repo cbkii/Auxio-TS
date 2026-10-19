@@ -53,9 +53,11 @@ done
 require_contains app/src/topwayCompat/java/com/tw/music/view/MusicWidgetProvider.kt \
   'ForegroundServiceStartContract.markRequired(serviceIntent)'
 
-require_contains "$playback_fragment" 'TopwayProgressTickerPolicy.directive(topwayCoordinator.mode, running)'
-require_contains "$playback_fragment" 'mode.sendsTopwayBroadcasts && !running'
-require_contains "$playback_fragment" '!mode.sendsTopwayBroadcasts && running'
+require_contains "$playback_fragment" 'TopwayProgressTickerPolicy.directive('
+require_contains "$playback_fragment" 'playing = playbackManager.progression.isPlaying'
+require_contains "$playback_fragment" 'mode.sendsTopwayBroadcasts && playing && !running'
+require_contains "$playback_fragment" '(!mode.sendsTopwayBroadcasts || !playing) && running'
+require_contains "$playback_fragment" 'if (playStateChanged) reconcileTopwayProgressTicker()'
 require_absent "$playback_fragment" 'startTopwayProgressTicker()'
 
 require_contains "$doc" 'schema version: `3`'

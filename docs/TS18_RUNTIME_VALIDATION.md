@@ -1,5 +1,37 @@
 # TS18 runtime validation checklist
 
+
+## Audit-remediation validation gate (PR #276)
+
+This gate supplements the normal launcher/bridge/storage/ACC checks below. Record the installed
+signed APK's source SHA and SHA-256 before each attempt. The runtime target is the physical
+Android 10 / API 29 TS18, not only a Pixel API 29 emulator.
+
+| Check | Setup and action | Pass | Fail | Evidence |
+| --- | --- | :---: | :---: | --- |
+| Disabled overlay external entry | Grant overlay permission, disable floating controls in app settings, then launch the exported floating-controls activity from another package (or use `adb shell am start -n com.tw.media/org.oxycblt.auxio.car.overlay.CarOverlayActivity`). | ☐ | ☐ | Screenshot/video, preference state before/after |
+| Overlay confirmation cancellation | On the confirmation prompt select Cancel. | ☐ | ☐ | Floating controls remain disabled; playback was not cold-started by the prompt |
+| Explicit overlay enable | Reopen the floating-controls launcher and confirm. | ☐ | ☐ | Overlay starts, existing playback is restored according to autoplay policy, no duplicate MediaSession |
+| Existing overlay launcher | With controls already enabled, relaunch the alias. | ☐ | ☐ | Direct launch/recovery without another consent prompt or duplicate overlay |
+| Private Binder rejection | Use a separate non-system-UID test client to bind the private command action and submit the Track-C transaction. | ☐ | ☐ | Rejected as untrusted; no private library-start side effect; record service lifecycle separately |
+| Trusted Binder command | With stock `com.tw.music` preserved and the LSPosed bridge scoped only to that package, perform play/pause, next/previous and seek. | ☐ | ☐ | Exactly one command is admitted/applied; cold-start and reconnect still work |
+| Mixed-access USB root | Prepare a source containing an unreadable candidate followed by at least one readable audio file; add it through DirectFS. | ☐ | ☐ | Readable media is found and playable; path remains within allowed canonical root |
+| USB removal/reinsert | Remove media during playback, then reconnect and retry source validation. | ☐ | ☐ | Cached library is retained as designed; no destructive reset; bounded recovery |
+| Canonical queue persistence | For a large queue, seek/skip/repeat and restart the service; repeat after shuffle/reorder. | ☐ | ☐ | Current item, order, play intent and position recover; no partial queue/database state |
+| Paused long-session ticker | Pause audio with Topway broadcast mode enabled, then observe CPU/wakeups and progress publication. | ☐ | ☐ | No 1-second paused ticker wakeups; resume restores accurate progress |
+| ACC and recovery | Sleep/wake and reboot after the above tests. | ☐ | ☐ | Single playback/session/notification, DoFun widgets and steering controls recover |
+| Rollback | Disable LSPosed bridge, reboot, start genuine stock app. | ☐ | ☐ | Stock media app works without Auxio intervention |
+
+**CI prerequisites:** the exact review head must pass Android Build, Android Quality (formatting,
+unit tests, lint), API 29 runtime smoke, Manual Release Smoke and release/minified package
+validation. GitHub Actions success is not a substitute for TS18 bridge, OEM firmware, audio-focus,
+ACC and removable-storage qualification.
+
+**Performance evidence:** record before/after values for first audible audio, queue save latency,
+row writes during a position-only save, and RSS/PSS + CPU/wakeup counts during prolonged pause.
+The position-only optimisation is still predicted until measured on the limiting hardware.
+
+
 Use this checklist for the supported TS18 layout:
 
 - genuine stock `com.tw.music` remains installed, enabled, platform-signed, and UID 1000;
