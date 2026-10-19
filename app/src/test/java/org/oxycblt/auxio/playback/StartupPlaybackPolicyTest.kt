@@ -20,11 +20,24 @@ package org.oxycblt.auxio.playback
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 
 class StartupPlaybackPolicyTest {
+
+    @Test
+    fun `passive cold preparation restores paused without choosing arbitrary music`() {
+        val action = StartupPlaybackPolicy.restoreActionForBackgroundReady(hasCurrentMedia = false)
+        assertEquals(DeferredPlayback.RestoreState(play = false), action)
+        assertNull(action?.fallback)
+    }
+
+    @Test
+    fun `passive reconnect preserves prepared or playing media without another restore`() {
+        assertNull(StartupPlaybackPolicy.restoreActionForBackgroundReady(hasCurrentMedia = true))
+    }
 
     @Test
     fun `restoreActionForLaunch with autoplay disabled returns play false with paused ShuffleAll fallback`() {

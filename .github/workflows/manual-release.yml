@@ -198,7 +198,7 @@ jobs:
 
       - name: Upload release recovery workflow artifact
         id: release_artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: Auxio-TS-${{ steps.plan.outputs.release_tag }}-release-recovery
           path: ${{ steps.assets.outputs.release_artifact_dir }}/*
@@ -208,7 +208,7 @@ jobs:
       - name: Upload selected debug workflow artifacts
         id: debug_artifact
         if: steps.selection.outputs.debug_destination == 'workflow_artifacts'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: Auxio-TS-${{ steps.plan.outputs.release_tag }}-debug-companions
           path: ${{ steps.assets.outputs.debug_artifact_dir }}/*

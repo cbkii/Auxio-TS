@@ -329,8 +329,15 @@ private constructor(
     // --- SETTINGS OVERRIDES ---
 
     override fun onImageSettingsChanged() {
-        // Need to reload the metadata cover.
-        updateMediaMetadata(playbackManager.currentSong, playbackManager.parent)
+        // A raw/primitive restored item is already the current source before library hydration.
+        // An artwork preference change must not clear its title/artist while playback is paused.
+        val song = playbackManager.currentSong
+        val rawMetadata = playbackManager.rawPlaybackMetadata
+        if (song == null && rawMetadata != null) {
+            updateRawMediaMetadata(rawMetadata)
+        } else {
+            updateMediaMetadata(song, playbackManager.parent)
+        }
     }
 
     // --- MEDIASESSION OVERRIDES ---

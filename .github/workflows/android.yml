@@ -247,7 +247,7 @@ jobs:
 
       - name: Upload API 29 failure reports
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: android-api29-failure-reports
           path: |
@@ -369,7 +369,7 @@ jobs:
       - name: Upload failure reports
         id: failure_reports
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: android-build-reports
           path: |
@@ -406,7 +406,7 @@ jobs:
       - name: Upload Auxio-TS debug APK
         id: debug_app
         if: success() && env.PUBLISH_DEBUG_ARTIFACTS == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: auxio-ts-debug-${{ github.sha }}
           path: ${{ steps.artifact_inventory.outputs.stage }}/app/*
@@ -416,7 +416,7 @@ jobs:
       - name: Upload debug artifact inventory
         id: debug_inventory
         if: success() && env.PUBLISH_DEBUG_ARTIFACTS == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: auxio-ts-debug-artifact-inventory-${{ github.sha }}
           path: |

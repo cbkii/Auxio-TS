@@ -22,6 +22,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.support.v4.media.session.MediaSessionCompat
+import androidx.media.MediaBrowserServiceCompat
 import androidx.preference.PreferenceManager
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -253,6 +254,23 @@ private constructor(
         }
 
         val startId = intent?.getIntExtra(INTENT_KEY_START_ID, -1)
+        if (
+            intent?.action == MediaBrowserServiceCompat.SERVICE_INTERFACE ||
+                startId == IntegerTable.START_ID_BACKGROUND_READY
+        ) {
+            // A dashboard reconnect/readiness request is not an instruction to reload a saved
+            // queue over the live player. Cold requests still join the existing restore arbiter.
+            val preparation =
+                StartupPlaybackPolicy.restoreActionForBackgroundReady(
+                    hasCurrentMedia =
+                        playbackManager.currentSong != null ||
+                            playbackManager.rawPlaybackMetadata != null ||
+                            playbackManager.queue.isNotEmpty() ||
+                            playbackManager.queueWindow != null
+                )
+            if (preparation != null) playbackManager.playDeferred(preparation)
+            return
+        }
         val action =
             when (startId) {
                 IntegerTable.START_ID_ACTIVITY -> null
@@ -274,8 +292,6 @@ private constructor(
                 IntegerTable.START_ID_TOPWAY -> null
                 IntegerTable.START_ID_BOOT ->
                     StartupPlaybackPolicy.restoreActionForBoot(playbackSettings.autoplayOnLaunch)
-                IntegerTable.START_ID_BACKGROUND_READY ->
-                    StartupPlaybackPolicy.restoreActionForBackgroundReady()
                 IntegerTable.START_ID_BLUETOOTH ->
                     DeferredPlayback.RestoreState(
                         play = playbackSettings.headsetAutoplay,

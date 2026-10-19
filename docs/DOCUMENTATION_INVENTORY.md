@@ -216,3 +216,4 @@ Files marked “Remove” are deleted rather than placed in an active archive. H
 | `tools/ts18-auxio-media-diag-pack-v3-recommended/docs/PR_RELEASE_AUDIT_SCOPE.md` | runbook | Keep for bounded execution. |
 | `tools/ts18-auxio-media-diag-pack-v3-recommended/docs/RESEARCH_NOTES.md` | runbook | Keep for bounded execution. |
 | `tools/ts18-root-storage-fastpath/README.md` | runbook | Keep for bounded execution. |
+| `docs/TS_THEME_INTEGRATION.md` | current topic guide | Keep; public launcher preparation, controls, metadata and qualification contract. |

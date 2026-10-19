@@ -53,9 +53,13 @@ object StartupPlaybackPolicy {
             fallback = DeferredPlayback.ShuffleAll(play = autoplayOnLaunch),
         )
 
-    /** Service-only background readiness always restores paused and never synthesizes playback. */
+    /** An empty service restores paused without choosing arbitrary fallback music. */
     fun restoreActionForBackgroundReady(): DeferredPlayback.RestoreState =
         DeferredPlayback.RestoreState(play = false)
+
+    /** Passive reconnects preserve live playback instead of reloading the persisted queue. */
+    fun restoreActionForBackgroundReady(hasCurrentMedia: Boolean): DeferredPlayback.RestoreState? =
+        if (hasCurrentMedia) null else restoreActionForBackgroundReady()
 
     /**
      * Determine whether the Now Playing panel should be opened on cold launch. We don't want to
