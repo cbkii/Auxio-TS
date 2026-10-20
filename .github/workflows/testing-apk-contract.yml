@@ -33,7 +33,7 @@ jobs:
       - name: Checkout exact HEAD
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: \${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Validate scripts and metadata state machine
         shell: bash
@@ -52,7 +52,7 @@ jobs:
       - name: Checkout exact requested source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: \${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           submodules: false
           persist-credentials: false
       - name: Set up Java 21
@@ -73,12 +73,12 @@ jobs:
       - name: Build TESTING handoff with ephemeral CI key
         shell: bash
         env:
-          TESTING_SOURCE_SHA: \${{ github.event.pull_request.head.sha || github.sha }}
+          TESTING_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           TESTING_SOURCE_KIND: contract
-          TESTING_PR_NUMBER: \${{ github.event.pull_request.number || '' }}
-          TESTING_PR_HEAD_SHA: \${{ github.event.pull_request.head.sha || '' }}
-          TESTING_PR_BASE_SHA: \${{ github.event.pull_request.base.sha || '' }}
-          TESTING_BUILD_RUN_URL: https://github.com/\${{ github.repository }}/actions/runs/\${{ github.run_id }}
+          TESTING_PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+          TESTING_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
+          TESTING_PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          TESTING_BUILD_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
           bash scripts/ci/build-auxio-testing-input.sh . "$RUNNER_TEMP/testing-input"
