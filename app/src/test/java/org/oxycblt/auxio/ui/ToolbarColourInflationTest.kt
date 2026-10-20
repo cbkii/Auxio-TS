@@ -43,7 +43,8 @@ class ToolbarColourInflationTest {
 
     private fun assertToolbarColours() {
         ShadowLog.clear()
-        val context = ContextThemeWrapper(RuntimeEnvironment.getApplication(), R.style.Theme_Auxio_App)
+        val context =
+            ContextThemeWrapper(RuntimeEnvironment.getApplication(), R.style.Theme_Auxio_App)
         val root = AuxioToolbar(context)
         val button = root.findViewById<MaterialButton>(R.id.toolbar_navigation_button)
         val value = TypedValue()
