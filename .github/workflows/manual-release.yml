@@ -268,9 +268,10 @@ jobs:
           RELEASE_ID: ${{ steps.release.outputs.release_id }}
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
           RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
+          RECONCILER: ${{ steps.tooling.outputs.tools_dir }}/reconcile-release-notes.py
         run: |
           set -euo pipefail
-          python3 scripts/reconcile-release-notes.py \
+          python3 "$RECONCILER" \
             --release-id "$RELEASE_ID" \
             --version-tag "$RELEASE_TAG" \
             --expected-source-sha "$RELEASE_SHA"
