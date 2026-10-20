@@ -238,10 +238,7 @@ constructor(
                 return
             }
             if (hasCurrentMedia()) onPlay()
-            else
-                playbackManager.playDeferred(
-                    DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = deadline)
-                )
+            else startColdRestore(play = true, deadlineElapsedMs = deadline)
             return
         }
         context.sendBroadcast(Intent(action))
@@ -254,9 +251,15 @@ constructor(
         play: Boolean,
         skipDelta: Int = 0,
         fallback: DeferredPlayback? = fallbackForColdRestore(play, skipDelta),
+        deadlineElapsedMs: Long? = null,
     ) {
         playbackManager.playDeferred(
-            DeferredPlayback.RestoreState(play = play, skipDelta = skipDelta, fallback = fallback)
+            DeferredPlayback.RestoreState(
+                play = play,
+                skipDelta = skipDelta,
+                fallback = fallback,
+                deadlineElapsedMs = deadlineElapsedMs,
+            )
         )
     }
 

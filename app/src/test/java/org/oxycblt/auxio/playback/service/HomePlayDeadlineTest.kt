@@ -26,6 +26,22 @@ import org.oxycblt.auxio.playback.state.DeferredPlayback
 
 class HomePlayDeadlineTest {
     @Test
+    fun liveUserPlayRetainsOrdinaryFallbackWhenNoResumeItemExists() {
+        val arbiter = RestoreIntentArbiter(elapsedMs = { 100L })
+        val fallback = DeferredPlayback.ShuffleAll()
+        arbiter.begin(
+            DeferredPlayback.RestoreState(
+                play = true,
+                fallback = fallback,
+                deadlineElapsedMs = 1_000L,
+            )
+        )
+        val live = arbiter.finish()
+        assertTrue(live.play)
+        org.junit.Assert.assertEquals(fallback, live.fallback)
+    }
+
+    @Test
     fun expiredPlayCannotActivateAudioOrFallbackAfterSlowRestore() {
         var now = 100L
         val arbiter = RestoreIntentArbiter(elapsedMs = { now })
