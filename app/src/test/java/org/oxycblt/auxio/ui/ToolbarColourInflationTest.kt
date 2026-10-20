@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.ui
 
+import android.app.Application
 import android.util.TypedValue
 import android.view.ContextThemeWrapper
 import com.google.android.material.button.MaterialButton
@@ -31,7 +32,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [29])
+// This is a production-view/resource test. Application startup installs process-wide crash
+// handling and unrelated source/vendor work, none of which owns toolbar attribute resolution.
+@Config(sdk = [29], application = Application::class)
 class ToolbarColourInflationTest {
     @Test
     @Config(qualifiers = "w1280dp-h720dp-land-notnight")
