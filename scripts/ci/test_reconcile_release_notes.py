@@ -135,6 +135,9 @@ class ReleaseNotesTests(unittest.TestCase):
         release, blobs = fixture()
         extra = copy.deepcopy(release["assets"][0])
         extra["name"] = "Auxio-TS-v26.9.8-topway-twmusic-release.apk"
+        extra["browser_download_url"] = (
+            f"https://github.com/{REPO}/releases/download/untagged-a1/{extra['name']}"
+        )
         release["assets"].append(extra)
         with self.assertRaisesRegex(notes.ReconciliationError, "Unexpected or unpaired"):
             self.perform(release, blobs)
