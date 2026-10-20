@@ -138,6 +138,10 @@ jobs:
         shell: bash
         run: python3 ./scripts/ci/test_manual_release_transactions.py
 
+      - name: Exercise metadata-driven release-note reconciliation
+        shell: bash
+        run: python3 -m unittest discover -s scripts/ci -p 'test_reconcile_release_notes.py' -v
+
       - name: Prove ambiguous dev metadata push recovery
         shell: bash
         run: python3 ./scripts/ci/test_manual_release_ambiguous_dev_push.py
