@@ -26,6 +26,29 @@ import org.oxycblt.auxio.playback.state.DeferredPlayback
 
 class HomePlayDeadlineTest {
     @Test
+    fun pauseDuringHomeRestoreAlsoPausesTheNoSavedSessionFallback() {
+        var now = 100L
+        val arbiter = RestoreIntentArbiter(elapsedMs = { now })
+        arbiter.begin(
+            DeferredPlayback.RestoreState(
+                play = true,
+                fallback = DeferredPlayback.ShuffleAll(play = true),
+                deadlineElapsedMs = 1_000L,
+            )
+        )
+        arbiter.updatePlay(false)
+        now = 2_000L
+        val paused = arbiter.snapshot()
+        assertFalse(paused.play)
+        org.junit.Assert.assertEquals(DeferredPlayback.ShuffleAll(play = false), paused.fallback)
+        // A still newer explicit Play owns the same restore, without the old HOME expiry.
+        arbiter.updatePlay(true)
+        val resumed = arbiter.finish()
+        assertTrue(resumed.play)
+        org.junit.Assert.assertEquals(DeferredPlayback.ShuffleAll(play = true), resumed.fallback)
+    }
+
+    @Test
     fun liveUserPlayRetainsOrdinaryFallbackWhenNoResumeItemExists() {
         val arbiter = RestoreIntentArbiter(elapsedMs = { 100L })
         val fallback = DeferredPlayback.ShuffleAll()

@@ -109,12 +109,24 @@ internal class RestoreIntentArbiter(
     @Synchronized
     fun snapshot(): Snapshot {
         val expired = deadlineElapsedMs?.let { elapsedMs() >= it } == true
+        val effectivePlay = play && !expired
+        // Fallback is executed as its own command. It must carry the latest Pause too,
+        // including when Pause supersedes a bounded HOME Play during a slow restore.
+        val effectiveFallback =
+            if (expired) null
+            else
+                when (val action = fallback) {
+                    is DeferredPlayback.ShuffleAll -> action.copy(play = effectivePlay)
+                    is DeferredPlayback.RestoreState -> action.copy(play = effectivePlay)
+                    is DeferredPlayback.Open -> if (effectivePlay) action else null
+                    null -> null
+                }
         return Snapshot(
             active,
-            play && !expired,
+            effectivePlay,
             skipDelta,
             seekPositionMs,
-            if (expired) null else fallback,
+            effectiveFallback,
             version,
             deadlineElapsedMs,
         )
