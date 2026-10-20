@@ -21,7 +21,6 @@ class TestingPublisherContracts(unittest.TestCase):
         self.assertIn("requested == 'true'", DRAFT)
         self.assertIn("needs.resolve-request.outputs.source_sha", DRAFT)
         self.assertIn("default: dev", DRAFT)
-        self.assertIn("standalone", "standalone")  # single application, no old flavours
         self.assertNotIn("workflow_run:", DRAFT)
 
     def test_signing_and_install_identity(self):
@@ -34,7 +33,7 @@ class TestingPublisherContracts(unittest.TestCase):
         self.assertIn('testing_version_code 2100000000', HELPER)
         self.assertIn("testDebugUnitTest", HELPER)
         self.assertIn("apksigner", HELPER)
-        self.assertIn('KEYSTORE_BASE64: \${{ secrets.KEYSTORE_BASE64 }}', PUBLISH)
+        self.assertIn('KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}', PUBLISH)
         self.assertIn("package: name='com.tw.media'", PUBLISH)
         self.assertIn("arm64-v8a", PUBLISH)
         self.assertIn("SIGNER", PUBLISH)
@@ -44,7 +43,7 @@ class TestingPublisherContracts(unittest.TestCase):
         self.assertIn("auxio-debug.apk", PUBLISH)
         self.assertIn("auxio-release.apk", PUBLISH)
         self.assertIn("group_complete", PUBLISH)
-        self.assertIn('for entry in "\${groups[@]:2}"', PUBLISH)
+        self.assertIn('for entry in "${groups[@]:2}"', PUBLISH)
         self.assertIn("BUILD_INFO-", PUBLISH)
         self.assertIn("SHA256SUMS-", PUBLISH)
         self.assertIn('upload_asset "$release_id" "outgoing/$INFO_NAME"', PUBLISH)
