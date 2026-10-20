@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 HELPER = ROOT / 'scripts/ci/reconcile_testing_release.py'
 spec = importlib.util.spec_from_file_location('reconcile_testing_release', HELPER)
 notes = importlib.util.module_from_spec(spec)
