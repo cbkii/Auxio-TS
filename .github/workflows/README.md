@@ -15,6 +15,11 @@ These are the canonical routine CI workflows. A new workflow must not repeat the
 - `startup-benchmarks.yml` — bounded managed-emulator Macrobenchmark or Baseline Profile collection.
 - `ui-screenshots.yml` — Roborazzi screenshot recording and verification.
 - `manual-release.yml` — version, tag and release-asset publication.
+- `reconcile-release-notes.yml` — **Reconcile Auxio Release Notes** on explicit
+  manual dispatch. Repairs only the managed asset-links/provenance section of
+  an existing named draft from TXT and SHA-256 sidecars; no builds, asset
+  replacement or release promotion. It shares `manual-release` concurrency.
+
 
 Manual workflows must remain bounded, use explicit inputs and distinguish repository/emulator evidence from exact TS18 validation.
 
