@@ -725,6 +725,8 @@ class ExoPlaybackStateHolder(
                                             else player.playWhenReady,
                                     )
                                 } else {
+                                    if (request.generation == primitiveNavigationGeneration)
+                                        pendingPrimitiveTarget = null
                                     L.w("Unable to load primitive queue target $target")
                                 }
                             }
@@ -1578,6 +1580,8 @@ class ExoPlaybackStateHolder(
         primitiveNavigationGeneration += 1
         pendingPrimitiveTarget = null
         pendingPrimitiveRequest = null
+        // An explicit seek owns the currently audible raw item, superseding deferred skips.
+        if (rawFastResumeItem != null) rawFastResumePendingNavigation = null
         if (restoreIntentArbiter.updateSeek(positionMs)) {
             Ts18FirstAudioLatency.mark("restore_seek_coalesced")
             return

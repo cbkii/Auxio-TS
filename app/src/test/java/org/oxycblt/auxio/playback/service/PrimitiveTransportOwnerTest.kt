@@ -1,7 +1,21 @@
 /*
  * Copyright (c) 2026 Auxio Project
- * SPDX-License-Identifier: GPL-3.0-or-later
+ * PrimitiveTransportOwnerTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 package org.oxycblt.auxio.playback.service
 
 import android.app.Application
@@ -273,6 +287,10 @@ class PrimitiveTransportOwnerTest {
         assertEquals(0, prepares)
         val pending = ReflectionHelpers.getField<Any>(holder, "rawFastResumePendingNavigation")
         assertEquals(2, ReflectionHelpers.getField<Int>(pending, "skipDelta").toInt())
+        holder.seekTo(9100L)
+        assertNull(ReflectionHelpers.getField<Any?>(holder, "rawFastResumePendingNavigation"))
+        assertEquals(9100L, position)
+        assertTrue(playing)
     }
 
     private fun installWindow(window: QueueWindow) {
