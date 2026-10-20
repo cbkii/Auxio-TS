@@ -21,8 +21,9 @@ def fixture(variants=("app-release",), draft=True):
     for variant in variants:
         apk = f"Auxio-TS-{TAG}-{variant}.apk"
         digest = hashlib.sha256(("APK" + variant).encode()).hexdigest()
+        asset_kind = "signed-apk" if variant == "app-release" else "signed-lsposed-api100-addon"
         payload = (
-            f"asset={apk}\nasset_kind=signed-apk\nasset_sha256={digest}\n"
+            f"asset={apk}\nasset_kind={asset_kind}\nasset_sha256={digest}\n"
             f"source_commit={SHA}\nrelease_tag={TAG}\n"
             f"application_id={'com.tw.media' if variant == 'app-release' else 'example.debug'}\n"
             "version_code=2609080\nversion_name=26.9.8\n"
