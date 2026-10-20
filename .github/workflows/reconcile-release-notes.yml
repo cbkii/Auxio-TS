@@ -1,0 +1,62 @@
+name: Reconcile Auxio Release Notes
+
+# Metadata-only repair of a named draft. No tag, APK, signer or status changes.
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "Exact draft version (e.g. v26.9.8); published releases are not editable."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: manual-release
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Reconcile verified release notes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted default-branch tooling
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: \${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Select exactly one named draft and verify notes
+        shell: bash
+        env:
+          GH_TOKEN: \${{ github.token }}
+          REQUESTED_VERSION: \${{ inputs.version_tag }}
+          DEFAULT_BRANCH: \${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" == "$DEFAULT_BRANCH" ]] || {
+            echo "::error::Run this maintenance action from the default branch."
+            exit 1
+          }
+          [[ "$REQUESTED_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9]+)*$ ]] || {
+            echo "::error::Supply an exact valid release version."
+            exit 1
+          }
+          timeout 60s gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            > "$RUNNER_TEMP/all-releases.json"
+          # Multiple pages arrive as consecutive JSON arrays. jq -s flattens them.
+          mapfile -t release_ids < <(
+            jq -sr --arg version "$REQUESTED_VERSION" \
+              '[.[][] | select(.name == $version and .draft == true) | .id] | .[]' \
+              "$RUNNER_TEMP/all-releases.json"
+          )
+          (("\${#release_ids[@]}" == 1)) || {
+            echo "::error::Expected one draft named $REQUESTED_VERSION; found \${#release_ids[@]}."
+            exit 1
+          }
+          python3 scripts/reconcile-release-notes.py \
+            --release-id "\${release_ids[0]}" --version-tag "$REQUESTED_VERSION"
+          echo "Reconciled $REQUESTED_VERSION from existing signed APK metadata; no assets changed." \
+            >> "$GITHUB_STEP_SUMMARY"
