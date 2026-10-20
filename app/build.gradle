@@ -24,6 +24,14 @@ android {
         // exact-package test never fails for an avoidable version downgrade. Signing and
         // privileged package identity remain separate, mandatory installation gates.
         versionCode 26090800
+        // Explicit, isolated rolling TESTING lane. Manual Release and production
+        // versions use the literals above unchanged. Android rejects replacing a
+        // higher versionCode with a lower one; this lane deliberately occupies
+        // Android's highest supported versionCode for same-signer updates.
+        if (System.getenv("AUXIO_TS_TESTING_APK") == "1") {
+            setVersionName("0.0.0-TS18-TESTING")
+            setVersionCode(2100000000)
+        }
         def buildCommit = System.getenv("GITHUB_SHA") ?: "local-unrecorded"
         buildConfigField "String", "BUILD_COMMIT", "\"${buildCommit.replace("\\", "\\\\").replace("\"", "\\\"")}\""
         buildConfigField "boolean", "TOPWAY_COMPAT_ENABLED", "true"
