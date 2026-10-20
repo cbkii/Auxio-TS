@@ -263,6 +263,15 @@ private constructor(
         }
     }
 
+    override fun onQueueWindowChanged(window: org.oxycblt.auxio.playback.persist.QueueWindow?) {
+        invalidateSessionState()
+        mediaSession.setShuffleMode(
+            if (playbackManager.isShuffled) PlaybackStateCompat.SHUFFLE_MODE_ALL
+            else PlaybackStateCompat.SHUFFLE_MODE_NONE
+        )
+        invalidateNotificationActions()
+    }
+
     override fun onQueueReordered(queue: List<Song>, index: Int, isShuffled: Boolean) {
         updateQueue(queue)
         invalidateSessionState()

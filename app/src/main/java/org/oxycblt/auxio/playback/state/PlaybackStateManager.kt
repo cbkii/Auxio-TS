@@ -760,7 +760,9 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
                     queueWindow = nextQueueWindow,
                     index =
                         nextQueueWindow?.descriptor?.currentLogicalPosition ?: stateMirror.index,
-                    isShuffled = nextQueueWindow?.descriptor?.shuffleScope != ShuffleScope.OFF,
+                    isShuffled =
+                        nextQueueWindow?.descriptor?.shuffleScope?.let { it != ShuffleScope.OFF }
+                            ?: stateMirror.isShuffled,
                     shuffleScope =
                         nextQueueWindow?.descriptor?.shuffleScope ?: stateMirror.shuffleScope,
                 )

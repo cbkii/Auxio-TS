@@ -63,6 +63,7 @@ class LauncherMediaSessionContractTest {
     private lateinit var holder: MediaSessionHolder
     private lateinit var callback: MediaSessionInterface
     private var raw: RawPlaybackMetadata? = null
+    private var shuffled = false
     private val commands = mutableListOf<Pair<String, Any?>>()
 
     @Before
@@ -81,7 +82,7 @@ class LauncherMediaSessionContractTest {
                     "getQueue" -> emptyList<Any>()
                     "getIndex" -> 0
                     "getRepeatMode" -> RepeatMode.NONE
-                    "isShuffled" -> false
+                    "isShuffled" -> shuffled
                     "playDeferred",
                     "playing",
                     "next",
@@ -119,6 +120,23 @@ class LauncherMediaSessionContractTest {
     fun tearDown() {
         holder.release()
         imageLoader.shutdown()
+    }
+
+    @Test
+    fun `primitive shuffle notification updates the standard session mode`() {
+        val session = ReflectionHelpers.getField<MediaSessionCompat>(holder, "mediaSession")
+        shuffled = true
+        holder.onQueueWindowChanged(null)
+        assertEquals(
+            android.support.v4.media.session.PlaybackStateCompat.SHUFFLE_MODE_ALL,
+            session.controller.shuffleMode,
+        )
+        shuffled = false
+        holder.onQueueWindowChanged(null)
+        assertEquals(
+            android.support.v4.media.session.PlaybackStateCompat.SHUFFLE_MODE_NONE,
+            session.controller.shuffleMode,
+        )
     }
 
     @Test
