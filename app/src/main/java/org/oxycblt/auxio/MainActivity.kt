@@ -249,9 +249,10 @@ class MainActivity : AppCompatActivity() {
             return true
         }
 
-        val destination = route?.let { resolvedRoute ->
-            HeadUnitRoutePolicy.entryDestinationForRoute(resolvedRoute)
-        }
+        val destination =
+            route?.let { resolvedRoute ->
+                HeadUnitRoutePolicy.entryDestinationForRoute(resolvedRoute)
+            }
         when (destination) {
             HeadUnitEntryPoints.EntryDestination.NOW_PLAYING ->
                 requestExplicitPanelRoute(OpenPanel.PLAYBACK, "Explicit Now Playing Intent")

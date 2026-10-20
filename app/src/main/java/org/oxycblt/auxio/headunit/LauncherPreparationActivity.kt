@@ -43,6 +43,7 @@ internal object LauncherPreparation {
     private const val EXTRA = "org.oxycblt.auxio.extra.PREPARE_NONCE"
     private var nonce: String? = null
     private var deadline = 0L
+
     fun requested(intent: Intent?): Boolean = intent?.action == ACTION
 
     @Synchronized
