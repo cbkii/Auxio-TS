@@ -327,6 +327,7 @@ jobs:
               [[ -z "$existing" ]] || return 0
 
               if curl --fail-with-body --silent --show-error --location \
+                  --connect-timeout 15 --max-time 300 \
                   --request POST \
                   --header "Accept: application/vnd.github+json" \
                   --header "Authorization: Bearer $GH_TOKEN" \
@@ -350,6 +351,7 @@ jobs:
           download_text_asset() {
             local asset_id="$1" output="$2"
             curl --fail --silent --show-error --location \
+              --connect-timeout 15 --max-time 60 \
               --header "Accept: application/octet-stream" \
               --header "Authorization: Bearer $GH_TOKEN" \
               --header "X-GitHub-Api-Version: 2022-11-28" \
@@ -382,10 +384,14 @@ jobs:
             --jq ".[] | select(.draft == true and .name == \"$TEST_RELEASE_TITLE\" and (.body // \"\" | contains(\"$MANAGED_MARKER\"))) | [.updated_at, .id] | @tsv" \
             | sort -r | head -n 1 | cut -f2)"
 
+          # Never commandeer another draft simply because it has the same title.
           if [[ -z "$release_id" ]]; then
-            release_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-              --jq ".[] | select(.draft == true and .name == \"$TEST_RELEASE_TITLE\") | [.updated_at, .id] | @tsv" \
-              | sort -r | head -n 1 | cut -f2)"
+            collision="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq ".[] | select(.draft == true and .name == \"$TEST_RELEASE_TITLE\") | .id" | head -n 1)"
+            [[ -z "$collision" ]] || {
+              echo "::error::An unmarked draft already uses the TESTING title; refusing adoption."
+              exit 1
+            }
           fi
 
           bootstrap_body="$RUNNER_TEMP/testing-draft-bootstrap.md"
@@ -407,8 +413,130 @@ jobs:
           fi
 
           state="$(api_read "repos/$GITHUB_REPOSITORY/releases/$release_id" --jq '[.draft, .name] | @tsv')"
-          [[ "$state" == $'true\t'"$TEST_RELEASE_TITLE" ]] || {
+          [[ "$state" == 
+
+          assets_json="$RUNNER_TEMP/testing-assets.json"
+          release_assets_json "$release_id" > "$assets_json"
+
+          # Recover from interrupted prior publications before selecting retained
+          # snapshots. BUILD_INFO is the commit marker for a snapshot group;
+          # incomplete groups and orphaned pre-marker assets are deleted.
+          declare -A candidate_groups=()
+          mapfile -t existing_names < <(jq -r '.[].name' "$assets_json")
+          legacy_seen=false
+          for name in "${existing_names[@]}"; do
+            group=''
+            case "$name" in
+              Auxio-TS-TESTING.apk|Auxio-TS-DEBUG.apk|BUILD_INFO.txt|SIGNER.txt|SHA256SUMS.txt)
+                legacy_seen=true
+                ;;
+              Auxio-TS-TESTING-*.apk)
+                group="${name#Auxio-TS-TESTING-}"
+                group="${group%.apk}"
+                ;;
+              Auxio-TS-DEBUG-*.apk)
+                group="${name#Auxio-TS-DEBUG-}"
+                group="${group%.apk}"
+                ;;
+              BUILD_INFO-*.txt)
+                group="${name#BUILD_INFO-}"
+                group="${group%.txt}"
+                ;;
+              SIGNER-*.txt)
+                group="${name#SIGNER-}"
+                group="${group%.txt}"
+                ;;
+              SHA256SUMS-*.txt)
+                group="${name#SHA256SUMS-}"
+                group="${group%.txt}"
+                ;;
+            esac
+            if [[ "$group" =~ ^(PR[1-9][0-9]*-[0-9a-f]{7}|SHA-[0-9a-f]{7})$ ]]; then
+              candidate_groups["$group"]=1
+            fi
+          done
+
+          if [[ "$legacy_seen" == true ]] && ! group_complete "$assets_json" LEGACY; then
+            echo "Removing incomplete legacy TESTING asset group from an interrupted publication."
+            delete_group "$release_id" LEGACY
+          fi
+          for group in "${!candidate_groups[@]}"; do
+            if ! group_complete "$assets_json" "$group"; then
+              echo "Removing incomplete TESTING asset group '$group' from an interrupted publication."
+              delete_group "$release_id" "$group"
+            fi
+          done
+
+          release_assets_json "$release_id" > "$assets_json"
+
+          # Re-running one snapshot replaces only that group. Upload BUILD_INFO
+          # last so it acts as the visible commit marker after the other four
+          # assets have arrived successfully.
+          delete_group "$release_id" "$GROUP_ID"
+          upload_asset "$release_id" "outgoing/$INSTALL_NAME"
+          upload_asset "$release_id" "outgoing/$DEBUG_NAME"
+          upload_asset "$release_id" "outgoing/$SIGNER_NAME"
+          upload_asset "$release_id" "outgoing/$SUMS_NAME"
+          upload_asset "$release_id" "outgoing/$INFO_NAME"
+
+          release_assets_json "$release_id" > "$assets_json"
+          group_complete "$assets_json" "$GROUP_ID" || {
+            echo "::error::New TESTING snapshot '$GROUP_ID' is incomplete after upload."
+            exit 1
+          }
+
+          # BUILD_INFO assets now represent only complete groups. Keep the two
+          # newest groups and prune only older workflow-managed snapshots.
+          mapfile -t groups < <(
+            jq -r '.[]
+              | select(.name == "BUILD_INFO.txt" or (.name | test("^BUILD_INFO-(PR[1-9][0-9]*-[0-9a-f]{7}|SHA-[0-9a-f]{7})\\.txt$")))
+              | [.created_at, .name] | @tsv' "$assets_json" | sort -r
+          )
+
+          for entry in "${groups[@]:2}"; do
+            metadata_name="${entry#*$'\t'}"
+            if [[ "$metadata_name" == 'BUILD_INFO.txt' ]]; then
+              delete_group "$release_id" LEGACY
+            else
+              stale_group="${metadata_name#BUILD_INFO-}"
+              stale_group="${stale_group%.txt}"
+              delete_group "$release_id" "$stale_group"
+            fi
+          done
+
+          release_assets_json "$release_id" > "$assets_json"
+          mapfile -t retained < <(
+            jq -r '.[]
+              | select(.name == "BUILD_INFO.txt" or (.name | test("^BUILD_INFO-(PR[1-9][0-9]*-[0-9a-f]{7}|SHA-[0-9a-f]{7})\\.txt$")))
+              | [.created_at, .name, .id] | @tsv' "$assets_json" | sort -r | head -n 2
+          )
+          ((${#retained[@]} >= 1 && ${#retained[@]} <= 2)) || {
+            echo "::error::Expected one or two retained TESTING snapshot groups; found ${#retained[@]}."
+            exit 1
+          }
+
+          # Render from the uploaded BUILD_INFO, signer and SHA256SUMS assets.
+          # Verify exact read-back before reporting publication success.
+          python3 publisher-tools/scripts/ci/reconcile_testing_release.py \
+            --release-id "$release_id" --expected-group "$GROUP_ID"
+
+          mapfile -t managed_duplicates < <(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq ".[] | select(.draft == true and .name == \"$TEST_RELEASE_TITLE\" and (.body // \"\" | contains(\"$MANAGED_MARKER\")) and .id != $release_id) | .id"
+          )
+          (("${#managed_duplicates[@]}" == 0)) || {
+            echo "::error::Multiple marked TESTING drafts require manual reconciliation; refusing to delete other releases."
+            exit 1
+          }
+
+          echo "TESTING draft refreshed with snapshot $GROUP_ID; newest two complete snapshot groups are retained."
+true\t'"$TEST_RELEASE_TITLE" ]] || {
             echo "::error::Testing release is not the required draft/title before asset refresh: $state"
+            exit 1
+          }
+          draft_tag="$(api_read "repos/$GITHUB_REPOSITORY/releases/$release_id" --jq .tag_name)"
+          [[ "$draft_tag" == "$TEST_RELEASE_TAG" || "$draft_tag" =~ ^untagged-[0-9a-f]+$ ]] || {
+            echo "::error::Unexpected managed TESTING draft tag $draft_tag"
             exit 1
           }
 
