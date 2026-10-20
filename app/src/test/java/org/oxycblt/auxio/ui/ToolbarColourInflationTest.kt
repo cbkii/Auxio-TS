@@ -1,9 +1,25 @@
+/*
+ * Copyright (c) 2026 Auxio Project
+ * ToolbarColourInflationTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package org.oxycblt.auxio.ui
 
 import android.util.TypedValue
 import android.view.ContextThemeWrapper
-import android.view.LayoutInflater
-import android.widget.FrameLayout
 import com.google.android.material.button.MaterialButton
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -28,8 +44,7 @@ class ToolbarColourInflationTest {
     private fun assertToolbarColours() {
         ShadowLog.clear()
         val context = ContextThemeWrapper(RuntimeEnvironment.getApplication(), R.style.Theme_Auxio_App)
-        val root =
-            LayoutInflater.from(context).inflate(R.layout.view_toolbar, FrameLayout(context), false)
+        val root = AuxioToolbar(context)
         val button = root.findViewById<MaterialButton>(R.id.toolbar_navigation_button)
         val value = TypedValue()
         assertTrue(
