@@ -29,6 +29,38 @@ The app is built with `:app:assembleRelease`; Track C, when explicitly selected,
 
 GitHub's repository-level immutable-release setting is an additional administrative hardening option. Enabling or changing it is separate from this source-controlled workflow and requires an explicit repository-settings decision.
 
+## Release-description asset reconciliation
+
+Manual Release preserves the source-commit changelog and the existing release guidance.
+After remote asset-manifest verification, and **before** promotion out of draft, the
+workflow reads each published APK's `.metadata.txt` and `.sha256` sidecars to
+regenerate an anchored `Verified release assets` section. The section lists
+only attached APKs, with verified version, package, commit, SHA-256 and links.
+`<!-- auxio-release-assets:begin -->` and
+`<!-- auxio-release-assets:end -->` delimit the automatically managed section;
+all prose outside these anchors is retained.
+
+`Reconcile Auxio Release Notes` is a separate **manual**, metadata-only workflow
+that accepts an **exact existing draft version** such as `v26.9.8`. Run it from
+the repository default branch. It takes the same `manual-release` concurrency
+lock as the publishing workflow, verifies complete APK/TXT/SHA256 triplets,
+checks the available GitHub asset digests, updates only the marked release-body
+section and reads back its result. It cannot build, tag, sign, upload, replace
+or delete assets or change release draft/prerelease status. It refuses any
+published release, missing or contradictory asset, ambiguous anchors, unknown
+variant, duplicate asset or concurrent edit.
+
+GitHub may expose a draft through an internal `untagged-*` tag. Target the
+exact draft **release name** rather than inferring its identity from that
+internal tag. A release remains draft until the main workflow's existing
+status-promotion stage; neither reconcile action should be used to publish it.
+
+The metadata TXT header is authoritative for version, source commit and package,
+and its `asset_sha256` must match the `.sha256` sidecar and GitHub's remote
+APK SHA-256 **when GitHub supplies one**. Where GitHub does not expose the
+remote digest, the note generator reports that limit rather than claiming
+cryptographic verification of the remote APK.
+
 ## Safety boundary
 
 Manual Release must not:
