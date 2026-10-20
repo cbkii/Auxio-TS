@@ -23,6 +23,12 @@ class TestingPublisherContracts(unittest.TestCase):
         self.assertIn("default: dev", DRAFT)
         self.assertNotIn("workflow_run:", DRAFT)
 
+    def test_trusted_comment_not_blocked_by_optional_label_write(self):
+        self.assertIn("issue_comment:", DRAFT)
+        self.assertIn('trusted_commenter "$AUTHOR_ASSOCIATION"', DRAFT)
+        self.assertIn('if ! ensure_testing_label "$pr_number"; then', DRAFT)
+        self.assertIn('continuing the explicit trusted request', DRAFT)
+
     def test_signing_and_install_identity(self):
         self.assertIn('System.getenv("AUXIO_TS_TESTING_APK") == "1"', GRADLE)
         self.assertIn('setVersionName("0.0.0-TS18-TESTING")', GRADLE)
