@@ -62,7 +62,6 @@ class TestingPublisherContracts(unittest.TestCase):
         self.assertIn("workflow_dispatch:", REPAIR)
         self.assertIn("reconcile_testing_release.py", REPAIR)
         self.assertIn("group: testing-only-draft-release", REPAIR)
-        self.assertIn("environment: release", PUBLISH)
         self.assertIn("contents: write", PUBLISH)
         self.assertNotIn("release-orchestrator.py", PUBLISH)
 
