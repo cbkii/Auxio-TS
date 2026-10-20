@@ -230,6 +230,20 @@ constructor(
 
     override fun onCustomAction(action: String, extras: Bundle?) {
         super.onCustomAction(action, extras)
+        if (action == "org.oxycblt.auxio.action.HOME_PLAY_V1") {
+            val now = android.os.SystemClock.elapsedRealtime()
+            val deadline = extras?.getLong("deadline_elapsed_ms", -1L) ?: -1L
+            if (extras?.getInt("protocol", 0) != 1 || deadline <= now || deadline - now > 5_000L) {
+                logTransport("HOME_PLAY", "EXPIRED_OR_INVALID")
+                return
+            }
+            if (hasCurrentMedia()) onPlay()
+            else
+                playbackManager.playDeferred(
+                    DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = deadline)
+                )
+            return
+        }
         context.sendBroadcast(Intent(action))
     }
 

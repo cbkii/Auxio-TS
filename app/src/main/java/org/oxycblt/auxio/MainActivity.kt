@@ -33,6 +33,7 @@ import org.oxycblt.auxio.databinding.ActivityMainBinding
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.headunit.HeadUnitRoute
 import org.oxycblt.auxio.headunit.HeadUnitRoutePolicy
+import org.oxycblt.auxio.headunit.LauncherPreparation
 import org.oxycblt.auxio.headunit.StartupPanelCoordinator
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy
@@ -60,10 +61,17 @@ class MainActivity : AppCompatActivity() {
     @Inject lateinit var uiSettings: UISettings
     @Inject lateinit var playbackSettings: PlaybackSettings
     private var isFirstResume = true
+    private var prepareOnly = false
+    private var invalidPreparation = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         PerfTimer.trace("MainActivity.onCreate") {
             super.onCreate(savedInstanceState)
+            prepareOnly =
+                LauncherPreparation.consume(intent) ||
+                    (LauncherPreparation.requested(intent) &&
+                        savedInstanceState?.getBoolean(KEY_PREPARE_ONLY, false) == true)
+            invalidPreparation = LauncherPreparation.requested(intent) && !prepareOnly
             // Only treat a launch with no saved instance state as a cold launch, so that activity
             // recreation (e.g. configuration changes or restoration after process death) does not
             // re-trigger autoplay.
@@ -86,10 +94,17 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         PerfTimer.trace("MainActivity.onResume") {
             super.onResume()
+            if (invalidPreparation) {
+                // A killed process or expired/forged handoff cannot become an autoplay launch.
+                isFirstResume = false
+                L.w("Ignoring invalid HOME preparation handoff")
+                return@trace
+            }
 
             val serviceClass =
                 TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
-            val trustedScanNonce = StartupScanAuthorityPolicy.issueTrustedUserVisibleStart()
+            val trustedScanNonce =
+                if (prepareOnly) null else StartupScanAuthorityPolicy.issueTrustedUserVisibleStart()
 
             startService(
                 Intent(this, serviceClass)
@@ -97,6 +112,21 @@ class MainActivity : AppCompatActivity() {
                     .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)
                     .putExtra(AuxioService.INTENT_KEY_TRUSTED_SCAN_NONCE, trustedScanNonce)
             )
+
+            if (prepareOnly) {
+                // Reuse the existing owner. Preparation never reloads or pauses live playback,
+                // chooses fallback music, acquires focus, or grants source-scan authority.
+                if (playbackModel.song.value == null) {
+                    playbackModel.playDeferred(
+                        StartupPlaybackPolicy.restoreActionForBackgroundReady()
+                    )
+                }
+                isFirstResume = false
+                L.i(
+                    "HOME prepare-only Activity initialised elapsedMs=${android.os.SystemClock.elapsedRealtime()}"
+                )
+                return@trace
+            }
 
             if (!startIntentAction(intent)) {
                 // No intent action to do, restore the previously saved state.
@@ -131,6 +161,9 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         clearIntentRoutingState(intent)
         setIntent(intent)
+        prepareOnly = LauncherPreparation.consume(intent)
+        invalidPreparation = LauncherPreparation.requested(intent) && !prepareOnly
+        if (prepareOnly || invalidPreparation) return
         val genericLauncherEntry = HeadUnitRoutePolicy.isGenericLauncherAction(intent.action)
         startIntentAction(intent)
         if (genericLauncherEntry) {
@@ -140,6 +173,11 @@ class MainActivity : AppCompatActivity() {
             L.d("Warm launcher entry requesting generic route action=${intent.action}")
             startupPanelCoordinator.requestUserLauncherRoute()
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(KEY_PREPARE_ONLY, prepareOnly)
+        super.onSaveInstanceState(outState)
     }
 
     private fun setupTheme() {
@@ -211,10 +249,9 @@ class MainActivity : AppCompatActivity() {
             return true
         }
 
-        val destination =
-            route?.let { resolvedRoute ->
-                HeadUnitRoutePolicy.entryDestinationForRoute(resolvedRoute)
-            }
+        val destination = route?.let { resolvedRoute ->
+            HeadUnitRoutePolicy.entryDestinationForRoute(resolvedRoute)
+        }
         when (destination) {
             HeadUnitEntryPoints.EntryDestination.NOW_PLAYING ->
                 requestExplicitPanelRoute(OpenPanel.PLAYBACK, "Explicit Now Playing Intent")
@@ -253,5 +290,6 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val KEY_INTENT_USED = BuildConfig.APPLICATION_ID + ".key.FILE_INTENT_USED"
+        const val KEY_PREPARE_ONLY = BuildConfig.APPLICATION_ID + ".key.PREPARE_ONLY"
     }
 }

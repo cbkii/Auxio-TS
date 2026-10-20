@@ -27,7 +27,10 @@ import org.oxycblt.auxio.playback.state.DeferredPlayback
  * bounded logical delta, and a newer fallback replaces an older one. The restore worker can use
  * [version] to re-check that it is not attaching a stale queue window.
  */
-internal class RestoreIntentArbiter(private val maxAbsoluteSkip: Int = DEFAULT_MAX_ABSOLUTE_SKIP) {
+internal class RestoreIntentArbiter(
+    private val maxAbsoluteSkip: Int = DEFAULT_MAX_ABSOLUTE_SKIP,
+    private val elapsedMs: () -> Long = { android.os.SystemClock.elapsedRealtime() },
+) {
     data class Snapshot(
         val active: Boolean,
         val play: Boolean,
@@ -35,6 +38,7 @@ internal class RestoreIntentArbiter(private val maxAbsoluteSkip: Int = DEFAULT_M
         val seekPositionMs: Long?,
         val fallback: DeferredPlayback?,
         val version: Long,
+        val deadlineElapsedMs: Long? = null,
     )
 
     private var active = false
@@ -43,6 +47,7 @@ internal class RestoreIntentArbiter(private val maxAbsoluteSkip: Int = DEFAULT_M
     private var seekPositionMs: Long? = null
     private var fallback: DeferredPlayback? = null
     private var version = 0L
+    private var deadlineElapsedMs: Long? = null
 
     @Synchronized
     fun begin(action: DeferredPlayback.RestoreState): Boolean {
@@ -53,8 +58,13 @@ internal class RestoreIntentArbiter(private val maxAbsoluteSkip: Int = DEFAULT_M
             seekPositionMs = null
             fallback = null
             play = false
+            deadlineElapsedMs = null
         }
-        play = play || action.play
+        if (action.play) {
+            play = true
+            deadlineElapsedMs = action.deadlineElapsedMs
+            if (deadlineElapsedMs != null) fallback = action.fallback
+        }
         if (action.skipDelta != 0) {
             skipDelta =
                 (skipDelta.toLong() + action.skipDelta)
@@ -71,6 +81,7 @@ internal class RestoreIntentArbiter(private val maxAbsoluteSkip: Int = DEFAULT_M
     fun updatePlay(playing: Boolean): Boolean {
         if (!active) return false
         play = playing
+        deadlineElapsedMs = null // A newer explicit source Play/Pause supersedes the old deadline.
         version += 1
         return true
     }
@@ -96,7 +107,18 @@ internal class RestoreIntentArbiter(private val maxAbsoluteSkip: Int = DEFAULT_M
     }
 
     @Synchronized
-    fun snapshot(): Snapshot = Snapshot(active, play, skipDelta, seekPositionMs, fallback, version)
+    fun snapshot(): Snapshot {
+        val expired = deadlineElapsedMs?.let { elapsedMs() >= it } == true
+        return Snapshot(
+            active,
+            play && !expired,
+            skipDelta,
+            seekPositionMs,
+            if (expired) null else fallback,
+            version,
+            deadlineElapsedMs,
+        )
+    }
 
     @Synchronized
     fun finish(): Snapshot {
@@ -118,6 +140,7 @@ internal class RestoreIntentArbiter(private val maxAbsoluteSkip: Int = DEFAULT_M
         skipDelta = 0
         seekPositionMs = null
         fallback = null
+        deadlineElapsedMs = null
         version += 1
     }
 
