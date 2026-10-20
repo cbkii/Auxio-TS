@@ -15,6 +15,14 @@ These are the canonical routine CI workflows. A new workflow must not repeat the
 - `startup-benchmarks.yml` — bounded managed-emulator Macrobenchmark or Baseline Profile collection.
 - `ui-screenshots.yml` — Roborazzi screenshot recording and verification.
 - `manual-release.yml` — version, tag and release-asset publication.
+- `testing-apk-draft.yml` — **Refresh Testing APK Draft**, explicit request
+  for a separate `com.tw.media` TESTING snapshot (PR/ref/SHA).
+- `testing-apk-publish.yml` — trusted reusable signer/rolling draft publisher,
+  retaining two complete five-asset groups.
+- `testing-apk-reconcile-notes.yml` — metadata-only manual repair of the
+  managed TESTING draft; never changes APK assets or production releases.
+- `testing-apk-contract.yml` — TESTING-specific CI contract and handoff build
+  checks on relevant source changes.
 
 Manual workflows must remain bounded, use explicit inputs and distinguish repository/emulator evidence from exact TS18 validation.
 
