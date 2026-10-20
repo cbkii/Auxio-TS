@@ -22,10 +22,10 @@ SHA = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 TAG = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+(?:[.-][A-Za-z0-9]+)*\Z")
 VARIANTS = {
-    "app-release": ("com.tw.media", "Maintained signed app"),
-    "app-debug": (None, "Diagnostic debug app"),
-    "lsposed-api100-bridge": (None, "Optional Track-C bridge"),
-    "lsposed-api100-bridge-debug": (None, "Diagnostic Track-C bridge"),
+    "app-release": ("com.tw.media", "Maintained signed app", "signed-apk"),
+    "app-debug": (None, "Diagnostic debug app", "debug-diagnostics-apk"),
+    "lsposed-api100-bridge": (None, "Optional Track-C bridge", "signed-lsposed-api100-addon"),
+    "lsposed-api100-bridge-debug": (None, "Diagnostic Track-C bridge", "debug-lsposed-api100-addon"),
 }
 
 
@@ -112,7 +112,8 @@ def verified_snapshots(repository: str, release: dict) -> list[dict]:
     allowed = set()
     entries = []
     commits = set()
-    for variant, (required_package, label) in VARIANTS.items():
+    versions = set()
+    for variant, (required_package, label, required_kind) in VARIANTS.items():
         apk = prefix + variant + ".apk"
         names = [apk, apk + ".metadata.txt", apk + ".sha256"]
         if not any(name in by_name for name in names):
@@ -129,8 +130,9 @@ def verified_snapshots(repository: str, release: dict) -> list[dict]:
                     "release_tag", "application_id", "version_code", "version_name"):
             if not meta.get(key):
                 raise ReconciliationError(f"{apk}: missing {key}")
-        if meta["asset"] != apk or meta["release_tag"] != tag:
-            raise ReconciliationError(f"{apk}: metadata identity mismatch")
+        if (meta["asset"] != apk or meta["release_tag"] != tag or
+                meta["asset_kind"] != required_kind):
+            raise ReconciliationError(f"{apk}: metadata identity/kind mismatch")
         if not SHA.fullmatch(meta["source_commit"]) or not DIGEST.fullmatch(meta["asset_sha256"]):
             raise ReconciliationError(f"{apk}: malformed provenance or SHA-256")
         if required_package and meta["application_id"] != required_package:
@@ -144,6 +146,7 @@ def verified_snapshots(repository: str, release: dict) -> list[dict]:
         if remote_hash and remote_hash != "sha256:" + meta["asset_sha256"]:
             raise ReconciliationError(f"{apk}: remote APK hash differs from sidecars")
         commits.add(meta["source_commit"])
+        versions.add((meta["version_name"], meta["version_code"]))
         entries.append({
             "name": apk, "label": label, "digest": meta["asset_sha256"],
             "source": meta["source_commit"], "package": meta["application_id"],
@@ -158,6 +161,8 @@ def verified_snapshots(repository: str, release: dict) -> list[dict]:
         raise ReconciliationError(f"Unexpected or unpaired assets: {sorted(extra)}")
     if len(commits) != 1:
         raise ReconciliationError("Release APKs do not share one recorded source commit")
+    if len(versions) != 1:
+        raise ReconciliationError("Release APKs have inconsistent version identity")
     return entries
 
 
@@ -234,11 +239,11 @@ def reconcile(repository: str, release_id: int, expected_tag: str, expected_sha:
             final.get("name") != expected_tag or final.get("draft") is not True):
         raise ReconciliationError("Release-body PATCH/read-back or draft identity mismatch")
     # Ensure no concurrent asset replacement invalidated the rendered manifest.
-    if [
-        (a["id"], a["name"], a.get("digest")) for a in final.get("assets", [])
-    ] != [
-        (a["id"], a["name"], a.get("digest")) for a in release.get("assets", [])
-    ]:
+    if sorted(
+        (a["id"], a["name"], a.get("digest") or "") for a in final.get("assets", [])
+    ) != sorted(
+        (a["id"], a["name"], a.get("digest") or "") for a in release.get("assets", [])
+    ):
         raise ReconciliationError("Release assets changed during reconciliation")
     print(f"Verified {len(entries)} APK triplet(s) for {expected_tag}; body changed={desired != original}")
     return desired != original
