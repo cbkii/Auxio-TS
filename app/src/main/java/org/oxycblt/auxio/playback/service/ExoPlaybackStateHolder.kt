@@ -164,6 +164,7 @@ class ExoPlaybackStateHolder(
         val generation: Long,
         val intentVersion: Long,
         val play: Boolean,
+        val remainingRevisionReads: Int = 4,
     )
 
     private var pendingPrimitiveRequest: PrimitiveNavigationRequest? = null
@@ -701,10 +702,11 @@ class ExoPlaybackStateHolder(
                                 synchronized(this@ExoPlaybackStateHolder) {
                                     pendingPrimitiveRequest?.also { pendingPrimitiveRequest = null }
                                 } ?: break
-                            val target = request.target
                             val descriptor =
                                 withContext(Dispatchers.Main) { activePrimitiveWindow?.descriptor }
                                     ?: break
+                            if (descriptor.totalCount <= 0) break
+                            val target = request.target.coerceIn(0, descriptor.totalCount - 1)
                             val requested = descriptor.copy(currentLogicalPosition = target)
                             val loaded =
                                 persistenceRepository
@@ -728,6 +730,22 @@ class ExoPlaybackStateHolder(
                                                 request.play
                                             else player.playWhenReady,
                                     )
+                                } else if (
+                                    request.generation == primitiveNavigationGeneration &&
+                                        currentDescriptor?.sessionId == descriptor.sessionId &&
+                                        currentDescriptor.revision != descriptor.revision &&
+                                        request.remainingRevisionReads > 0
+                                ) {
+                                    // A committed mutation invalidates the rows, not this newer
+                                    // transport command. Re-read only on a changed revision,
+                                    // with a fixed budget; Pause/seek/generation guards still win.
+                                    synchronized(this@ExoPlaybackStateHolder) {
+                                        pendingPrimitiveRequest =
+                                            request.copy(
+                                                remainingRevisionReads =
+                                                    request.remainingRevisionReads - 1
+                                            )
+                                    }
                                 } else {
                                     if (request.generation == primitiveNavigationGeneration)
                                         pendingPrimitiveTarget = null
@@ -956,7 +974,7 @@ class ExoPlaybackStateHolder(
         libraryGeneration: Long = latestDeviceLibraryGeneration,
         force: Boolean = false,
     ) {
-        if (pendingPrimitiveMutations > 0) return
+        if (pendingPrimitiveMutations > 0 || pendingPrimitiveTarget != null) return
         if (!FastResumeCanonicalHandoffPolicy.isAuthoritative(latestDeviceSourceOutcome)) {
             armFastResumeCanonicalRetry()
             return
@@ -1113,7 +1131,7 @@ class ExoPlaybackStateHolder(
         reason: String,
         replay: () -> Unit,
     ): Boolean {
-        if (pendingPrimitiveMutations > 0) return false
+        if (pendingPrimitiveMutations > 0 || pendingPrimitiveTarget != null) return false
         val active = activePrimitiveWindow ?: return false
         val library = authoritativeFastResumeLibrary() ?: return false
         val key = active.promotionKey()
@@ -1139,7 +1157,7 @@ class ExoPlaybackStateHolder(
     }
 
     private fun promotePreparedPrimitiveQueue(reason: String): Boolean {
-        if (pendingPrimitiveMutations > 0) return false
+        if (pendingPrimitiveMutations > 0 || pendingPrimitiveTarget != null) return false
         val active = activePrimitiveWindow ?: return false
         val key = active.promotionKey()
         val prepared = preparedPrimitivePromotion ?: return false

@@ -286,6 +286,24 @@ class PrimitiveTransportOwnerTest {
     }
 
     @Test
+    fun outOfWindowSkipIsRevalidatedAfterAConcurrentMutationChangesRevision() {
+        val oldDescriptor = descriptor
+        val oldRows = rows
+        installWindow(QueueWindow(descriptor, 0, rows.take(1)))
+        blockRead = true
+        holder.next()
+        awaitRead()
+        holder.shuffled(true)
+        drainUntil { holder.primitiveQueueWindow?.descriptor?.shuffleScope == ShuffleScope.ALL }
+        holder.playing(false)
+        waiting!!.resume(QueueWindow(oldDescriptor.copy(currentLogicalPosition = 1), 0, oldRows))
+        drainUntil { ReflectionHelpers.getField<Any?>(holder, "primitiveNavigationJob") == null }
+        assertEquals(1, index)
+        assertEquals(ShuffleScope.ALL, holder.primitiveQueueWindow?.descriptor?.shuffleScope)
+        assertFalse(playing)
+    }
+
+    @Test
     fun libraryReadinessWaitsForCommittedQueueMutationBeforePreparingHandoff() {
         blockRead = true
         holder.shuffled(true)
