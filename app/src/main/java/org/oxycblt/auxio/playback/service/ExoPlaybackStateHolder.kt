@@ -713,44 +713,7 @@ class ExoPlaybackStateHolder(
                                     .readQueueWindowAround(requested, target)
                                     ?.contiguousPlayableWindow()
                             withContext(Dispatchers.Main) {
-                                val currentDescriptor = activePrimitiveWindow?.descriptor
-                                if (
-                                    loaded != null &&
-                                        request.generation == primitiveNavigationGeneration &&
-                                        currentDescriptor?.sessionId == descriptor.sessionId &&
-                                        currentDescriptor.revision == descriptor.revision
-                                ) {
-                                    pendingPrimitiveTarget = null
-                                    attachPrimitiveWindow(
-                                        window = loaded,
-                                        targetLogicalPosition = target,
-                                        positionMs = 0L,
-                                        play =
-                                            if (request.intentVersion == transportIntentVersion)
-                                                request.play
-                                            else player.playWhenReady,
-                                    )
-                                } else if (
-                                    request.generation == primitiveNavigationGeneration &&
-                                        currentDescriptor?.sessionId == descriptor.sessionId &&
-                                        currentDescriptor.revision != descriptor.revision &&
-                                        request.remainingRevisionReads > 0
-                                ) {
-                                    // A committed mutation invalidates the rows, not this newer
-                                    // transport command. Re-read only on a changed revision,
-                                    // with a fixed budget; Pause/seek/generation guards still win.
-                                    synchronized(this@ExoPlaybackStateHolder) {
-                                        pendingPrimitiveRequest =
-                                            request.copy(
-                                                remainingRevisionReads =
-                                                    request.remainingRevisionReads - 1
-                                            )
-                                    }
-                                } else {
-                                    if (request.generation == primitiveNavigationGeneration)
-                                        pendingPrimitiveTarget = null
-                                    L.w("Unable to load primitive queue target $target")
-                                }
+                                commitPrimitiveNavigation(request, descriptor, loaded, target)
                             }
                         }
                     } finally {
@@ -772,6 +735,45 @@ class ExoPlaybackStateHolder(
                     }
                 }
         }
+    }
+
+    /**
+     * Commit on the main playback owner; persistence results carry no independent play authority.
+     */
+    private fun commitPrimitiveNavigation(
+        request: PrimitiveNavigationRequest,
+        descriptor: QueueDescriptor,
+        loaded: QueueWindow?,
+        target: Int,
+    ) {
+        val current = activePrimitiveWindow?.descriptor ?: return
+        if (
+            request.generation != primitiveNavigationGeneration ||
+                current.sessionId != descriptor.sessionId
+        )
+            return
+        if (current.revision != descriptor.revision && request.remainingRevisionReads > 0) {
+            // A mutation invalidates old rows, not the still-current transport command.
+            // Only a changed revision permits another read, with a fixed request budget.
+            synchronized(this) {
+                pendingPrimitiveRequest =
+                    request.copy(remainingRevisionReads = request.remainingRevisionReads - 1)
+            }
+            return
+        }
+        pendingPrimitiveTarget = null
+        if (loaded == null || current.revision != descriptor.revision) {
+            L.w("Unable to load primitive queue target $target")
+            return
+        }
+        attachPrimitiveWindow(
+            window = loaded,
+            targetLogicalPosition = target,
+            positionMs = 0L,
+            play =
+                if (request.intentVersion == transportIntentVersion) request.play
+                else player.playWhenReady,
+        )
     }
 
     private fun maybePrefetchPrimitiveWindow() {
