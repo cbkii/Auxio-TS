@@ -46,6 +46,7 @@ import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.persist.*
 import org.oxycblt.auxio.playback.replaygain.ReplayGainAudioProcessor
 import org.oxycblt.auxio.playback.state.*
+import org.oxycblt.musikr.Library
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
@@ -70,6 +71,9 @@ class PrimitiveTransportOwnerTest {
     @Volatile private var blockRead = false
     @Volatile private var waiting: Continuation<QueueWindow?>? = null
     private var readEntered = CountDownLatch(1)
+    @Volatile private var allQueueReads = 0
+    private var library: Library? = null
+    private var sourceOutcome: SourceScanOutcome? = null
 
     @Before
     fun setUp() {
@@ -152,7 +156,10 @@ class PrimitiveTransportOwnerTest {
             proxy<PersistenceRepository> { method, args ->
                 when (method.name) {
                     "updateQueuePosition" -> true
-                    "readAllQueueItems" -> rows
+                    "readAllQueueItems" -> {
+                        allQueueReads += 1
+                        rows
+                    }
                     "reorderQueue" -> {
                         val order = (args!![1] as List<*>).filterIsInstance<Int>()
                         val currentCanonical =
@@ -194,7 +201,13 @@ class PrimitiveTransportOwnerTest {
                 settings,
                 proxy<PlaybackCommand.Factory>(),
                 ReplayGainAudioProcessor(manager, settings),
-                proxy<MusicRepository>(),
+                proxy<MusicRepository> { method, _ ->
+                    when (method.name) {
+                        "getLibrary" -> library
+                        "getLastSourceScanOutcome" -> sourceOutcome
+                        else -> defaultValue(method)
+                    }
+                },
                 proxy<ImageSettings>(),
                 readiness,
                 ConfiguredSourcePolicy(proxy<MusicSettings>()),
@@ -269,6 +282,36 @@ class PrimitiveTransportOwnerTest {
         assertSame(current, items[index])
         assertEquals(4200L, position)
         assertFalse(playing)
+        assertEquals(0, prepares)
+    }
+
+    @Test
+    fun libraryReadinessWaitsForCommittedQueueMutationBeforePreparingHandoff() {
+        blockRead = true
+        holder.shuffled(true)
+        awaitRead()
+        library =
+            proxy<Library> { method, _ ->
+                when (method.name) {
+                    "empty" -> false
+                    "getSongs",
+                    "getAlbums",
+                    "getArtists",
+                    "getGenres",
+                    "getPlaylists" -> emptyList<Any>()
+                    else -> defaultValue(method)
+                }
+            }
+        sourceOutcome = SourceScanOutcome.Success(emptySet())
+        holder.onMusicChanges(MusicRepository.Changes(true, false, 1, 0, sourceOutcome))
+        assertNull(ReflectionHelpers.getField<Any?>(holder, "primitivePromotionPreparationJob"))
+        assertEquals(1, allQueueReads)
+        waiting!!.resume(QueueWindow(descriptor, 0, rows))
+        drainUntil {
+            holder.primitiveQueueWindow?.descriptor?.shuffleScope == ShuffleScope.ALL &&
+                allQueueReads > 1
+        }
+        assertTrue(playing)
         assertEquals(0, prepares)
     }
 
