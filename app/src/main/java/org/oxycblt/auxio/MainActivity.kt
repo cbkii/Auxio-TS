@@ -97,7 +97,10 @@ class MainActivity : AppCompatActivity() {
             if (invalidPreparation) {
                 // A killed process or expired/forged handoff cannot become an autoplay launch.
                 isFirstResume = false
-                L.w("Ignoring invalid HOME preparation handoff")
+                L.w("Ignoring invalid HOME preparation handoff; closing inert task")
+                // A stale/forged preparation must not leave a visible but nonfunctional
+                // activity over the head-unit launcher or accidentally trigger autoplay.
+                finish()
                 return@trace
             }
 
