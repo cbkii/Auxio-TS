@@ -165,11 +165,19 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // Reject a stale/forged preparation *before* replacing an already-running task's
+        // launch intent. Otherwise a bad alias intent can poison future onResume calls.
+        val requestedPreparation = LauncherPreparation.requested(intent)
+        val acceptedPreparation = requestedPreparation && LauncherPreparation.consume(intent)
+        if (requestedPreparation && !acceptedPreparation) {
+            L.w("Ignoring invalid HOME preparation delivered to existing activity")
+            return
+        }
         clearIntentRoutingState(intent)
         setIntent(intent)
-        prepareOnly = LauncherPreparation.consume(intent)
-        invalidPreparation = LauncherPreparation.requested(intent) && !prepareOnly
-        if (prepareOnly || invalidPreparation) return
+        prepareOnly = acceptedPreparation
+        invalidPreparation = false
+        if (prepareOnly) return
         val genericLauncherEntry = HeadUnitRoutePolicy.isGenericLauncherAction(intent.action)
         startIntentAction(intent)
         if (genericLauncherEntry) {
