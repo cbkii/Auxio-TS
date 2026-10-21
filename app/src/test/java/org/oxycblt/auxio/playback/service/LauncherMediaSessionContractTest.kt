@@ -21,6 +21,8 @@ package org.oxycblt.auxio.playback.service
 import android.content.Context
 import android.media.MediaMetadata
 import android.media.session.MediaSession
+import android.os.Bundle
+import android.os.SystemClock
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import androidx.test.core.app.ApplicationProvider
@@ -120,6 +122,49 @@ class LauncherMediaSessionContractTest {
     fun tearDown() {
         holder.release()
         imageLoader.shutdown()
+    }
+
+    @Test
+    fun `bounded HOME Play dispatches one cold restore with the original expiry`() {
+        val deadline = SystemClock.elapsedRealtime() + MediaSessionInterface.HOME_PLAY_MAX_WINDOW_MS
+        callback.onCustomAction(
+            "org.oxycblt.auxio.action.HOME_PLAY_V1",
+            Bundle().apply {
+                putInt("protocol", 1)
+                putLong("deadline_elapsed_ms", deadline)
+            },
+        )
+        assertEquals(
+            listOf(
+                "playDeferred" to
+                    DeferredPlayback.RestoreState(
+                        play = true,
+                        fallback = DeferredPlayback.ShuffleAll(play = true),
+                        deadlineElapsedMs = deadline,
+                    )
+            ),
+            commands,
+        )
+    }
+
+    @Test
+    fun `expired malformed and oversized HOME Play cannot resume a prepared track`() {
+        raw = rawTrack()
+        val now = SystemClock.elapsedRealtime()
+        for (remaining in listOf(-1L, 0L, 6_100L, 7_700L)) {
+            callback.onCustomAction(
+                "org.oxycblt.auxio.action.HOME_PLAY_V1",
+                Bundle().apply {
+                    putInt("protocol", 1)
+                    putLong("deadline_elapsed_ms", now + remaining)
+                },
+            )
+        }
+        callback.onCustomAction("org.oxycblt.auxio.action.HOME_PLAY_V1", null)
+        assertEquals(emptyList<Pair<String, Any?>>(), commands)
+        callback.onPlay()
+        callback.onPause()
+        assertEquals(listOf("playing" to true, "playing" to false), commands)
     }
 
     @Test
