@@ -116,7 +116,10 @@ class MainActivity : AppCompatActivity() {
             if (prepareOnly) {
                 // Reuse the existing owner. Preparation never reloads or pauses live playback,
                 // chooses fallback music, acquires focus, or grants source-scan authority.
-                if (playbackModel.song.value == null) {
+                if (
+                    playbackModel.song.value == null &&
+                        playbackModel.rawPlaybackMetadata.value == null
+                ) {
                     playbackModel.playDeferred(
                         StartupPlaybackPolicy.restoreActionForBackgroundReady()
                     )
