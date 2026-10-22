@@ -71,6 +71,7 @@
                 android:resource="@drawable/ic_auxio_24" />
 
         <meta-data android:name="org.oxycblt.auxio.PREPARE_HOME_PROTOCOL" android:value="1" />
+        <meta-data android:name="org.oxycblt.auxio.PREPARE_HOME_DEADLINE_PROTOCOL" android:value="1" />
         <activity
             android:name=".headunit.LauncherPreparationActivity"
             android:exported="false"

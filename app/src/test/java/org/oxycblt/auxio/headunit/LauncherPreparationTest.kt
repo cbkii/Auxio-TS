@@ -19,12 +19,16 @@
 package org.oxycblt.auxio.headunit
 
 import android.content.Intent
+import android.os.SystemClock
 import java.time.Duration
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowSystemClock
 
@@ -45,5 +49,23 @@ class LauncherPreparationTest {
         val issued = LauncherPreparation.issue()
         ShadowSystemClock.advanceBy(Duration.ofSeconds(11))
         assertFalse(LauncherPreparation.consume(issued))
+    }
+
+    @Test
+    fun originalLauncherDeadlineCannotBeRenewedByTheTrampoline() {
+        val issued = LauncherPreparation.issue(SystemClock.elapsedRealtime() + 800L)
+        ShadowSystemClock.advanceBy(Duration.ofMillis(801))
+        assertFalse(LauncherPreparation.consume(issued))
+    }
+
+    @Test
+    fun expiredTrampolineFinishesWithoutStartingThePlayer() {
+        val intent =
+            Intent().putExtra(LauncherPreparation.EXTRA_UNTIL, SystemClock.elapsedRealtime())
+        val controller =
+            Robolectric.buildActivity(LauncherPreparationActivity::class.java, intent).create()
+        assertTrue(controller.get().isFinishing)
+        assertNull(shadowOf(controller.get()).nextStartedActivity)
+        controller.destroy()
     }
 }

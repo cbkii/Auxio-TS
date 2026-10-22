@@ -28,8 +28,14 @@ import org.oxycblt.auxio.MainActivity
 class LauncherPreparationActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val now = SystemClock.elapsedRealtime()
+        val until = intent.getLongExtra(LauncherPreparation.EXTRA_UNTIL, now + 10_000L)
+        if (until <= now) {
+            finish()
+            return
+        }
         startActivity(
-            LauncherPreparation.issue()
+            LauncherPreparation.issue(until)
                 .setClass(this, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
@@ -39,6 +45,7 @@ class LauncherPreparationActivity : Activity() {
 
 /** One-use, process-local authority; an extra on the exported launcher alias is insufficient. */
 internal object LauncherPreparation {
+    const val EXTRA_UNTIL = "org.oxycblt.auxio.extra.PREPARE_UNTIL"
     private const val ACTION = "org.oxycblt.auxio.action.PREPARE_HOME"
     private const val EXTRA = "org.oxycblt.auxio.extra.PREPARE_NONCE"
     private var nonce: String? = null
@@ -47,10 +54,10 @@ internal object LauncherPreparation {
     fun requested(intent: Intent?): Boolean = intent?.action == ACTION
 
     @Synchronized
-    fun issue(): Intent {
+    fun issue(until: Long = Long.MAX_VALUE): Intent {
         val issued = java.util.UUID.randomUUID().toString()
         nonce = issued
-        deadline = SystemClock.elapsedRealtime() + 10_000L
+        deadline = minOf(until, SystemClock.elapsedRealtime() + 10_000L)
         return Intent(ACTION).putExtra(EXTRA, issued)
     }
 
