@@ -254,7 +254,7 @@ class LauncherMediaSessionContractTest {
         val publication = publication()
         assertEquals(0, publication.publishedQueue?.size ?: 0)
         assertEquals(
-            MediaSession.QueueItem.UNKNOWN_ID,
+            MediaSession.QueueItem.UNKNOWN_ID.toLong(),
             publication.publishedState?.activeQueueItemId,
         )
     }

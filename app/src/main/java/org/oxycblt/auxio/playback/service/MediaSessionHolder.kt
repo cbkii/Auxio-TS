@@ -638,7 +638,7 @@ private constructor(
                 .setActions(MediaSessionInterface.ACTIONS)
                 .setActiveQueueItemId(
                     playbackManager.index.toLong().takeIf { it in publishedQueueIds }
-                        ?: MediaSessionCompat.QueueItem.UNKNOWN_ID
+                        ?: MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong()
                 )
         val repeatAction =
             PlaybackStateCompat.CustomAction.Builder(
