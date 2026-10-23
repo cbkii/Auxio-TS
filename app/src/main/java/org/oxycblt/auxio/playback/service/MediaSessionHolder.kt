@@ -28,6 +28,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -248,7 +249,8 @@ private constructor(
     override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
         updateQueue(queue)
         if (queue.isEmpty()) {
-            updateMediaMetadata(null, null)
+            val raw = playbackManager.rawPlaybackMetadata
+            if (raw != null) updateRawMediaMetadata(raw) else updateMediaMetadata(null, null)
             invalidateSessionState()
             return
         }
@@ -264,6 +266,7 @@ private constructor(
     }
 
     override fun onQueueWindowChanged(window: org.oxycblt.auxio.playback.persist.QueueWindow?) {
+        updateQueue(playbackManager.queue)
         invalidateSessionState()
         mediaSession.setShuffleMode(
             if (playbackManager.isShuffled) PlaybackStateCompat.SHUFFLE_MODE_ALL
@@ -319,6 +322,7 @@ private constructor(
         } else if (playbackManager.currentSong == null) {
             updateMediaMetadata(null, null)
         }
+        updateQueue(playbackManager.queue)
         invalidateSessionState()
         foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
     }
@@ -580,9 +584,11 @@ private constructor(
         }
     }
 
+    private var publishedQueueIds: Set<Long> = emptySet()
+
     private fun updateQueue(queue: List<Song>) {
         PerfTimer.trace("MediaSessionHolder.updateQueue(${queue.size})") {
-            val queueItems =
+            val richItems =
                 queue.mapIndexed { i, song ->
                     val description =
                         song.toMediaDescription(
@@ -591,6 +597,28 @@ private constructor(
                         )
                     MediaSessionCompat.QueueItem(description, i.toLong())
                 }
+            // Raw restore precedes Song/library hydration. Publish the actual current item,
+            // not an empty queue paired with a non-existent active index. Queue IDs remain
+            // absolute player indices so existing skip-to-queue-item transport is unchanged.
+            val raw = playbackManager.rawPlaybackMetadata
+            val index = playbackManager.index.toLong()
+            val queueItems =
+                if (
+                    richItems.isEmpty() && raw != null && raw.uriString.isNotBlank() && index >= 0
+                ) {
+                    listOf(
+                        MediaSessionCompat.QueueItem(
+                            MediaDescriptionCompat.Builder()
+                                .setMediaId(raw.uriString)
+                                .setMediaUri(Uri.parse(raw.uriString))
+                                .setTitle(raw.displayTitle)
+                                .setSubtitle(raw.displayArtist)
+                                .build(),
+                            index,
+                        )
+                    )
+                } else richItems
+            publishedQueueIds = queueItems.map { it.queueId }.toSet()
             L.d("Uploading ${queueItems.size} songs to MediaSession queue")
             mediaSession.setQueue(queueItems)
         }
@@ -608,7 +636,10 @@ private constructor(
             playbackManager.progression
                 .intoPlaybackState(PlaybackStateCompat.Builder())
                 .setActions(MediaSessionInterface.ACTIONS)
-                .setActiveQueueItemId(playbackManager.index.toLong())
+                .setActiveQueueItemId(
+                    playbackManager.index.toLong().takeIf { it in publishedQueueIds }
+                        ?: MediaSessionCompat.QueueItem.UNKNOWN_ID
+                )
         val repeatAction =
             PlaybackStateCompat.CustomAction.Builder(
                     PlaybackActions.ACTION_INC_REPEAT_MODE,

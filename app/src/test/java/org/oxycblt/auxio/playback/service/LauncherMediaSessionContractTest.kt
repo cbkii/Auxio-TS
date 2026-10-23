@@ -21,6 +21,7 @@ package org.oxycblt.auxio.playback.service
 import android.content.Context
 import android.media.MediaMetadata
 import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.os.Bundle
 import android.os.SystemClock
 import android.support.v4.media.MediaMetadataCompat
@@ -39,11 +40,13 @@ import org.oxycblt.auxio.headunit.topway.LauncherIntegrationTelemetry
 import org.oxycblt.auxio.headunit.topway.TopwayLauncherIntegrationCoordinator
 import org.oxycblt.auxio.image.BitmapProvider
 import org.oxycblt.auxio.image.ImageSettingsImpl
+import org.oxycblt.auxio.list.adapter.UpdateInstructions
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackCommand
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
+import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.robolectric.RobolectricTestRunner
@@ -66,6 +69,7 @@ class LauncherMediaSessionContractTest {
     private lateinit var callback: MediaSessionInterface
     private var raw: RawPlaybackMetadata? = null
     private var shuffled = false
+    private var index = 6
     private val commands = mutableListOf<Pair<String, Any?>>()
 
     @Before
@@ -82,7 +86,7 @@ class LauncherMediaSessionContractTest {
                     "getRawPlaybackMetadata" -> raw
                     "getProgression" -> Progression.nil()
                     "getQueue" -> emptyList<Any>()
-                    "getIndex" -> 0
+                    "getIndex" -> index
                     "getRepeatMode" -> RepeatMode.NONE
                     "isShuffled" -> shuffled
                     "playDeferred",
@@ -223,6 +227,57 @@ class LauncherMediaSessionContractTest {
     }
 
     @Test
+    fun `raw restore and natural next publish an actual current queue item without library hydration`() {
+        raw = rawTrack()
+        holder.onNewPlayback(null, emptyList(), index, false)
+        assertRawQueue()
+        // The primitive queue moves before the rich Song library is available.
+        index = 7
+        raw = rawTrack().copy(uriString = "file:///storage/usbdisk0/next.flac", title = "Next")
+        holder.onRawPlaybackMetadataChanged(raw)
+        assertRawQueue()
+        holder.onQueueWindowChanged(null)
+        assertRawQueue()
+        holder.onQueueChanged(
+            emptyList(),
+            index,
+            QueueChange(QueueChange.Type.MAPPING, UpdateInstructions.Diff),
+        )
+        assertRawQueue()
+        index = 6
+        raw = rawTrack()
+        holder.onRawPlaybackMetadataChanged(raw)
+        assertRawQueue()
+        // Losing current identity may not advertise a phantom queue index.
+        raw = null
+        holder.onRawPlaybackMetadataChanged(null)
+        val publication = publication()
+        assertEquals(0, publication.publishedQueue?.size ?: 0)
+        assertEquals(
+            MediaSession.QueueItem.UNKNOWN_ID,
+            publication.publishedState?.activeQueueItemId,
+        )
+    }
+
+    private fun assertRawQueue() {
+        val publication = publication()
+        val queue = requireNotNull(publication.publishedQueue)
+        assertEquals(1, queue.size)
+        assertEquals(index.toLong(), queue.single().queueId)
+        assertEquals(index.toLong(), publication.publishedState?.activeQueueItemId)
+        assertEquals(raw?.uriString, queue.single().description.mediaId)
+        assertEquals(
+            raw?.uriString,
+            publishedMetadata().getString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID),
+        )
+    }
+
+    private fun publication(): MetadataPublishingSession {
+        val compat = ReflectionHelpers.getField<MediaSessionCompat>(holder, "mediaSession")
+        return Shadow.extract(compat.mediaSession as MediaSession)
+    }
+
+    @Test
     fun `artwork settings retain raw title artist and identity until explicit clear`() {
         raw = rawTrack()
         holder.onRawPlaybackMetadataChanged(raw)
@@ -292,6 +347,22 @@ class LauncherMediaSessionContractTest {
 class MetadataPublishingSession : ShadowMediaSession() {
     var publishedMetadata: MediaMetadata? = null
         private set
+
+    var publishedQueue: List<MediaSession.QueueItem>? = null
+        private set
+
+    var publishedState: PlaybackState? = null
+        private set
+
+    @Implementation
+    protected fun setQueue(queue: List<MediaSession.QueueItem>?) {
+        publishedQueue = queue
+    }
+
+    @Implementation
+    protected fun setPlaybackState(state: PlaybackState?) {
+        publishedState = state
+    }
 
     @Implementation
     protected fun setMetadata(metadata: MediaMetadata?) {
