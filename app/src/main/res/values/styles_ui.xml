@@ -375,7 +375,8 @@
         <item name="materialThemeOverlay">@style/ThemeOverlay.Auxio.UncheckableIconButton</item>
     </style>
 
-    <style name="ThemeOverlay.Auxio.UncheckableIconButton" parent="">
+    <!-- Retain Material's checked/unchecked selector tokens on API 29. -->
+    <style name="ThemeOverlay.Auxio.UncheckableIconButton" parent="ThemeOverlay.Material3.Button.IconButton">
         <item name="colorContainer">@android:color/transparent</item>
         <item name="colorOnContainer">?attr/colorOnSurfaceVariant</item>
     </style>

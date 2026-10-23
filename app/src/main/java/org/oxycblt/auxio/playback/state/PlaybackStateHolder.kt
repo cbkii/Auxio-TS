@@ -327,6 +327,7 @@ sealed interface DeferredPlayback {
         val play: Boolean,
         val skipDelta: Int = 0,
         val fallback: DeferredPlayback? = null,
+        val deadlineElapsedMs: Long? = null,
     ) : DeferredPlayback
 
     /**

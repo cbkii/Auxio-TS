@@ -653,6 +653,22 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
     @Synchronized
     override fun playDeferred(action: DeferredPlayback) {
+        if (
+            action is DeferredPlayback.RestoreState &&
+                !action.play &&
+                action.fallback == null &&
+                !PassivePreparationPolicy.mayRestore(
+                    hasPendingAction = pendingDeferredPlayback != null,
+                    hasCurrentMedia = currentSong != null || rawPlaybackMetadata != null,
+                    restoreInProgress =
+                        restoreOutcome == RestoreOutcome.WAITING_FOR_PLAYER ||
+                            restoreOutcome == RestoreOutcome.WAITING_FOR_LIBRARY ||
+                            restoreOutcome == RestoreOutcome.RAW_FAST_RESUME_ACTIVE,
+                )
+        ) {
+            L.d("Passive preparation joined existing playback/restore authority")
+            return
+        }
         val stateHolder = stateHolder
         if (stateHolder == null || !stateHolder.handleDeferred(action)) {
             L.d("Internal player not present or did not consume action, waiting")
@@ -744,7 +760,9 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
                     queueWindow = nextQueueWindow,
                     index =
                         nextQueueWindow?.descriptor?.currentLogicalPosition ?: stateMirror.index,
-                    isShuffled = nextQueueWindow?.descriptor?.shuffleScope != ShuffleScope.OFF,
+                    isShuffled =
+                        nextQueueWindow?.descriptor?.shuffleScope?.let { it != ShuffleScope.OFF }
+                            ?: stateMirror.isShuffled,
                     shuffleScope =
                         nextQueueWindow?.descriptor?.shuffleScope ?: stateMirror.shuffleScope,
                 )

@@ -75,3 +75,19 @@ Run the short same-session startup gate before an extended campaign:
 No firmware, stock package, SELinux, protected partition, signer, LSPosed scope or vehicle
 state changes are authorised by these app-side fixes. Signed release/install identity,
 exact TS18 audibility and performance remain unqualified until independently observed.
+
+## 20 October 2026: paired automatic HOME preparation
+
+This child starts from dev `21cd6f3fd84f3d163345fedfa1b5214fe68854d4`, not the unknown-source installed 26.6.8 APK. The matching launcher selects immediate root Activity preparation while public browser/session discovery continues in parallel. It does not wait nine seconds for browser failure.
+
+Manifest capability `org.oxycblt.auxio.PREPARE_HOME_PROTOCOL=1` identifies the non-exported `org.oxycblt.auxio.headunit.LauncherPreparationActivity`. Only the app or an actually privileged caller can enter it. It issues a random one-use, process-local ten-second nonce into the same MainActivity, then finishes its excluded, no-history wrapper task. An invented extra on exported MusicActivity is insufficient. Expired or process-lost handoffs cannot become automatic playback.
+
+Prepare-only MainActivity starts the existing playback owner and requests paused Background Ready restoration with no fallback, no trusted user-visible scan authority and no generic Topway route request. Passive preparation does not overwrite pending commands, an active restore or current playback. Existing explicit playback remains authoritative. No second service, player, queue, MediaSession or audio-focus owner is introduced.
+
+The public session custom action `org.oxycblt.auxio.action.HOME_PLAY_V1` accepts protocol 1 and a live elapsed-realtime deadline within five seconds. Launcher supplies the remainder of its existing 4.5-second command budget; this is an expiry bound, not a hard three-second pass threshold. Restore arbitration preserves the deadline through raw/library fallback, drops expired Play, and allows a newer explicit user command its own authority. Ordinary Play remains supported.
+
+Observed host policy tests cover paused preparation, active-owner protection and expired/deferred Play. Full app/JVM/lint gates and physical silent startup, radio preservation and audible first Play remain pending. Around three seconds is a soft target; the mandatory goal is the fastest reliable measured behaviour.
+
+## PR finalisation review — 20 October
+
+A newer explicit Pause during a bounded HOME restore must also govern the no-saved-session fallback. RestoreIntentArbiter now projects its current play state into ShuffleAll/RestoreState fallbacks and suppresses an Open fallback while paused. Expired HOME commands still have no fallback; a still newer explicit Play may resume the same restore without inheriting the old HOME deadline. The new regression exercises HOME Play → Pause → slow/no-saved restore → explicit Play and verifies fallback intent as well as the primary play flag. Twelve focused restore/deadline/passive-policy tests pass locally with production policy sources and framework clock/URI boundary doubles. Physical audibility and same-signer PR testing remain separate gates.
