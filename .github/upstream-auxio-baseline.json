@@ -2,7 +2,7 @@
   "upstream_repository": "OxygenCobalt/Auxio",
   "upstream_url": "https://github.com/OxygenCobalt/Auxio.git",
   "upstream_branch": "dev",
-  "last_seen_sha": "c05cebc52fe2393bf3a988068e4060fd6dba408f",
-  "last_seen_at": "2026-10-03T18:28:05Z",
+  "last_seen_sha": "f243bceab0b55fdae7462723a3d14e7eec21a432",
+  "last_seen_at": "2026-11-03T17:38:23Z",
   "notes": "Updated only when upstream is first baselined or after an upstream-change issue is created/acknowledged."
 }
