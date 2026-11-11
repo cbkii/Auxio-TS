@@ -17,6 +17,7 @@ Start with the document that owns the question:
 - [TS18 installation constraints](TS18_INSTALLATION_CONSTRAINTS.md)
 - [DoFun/Topway compatibility guide](DOFUN_VARIETY_COMPATIBILITY.md)
 - [ts-theme startup, transport and metadata integration](TS_THEME_INTEGRATION.md)
+- [Bounded HOME Play deadline contract](HOME_PLAY_DEADLINE.md)
 - [BootTrace v3 MediaSession contract repair](BOOTTRACE_V3_MEDIA_CONTRACT.md)
 - [LSPosed Track-C guide](ts18/launcher-integration/LSPOSED_API100_BRIDGE.md)
 - [Root storage fast path](ts18/ROOT_STORAGE_FASTPATH.md)
