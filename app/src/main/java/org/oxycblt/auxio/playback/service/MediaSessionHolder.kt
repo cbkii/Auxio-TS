@@ -636,6 +636,7 @@ private constructor(
             playbackManager.progression
                 .intoPlaybackState(PlaybackStateCompat.Builder())
                 .setActions(MediaSessionInterface.ACTIONS)
+                .addCustomAction(MediaSessionInitializationPolicy.deadlineAction())
                 .setActiveQueueItemId(
                     playbackManager.index.toLong().takeIf { it in publishedQueueIds }
                         ?: MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong()

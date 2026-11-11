@@ -258,6 +258,12 @@ interface PlaybackStateManager {
      *
      * @param isPlaying Whether playback is ongoing or not.
      */
+    fun playingBefore(deadlineElapsedMs: Long) {
+        playDeferred(
+            DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = deadlineElapsedMs)
+        )
+    }
+
     fun playing(isPlaying: Boolean)
 
     /**
@@ -706,6 +712,15 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
     }
 
     @Synchronized
+    override fun playingBefore(deadlineElapsedMs: Long) {
+        val holder = stateHolder
+        if (holder != null) holder.playingBefore(deadlineElapsedMs)
+        else
+            playDeferred(
+                DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = deadlineElapsedMs)
+            )
+    }
+
     override fun playing(isPlaying: Boolean) {
         val stateHolder = stateHolder
         if (stateHolder == null) {

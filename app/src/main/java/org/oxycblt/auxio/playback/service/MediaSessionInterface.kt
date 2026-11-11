@@ -230,7 +230,7 @@ constructor(
 
     override fun onCustomAction(action: String, extras: Bundle?) {
         super.onCustomAction(action, extras)
-        if (action == "org.oxycblt.auxio.action.HOME_PLAY_V1") {
+        if (action == MediaSessionInitializationPolicy.HOME_PLAY_V1) {
             val now = android.os.SystemClock.elapsedRealtime()
             val deadline = extras?.getLong("deadline_elapsed_ms", -1L) ?: -1L
             if (
@@ -242,8 +242,8 @@ constructor(
                 return
             }
             logTransport("HOME_PLAY", "ADMITTED", "remainingMs=${deadline - now}")
-            if (hasCurrentMedia()) onPlay()
-            else startColdRestore(play = true, deadlineElapsedMs = deadline)
+            if (hasCurrentMedia()) playbackManager.playingBefore(deadline)
+            else startColdRestore(play = true, fallback = null, deadlineElapsedMs = deadline)
             return
         }
         context.sendBroadcast(Intent(action))

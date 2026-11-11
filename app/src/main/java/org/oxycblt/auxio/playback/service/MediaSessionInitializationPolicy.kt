@@ -23,6 +23,16 @@ import android.support.v4.media.session.PlaybackStateCompat
 
 /** Pure values installed before the canonical playback session becomes active. */
 object MediaSessionInitializationPolicy {
+    const val HOME_PLAY_V1 = "org.oxycblt.auxio.action.HOME_PLAY_V1"
+
+    fun deadlineAction(): PlaybackStateCompat.CustomAction =
+        PlaybackStateCompat.CustomAction.Builder(
+                HOME_PLAY_V1,
+                "Bounded Play",
+                org.oxycblt.auxio.R.drawable.ic_shuffle_off_24,
+            )
+            .build()
+
     const val FLAGS =
         MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
             MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS or
@@ -31,6 +41,7 @@ object MediaSessionInitializationPolicy {
     fun initialPlaybackState(): PlaybackStateCompat =
         PlaybackStateCompat.Builder()
             .setActions(MediaSessionInterface.ACTIONS)
+            .addCustomAction(deadlineAction())
             .setState(PlaybackStateCompat.STATE_NONE, 0L, 0f, 0L)
             .build()
 
@@ -38,6 +49,7 @@ object MediaSessionInitializationPolicy {
     fun emptyPlaybackState(): PlaybackStateCompat =
         PlaybackStateCompat.Builder()
             .setActions(MediaSessionInterface.ACTIONS)
+            .addCustomAction(deadlineAction())
             .setState(PlaybackStateCompat.STATE_STOPPED, 0L, 0f, 0L)
             .build()
 }

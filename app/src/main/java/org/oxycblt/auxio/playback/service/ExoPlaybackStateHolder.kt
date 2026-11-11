@@ -129,6 +129,10 @@ class ExoPlaybackStateHolder(
     @Volatile private var currentRestoreJob: Job? = null
     @Volatile private var restoreGeneration = 0L
     private val restoreIntentArbiter = RestoreIntentArbiter()
+    // Main-thread owner of a bounded HOME request waiting for decoder readiness. No audio
+    // focus or playWhenReady is acquired until STATE_READY inside the original deadline.
+    private val homePlayGate = HomePlayDeadlineGate { android.os.SystemClock.elapsedRealtime() }
+    private var homePlayExpiry: Job? = null
     private var openAudioEffectSession = false
     private val audioManager = context.getSystemService(AudioManager::class.java)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -540,8 +544,11 @@ class ExoPlaybackStateHolder(
                                     window = playableWindow,
                                     targetLogicalPosition = latestTarget,
                                     positionMs = position,
-                                    play = shouldPlayImmediately(finalIntent.play),
+                                    play =
+                                        finalIntent.deadlineElapsedMs == null &&
+                                            restoredPlayAllowed(finalIntent),
                                 )
+                                armHomePlay(finalIntent)
                                 Ts18FirstAudioLatency.mark("primitive_window_attached")
                                 if (!publishQueueReadyIfCurrent(generation)) return@withContext true
                                 completeRestore(
@@ -1581,6 +1588,7 @@ class ExoPlaybackStateHolder(
     }
 
     private fun cancelActiveRestore(reason: String, notify: Boolean = true) {
+        clearHomePlay()
         val job = currentRestoreJob
         val outcome = playbackManager.restoreOutcome
         val jobActive = job?.isActive == true
@@ -1603,6 +1611,7 @@ class ExoPlaybackStateHolder(
     }
 
     override fun playing(playing: Boolean) {
+        clearHomePlay()
         transportIntentVersion += 1
         if (restoreIntentArbiter.updatePlay(playing)) {
             Ts18FirstAudioLatency.mark("restore_play_state_coalesced")
@@ -2075,6 +2084,7 @@ class ExoPlaybackStateHolder(
 
     override fun onPlaybackStateChanged(playbackState: Int) {
         super<Player.Listener>.onPlaybackStateChanged(playbackState)
+        tryHomePlay()
 
         PlaybackReadinessPolicy.fromPlayer(
                 playbackState = playbackState,
@@ -2345,7 +2355,9 @@ class ExoPlaybackStateHolder(
                         )
                     startRawFastResume(
                         item = validation.item,
-                        play = shouldPlayImmediately(finalIntent.play),
+                        play =
+                            finalIntent.deadlineElapsedMs == null &&
+                                restoredPlayAllowed(finalIntent),
                         descriptor = rawDescriptor,
                         allowAllSongsFallback = rawDescriptor == null,
                         pendingNavigation =
@@ -2354,6 +2366,7 @@ class ExoPlaybackStateHolder(
                                 seekPositionMs = finalIntent.seekPositionMs,
                             ),
                     )
+                    armHomePlay(finalIntent)
                     optionalWorkGate.onRestoreFinished()
                     playbackManager.notifyRestoreOutcome(RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
                 }
@@ -2904,6 +2917,44 @@ class ExoPlaybackStateHolder(
 
         return queue
     }
+
+    private fun clearHomePlay() {
+        homePlayGate.cancel()
+        homePlayExpiry?.cancel()
+        homePlayExpiry = null
+    }
+
+    private fun armHomePlay(intent: RestoreIntentArbiter.Snapshot) {
+        clearHomePlay()
+        val deadline = intent.deadlineElapsedMs ?: return
+        if (!restoredPlayAllowed(intent)) return
+        playingBefore(deadline)
+    }
+
+    override fun playingBefore(deadlineElapsedMs: Long) {
+        clearHomePlay()
+        val deadline = deadlineElapsedMs
+        if (android.os.SystemClock.elapsedRealtime() >= deadline) return
+        homePlayGate.arm(deadline)
+        homePlayExpiry =
+            restoreScope.launch(Dispatchers.Main) {
+                delay((deadline - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L))
+                homePlayGate.expire(deadline)
+            }
+        tryHomePlay()
+    }
+
+    private fun tryHomePlay() {
+        if (homePlayGate.consumeIfReady(player.playbackState == Player.STATE_READY)) {
+            clearHomePlay()
+            playing(true)
+        }
+    }
+
+    private fun restoredPlayAllowed(intent: RestoreIntentArbiter.Snapshot): Boolean =
+        intent.play &&
+            (intent.deadlineElapsedMs?.let { android.os.SystemClock.elapsedRealtime() < it }
+                ?: true)
 
     private fun shouldPlayImmediately(playActionRequested: Boolean): Boolean {
         return playActionRequested ||

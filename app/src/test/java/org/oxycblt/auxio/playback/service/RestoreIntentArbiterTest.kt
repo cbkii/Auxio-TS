@@ -27,6 +27,38 @@ import org.oxycblt.auxio.playback.state.DeferredPlayback
 
 class RestoreIntentArbiterTest {
     @Test
+    fun `expired bounded restore stays silent and drops fallback`() {
+        var now = 100L
+        val arbiter = RestoreIntentArbiter(elapsedMs = { now })
+        arbiter.begin(
+            DeferredPlayback.RestoreState(
+                play = true,
+                deadlineElapsedMs = 200L,
+                fallback = DeferredPlayback.ShuffleAll(),
+            )
+        )
+        assertTrue(arbiter.snapshot().play)
+        now = 200L
+        val committed = arbiter.finish()
+        assertFalse(committed.play)
+        assertNull(committed.fallback)
+        assertEquals(200L, committed.deadlineElapsedMs)
+        assertFalse(arbiter.snapshot().active)
+    }
+
+    @Test
+    fun `cancel and explicit pause prevent stale bounded restore playback`() {
+        val arbiter = RestoreIntentArbiter(elapsedMs = { 100L })
+        arbiter.begin(DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 200L))
+        arbiter.updatePlay(false)
+        assertFalse(arbiter.finish().play)
+        arbiter.begin(DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 200L))
+        arbiter.cancel()
+        assertFalse(arbiter.snapshot().active)
+        assertFalse(arbiter.finish().play)
+    }
+
+    @Test
     fun `duplicate restore coalesces and play requests upgrade eventual intent`() {
         val arbiter = RestoreIntentArbiter()
 

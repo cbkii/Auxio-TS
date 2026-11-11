@@ -32,6 +32,21 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class MediaSessionInitializationPolicyTest {
     @Test
+    fun `all session states advertise the bounded HOME Play protocol`() {
+        listOf(
+                MediaSessionInitializationPolicy.initialPlaybackState(),
+                MediaSessionInitializationPolicy.emptyPlaybackState(),
+            )
+            .forEach { state ->
+                assertTrue(
+                    state.customActions.any {
+                        it.action == MediaSessionInitializationPolicy.HOME_PLAY_V1
+                    }
+                )
+            }
+    }
+
+    @Test
     fun `initial flags expose media buttons transports and queue commands`() {
         val flags = MediaSessionInitializationPolicy.FLAGS
 
