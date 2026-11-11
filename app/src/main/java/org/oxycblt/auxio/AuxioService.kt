@@ -73,6 +73,7 @@ open class AuxioService :
             playbackFragment = playbackFragmentFactory.create(this, this)
             musicFragment = musicFragmentFactory.create(this, this, this)
             sessionToken = playbackFragment.attach()
+            android.util.Log.i("TS18Browser", "phase=token ready=${sessionToken != null}")
             musicFragment.attach()
             topwayCommandServiceClient.attach(this::class.java)
             Timber.d("Service Created")
@@ -97,6 +98,10 @@ open class AuxioService :
 
     override fun onBind(intent: Intent): IBinder? {
         val binder = super.onBind(intent)
+        android.util.Log.i(
+            "TS18Browser",
+            "phase=bind binder=${binder != null} token=${sessionToken != null}",
+        )
         onHandleForeground(intent, allowTrustedUserVisible = false)
         return binder
     }
@@ -163,6 +168,7 @@ open class AuxioService :
         clientUid: Int,
         rootHints: Bundle?,
     ): BrowserRoot? {
+        android.util.Log.i("TS18Browser", "phase=root uid=$clientUid token=${sessionToken != null}")
         if (
             clientUid < 0 ||
                 clientPackageName.isBlank() ||

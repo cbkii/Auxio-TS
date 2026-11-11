@@ -21,6 +21,9 @@ package org.oxycblt.auxio.playback.service
 import android.content.Context
 import android.media.MediaMetadata
 import android.media.session.MediaSession
+import android.media.session.PlaybackState
+import android.os.Bundle
+import android.os.SystemClock
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import androidx.test.core.app.ApplicationProvider
@@ -37,11 +40,13 @@ import org.oxycblt.auxio.headunit.topway.LauncherIntegrationTelemetry
 import org.oxycblt.auxio.headunit.topway.TopwayLauncherIntegrationCoordinator
 import org.oxycblt.auxio.image.BitmapProvider
 import org.oxycblt.auxio.image.ImageSettingsImpl
+import org.oxycblt.auxio.list.adapter.UpdateInstructions
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackCommand
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
+import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.robolectric.RobolectricTestRunner
@@ -63,6 +68,8 @@ class LauncherMediaSessionContractTest {
     private lateinit var holder: MediaSessionHolder
     private lateinit var callback: MediaSessionInterface
     private var raw: RawPlaybackMetadata? = null
+    private var shuffled = false
+    private var index = 6
     private val commands = mutableListOf<Pair<String, Any?>>()
 
     @Before
@@ -79,9 +86,9 @@ class LauncherMediaSessionContractTest {
                     "getRawPlaybackMetadata" -> raw
                     "getProgression" -> Progression.nil()
                     "getQueue" -> emptyList<Any>()
-                    "getIndex" -> 0
+                    "getIndex" -> index
                     "getRepeatMode" -> RepeatMode.NONE
-                    "isShuffled" -> false
+                    "isShuffled" -> shuffled
                     "playDeferred",
                     "playing",
                     "next",
@@ -122,6 +129,66 @@ class LauncherMediaSessionContractTest {
     }
 
     @Test
+    fun `bounded HOME Play dispatches one cold restore with the original expiry`() {
+        val deadline = SystemClock.elapsedRealtime() + MediaSessionInterface.HOME_PLAY_MAX_WINDOW_MS
+        callback.onCustomAction(
+            "org.oxycblt.auxio.action.HOME_PLAY_V1",
+            Bundle().apply {
+                putInt("protocol", 1)
+                putLong("deadline_elapsed_ms", deadline)
+            },
+        )
+        assertEquals(
+            listOf(
+                "playDeferred" to
+                    DeferredPlayback.RestoreState(
+                        play = true,
+                        fallback = DeferredPlayback.ShuffleAll(play = true),
+                        deadlineElapsedMs = deadline,
+                    )
+            ),
+            commands,
+        )
+    }
+
+    @Test
+    fun `expired malformed and oversized HOME Play cannot resume a prepared track`() {
+        raw = rawTrack()
+        val now = SystemClock.elapsedRealtime()
+        for (remaining in listOf(-1L, 0L, 6_100L, 7_700L)) {
+            callback.onCustomAction(
+                "org.oxycblt.auxio.action.HOME_PLAY_V1",
+                Bundle().apply {
+                    putInt("protocol", 1)
+                    putLong("deadline_elapsed_ms", now + remaining)
+                },
+            )
+        }
+        callback.onCustomAction("org.oxycblt.auxio.action.HOME_PLAY_V1", null)
+        assertEquals(emptyList<Pair<String, Any?>>(), commands)
+        callback.onPlay()
+        callback.onPause()
+        assertEquals(listOf("playing" to true, "playing" to false), commands)
+    }
+
+    @Test
+    fun `primitive shuffle notification updates the standard session mode`() {
+        val session = ReflectionHelpers.getField<MediaSessionCompat>(holder, "mediaSession")
+        shuffled = true
+        holder.onQueueWindowChanged(null)
+        assertEquals(
+            android.support.v4.media.session.PlaybackStateCompat.SHUFFLE_MODE_ALL,
+            session.controller.shuffleMode,
+        )
+        shuffled = false
+        holder.onQueueWindowChanged(null)
+        assertEquals(
+            android.support.v4.media.session.PlaybackStateCompat.SHUFFLE_MODE_NONE,
+            session.controller.shuffleMode,
+        )
+    }
+
+    @Test
     fun `cold prepare never plays and one Play requests one restore`() {
         callback.onPrepare()
         callback.onPlay()
@@ -157,6 +224,57 @@ class LauncherMediaSessionContractTest {
             ),
             commands,
         )
+    }
+
+    @Test
+    fun `raw restore and natural next publish an actual current queue item without library hydration`() {
+        raw = rawTrack()
+        holder.onNewPlayback(null, emptyList(), index, false)
+        assertRawQueue()
+        // The primitive queue moves before the rich Song library is available.
+        index = 7
+        raw = rawTrack().copy(uriString = "file:///storage/usbdisk0/next.flac", title = "Next")
+        holder.onRawPlaybackMetadataChanged(raw)
+        assertRawQueue()
+        holder.onQueueWindowChanged(null)
+        assertRawQueue()
+        holder.onQueueChanged(
+            emptyList(),
+            index,
+            QueueChange(QueueChange.Type.MAPPING, UpdateInstructions.Diff),
+        )
+        assertRawQueue()
+        index = 6
+        raw = rawTrack()
+        holder.onRawPlaybackMetadataChanged(raw)
+        assertRawQueue()
+        // Losing current identity may not advertise a phantom queue index.
+        raw = null
+        holder.onRawPlaybackMetadataChanged(null)
+        val publication = publication()
+        assertEquals(0, publication.publishedQueue?.size ?: 0)
+        assertEquals(
+            MediaSession.QueueItem.UNKNOWN_ID.toLong(),
+            publication.publishedState?.activeQueueItemId,
+        )
+    }
+
+    private fun assertRawQueue() {
+        val publication = publication()
+        val queue = requireNotNull(publication.publishedQueue)
+        assertEquals(1, queue.size)
+        assertEquals(index.toLong(), queue.single().queueId)
+        assertEquals(index.toLong(), publication.publishedState?.activeQueueItemId)
+        assertEquals(raw?.uriString, queue.single().description.mediaId)
+        assertEquals(
+            raw?.uriString,
+            publishedMetadata().getString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID),
+        )
+    }
+
+    private fun publication(): MetadataPublishingSession {
+        val compat = ReflectionHelpers.getField<MediaSessionCompat>(holder, "mediaSession")
+        return Shadow.extract(compat.mediaSession as MediaSession)
     }
 
     @Test
@@ -229,6 +347,22 @@ class LauncherMediaSessionContractTest {
 class MetadataPublishingSession : ShadowMediaSession() {
     var publishedMetadata: MediaMetadata? = null
         private set
+
+    var publishedQueue: List<MediaSession.QueueItem>? = null
+        private set
+
+    var publishedState: PlaybackState? = null
+        private set
+
+    @Implementation
+    protected fun setQueue(queue: List<MediaSession.QueueItem>?) {
+        publishedQueue = queue
+    }
+
+    @Implementation
+    protected fun setPlaybackState(state: PlaybackState?) {
+        publishedState = state
+    }
 
     @Implementation
     protected fun setMetadata(metadata: MediaMetadata?) {
