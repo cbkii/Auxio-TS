@@ -18,12 +18,12 @@ android {
 
     defaultConfig {
         applicationId "com.tw.media"
-        versionName "26.9.8"
+        versionName "26.10.0"
         // Monotonic TS18 code: major * 1,000,000 + minor * 10,000 + patch * 100 + revision.
         // Keep this above every recorded stock com.tw.music build (currently 118) so an
         // exact-package test never fails for an avoidable version downgrade. Signing and
         // privileged package identity remain separate, mandatory installation gates.
-        versionCode 26090800
+        versionCode 26100000
         // Explicit, isolated rolling TESTING lane. Manual Release and production
         // versions use the literals above unchanged. Android rejects replacing a
         // higher versionCode with a lower one; this lane deliberately occupies
