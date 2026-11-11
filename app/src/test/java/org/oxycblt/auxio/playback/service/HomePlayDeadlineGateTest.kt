@@ -44,6 +44,17 @@ class HomePlayDeadlineGateTest {
     }
 
     @Test
+    fun `focus admission consuming the remaining budget cannot commit playback`() {
+        var now = 100L
+        val gate = HomePlayDeadlineGate { now }
+        gate.arm(200L)
+        val deadline = requireNotNull(gate.expiresAt)
+        assertTrue(gate.consumeIfReady(true))
+        now = 200L // Simulated blocking audio-focus admission.
+        assertFalse(gate.permitsCommit(deadline))
+    }
+
+    @Test
     fun `cancellation and stale expiry cannot revive or cancel replacement intent`() {
         var now = 100L
         val gate = HomePlayDeadlineGate { now }

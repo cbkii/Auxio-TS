@@ -143,7 +143,7 @@ class LauncherMediaSessionContractTest {
                 "playDeferred" to
                     DeferredPlayback.RestoreState(
                         play = true,
-                        fallback = DeferredPlayback.ShuffleAll(play = true),
+                        fallback = null,
                         deadlineElapsedMs = deadline,
                     )
             ),

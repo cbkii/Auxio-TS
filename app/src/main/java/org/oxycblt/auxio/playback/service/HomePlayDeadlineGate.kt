@@ -21,6 +21,10 @@ package org.oxycblt.auxio.playback.service
 /** One-use admission at decoder readiness. The main-thread playback owner serialises this gate. */
 internal class HomePlayDeadlineGate(private val elapsedMs: () -> Long) {
     private var deadline: Long? = null
+    val expiresAt: Long?
+        get() = deadline
+
+    fun permitsCommit(until: Long): Boolean = elapsedMs() < until
 
     fun arm(until: Long) {
         deadline = until.takeIf { it > elapsedMs() }
