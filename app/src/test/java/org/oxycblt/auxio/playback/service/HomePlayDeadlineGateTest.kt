@@ -24,6 +24,77 @@ import org.junit.Test
 
 class HomePlayDeadlineGateTest {
     @Test
+    fun `focus admission crossing the deadline cannot commit Play and releases newly acquired focus`() {
+        var now = 100L
+        val gate = HomePlayDeadlineGate { now }
+        gate.arm(200L)
+        val deadline = requireNotNull(gate.expiresAt)
+        assertTrue(gate.consumeIfReady(true))
+        var abandoned = 0
+        var played = false
+
+        val committed =
+            HomePlayCommitPolicy.admit(
+                focusWasHeld = false,
+                requestFocus = {
+                    now = 200L // Simulate a blocking audio-focus Binder transaction.
+                    true
+                },
+                deadlinePermitsCommit = { gate.permitsCommit(deadline) },
+                releaseNewFocus = { abandoned++ },
+                commitPlay = { played = true },
+            )
+
+        assertFalse(committed)
+        assertFalse(played)
+        assertEquals(1, abandoned)
+    }
+
+    @Test
+    fun `slow focus admission does not abandon focus that was held before the request`() {
+        var now = 100L
+        val gate = HomePlayDeadlineGate { now }
+        gate.arm(200L)
+        val deadline = requireNotNull(gate.expiresAt)
+        assertTrue(gate.consumeIfReady(true))
+        var abandoned = false
+
+        assertFalse(
+            HomePlayCommitPolicy.admit(
+                focusWasHeld = true,
+                requestFocus = {
+                    now = 200L
+                    true
+                },
+                deadlinePermitsCommit = { gate.permitsCommit(deadline) },
+                releaseNewFocus = { abandoned = true },
+                commitPlay = { error("Expired bounded Play must never commit") },
+            )
+        )
+        assertFalse(abandoned)
+    }
+
+    @Test
+    fun `focus admission inside deadline commits Play once`() {
+        var now = 100L
+        val gate = HomePlayDeadlineGate { now }
+        gate.arm(200L)
+        val deadline = requireNotNull(gate.expiresAt)
+        assertTrue(gate.consumeIfReady(true))
+        var played = 0
+        assertTrue(
+            HomePlayCommitPolicy.admit(
+                focusWasHeld = false,
+                requestFocus = { true },
+                deadlinePermitsCommit = { gate.permitsCommit(deadline) },
+                releaseNewFocus = { error("Valid admission must not release focus") },
+                commitPlay = { played++ },
+            )
+        )
+        assertEquals(1, played)
+    }
+
+    @Test
     fun `restoration before deadline cannot play until decoder is ready and commits once`() {
         val gate = HomePlayDeadlineGate { 100L }
         gate.arm(200L)
