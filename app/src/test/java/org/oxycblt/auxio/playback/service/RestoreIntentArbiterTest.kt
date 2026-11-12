@@ -47,6 +47,39 @@ class RestoreIntentArbiterTest {
     }
 
     @Test
+    fun `bounded restore cannot dispatch an unbounded fallback while still inside deadline`() {
+        val arbiter = RestoreIntentArbiter(elapsedMs = { 100L })
+        arbiter.begin(
+            DeferredPlayback.RestoreState(
+                play = true,
+                deadlineElapsedMs = 200L,
+                fallback = DeferredPlayback.ShuffleAll(),
+            )
+        )
+        assertTrue(arbiter.snapshot().play)
+        assertNull(arbiter.snapshot().fallback)
+        assertNull(arbiter.finish().fallback)
+    }
+
+    @Test
+    fun `explicit seek cancels bounded start without promoting it to unbounded autoplay`() {
+        val arbiter = RestoreIntentArbiter(elapsedMs = { 100L })
+        arbiter.begin(
+            DeferredPlayback.RestoreState(
+                play = true,
+                deadlineElapsedMs = 200L,
+                fallback = DeferredPlayback.ShuffleAll(),
+            )
+        )
+        assertTrue(arbiter.updateSeek(4_321L))
+        val intent = arbiter.finish()
+        assertEquals(4_321L, intent.seekPositionMs)
+        assertFalse(intent.play)
+        assertNull(intent.fallback)
+        assertNull(intent.deadlineElapsedMs)
+    }
+
+    @Test
     fun `cancel and explicit pause prevent stale bounded restore playback`() {
         val arbiter = RestoreIntentArbiter(elapsedMs = { 100L })
         arbiter.begin(DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 200L))
