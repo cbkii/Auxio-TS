@@ -149,7 +149,45 @@ class PlaybackViewModelShuffleTest {
         model.cycleShuffleScope()
 
         assertFalse(factory.calls.contains("songFromAll(OFF)"))
-        assertEquals(listOf("replace(shuffled=false,scope=OFF)", "shuffled(false)"), manager.calls)
+        assertEquals(listOf("shuffled(false)"), manager.calls)
+    }
+
+    @Test
+    fun refusedContextRestoreKeepsGenreInsteadOfDroppingTheContext() {
+        val genre = genre()
+        val current = song(1, genre)
+        val playlistSongs = listOf(song(7, genre), current)
+        val manager =
+            RecordingManager(
+                song = current,
+                scope = ShuffleScope.GENRE,
+                parent = playlist(),
+                acceptReplace = false,
+            )
+        val model = newModel(manager, RecordingFactory(playlistQueue = playlistSongs))
+
+        model.cycleShuffleScope()
+
+        // Only the seamless install was attempted: no unshuffle that would discard the context.
+        assertEquals(listOf("replace(shuffled=false,scope=OFF)"), manager.calls)
+    }
+
+    @Test
+    fun newPlaybackOfTheSameSongDiscardsAPendingGenreSelection() {
+        val genre = genre()
+        val current = song(1, genre)
+        genre.songs += listOf(current, song(2, genre), song(3, genre))
+        val manager = RecordingManager(song = current, scope = ShuffleScope.ALL)
+        val model = newModel(manager)
+        // New playback of the same song, still in ALL, lands while the selection is computed.
+        genre.onSongsRead = { model.onNewPlayback(null, listOf(current), 0, true) }
+
+        model.cycleShuffleScope()
+        drainUntil {
+            ReflectionHelpers.getField<Job?>(model, "genreShuffleJob")?.isCompleted != false
+        }
+
+        assertTrue("Stale selection was applied: ${manager.calls}", manager.calls.isEmpty())
     }
 
     @Test

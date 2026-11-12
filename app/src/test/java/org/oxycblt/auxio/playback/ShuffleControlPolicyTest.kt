@@ -26,10 +26,30 @@ import org.oxycblt.auxio.playback.ShuffleControlPolicy.Action
 import org.oxycblt.auxio.playback.state.ShuffleScope
 
 class ShuffleControlPolicyTest {
-    private val idle = ShuffleControlPolicy.capability(false, false, false)
-    private val primitive = ShuffleControlPolicy.capability(false, true, false)
-    private val hydrated = ShuffleControlPolicy.capability(true, false, true)
-    private val hydratedNoGenre = ShuffleControlPolicy.capability(true, false, false)
+    private val idle =
+        ShuffleControlPolicy.capability(
+            hasHydratedSong = false,
+            hasPrimitivePlayback = false,
+            hydratedSongHasGenres = false,
+        )
+    private val primitive =
+        ShuffleControlPolicy.capability(
+            hasHydratedSong = false,
+            hasPrimitivePlayback = true,
+            hydratedSongHasGenres = false,
+        )
+    private val hydrated =
+        ShuffleControlPolicy.capability(
+            hasHydratedSong = true,
+            hasPrimitivePlayback = false,
+            hydratedSongHasGenres = true,
+        )
+    private val hydratedNoGenre =
+        ShuffleControlPolicy.capability(
+            hasHydratedSong = true,
+            hasPrimitivePlayback = false,
+            hydratedSongHasGenres = false,
+        )
 
     @Test
     fun primitiveFastResumeCanShuffleTheWholePersistedQueue() {

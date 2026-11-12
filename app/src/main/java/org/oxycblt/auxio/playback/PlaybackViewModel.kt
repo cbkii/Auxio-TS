@@ -194,6 +194,8 @@ constructor(
     }
 
     override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
+        // A queue edit supersedes any genre selection still being computed for the old queue.
+        invalidatePendingShuffleSelection()
         _rawPlaybackMetadata.value = playbackManager.rawPlaybackMetadata
         // Other types of queue changes preserve the current song.
         if (change.type == QueueChange.Type.SONG) {
@@ -215,6 +217,8 @@ constructor(
         isShuffled: Boolean,
     ) {
         L.d("New playback started, updating playback information")
+        // New playback (even of the same song) supersedes any pending genre selection.
+        invalidatePendingShuffleSelection()
         _song.value = playbackManager.currentSong
         _rawPlaybackMetadata.value = playbackManager.rawPlaybackMetadata
         _parent.value = parent
@@ -725,9 +729,7 @@ constructor(
         val action = ShuffleControlPolicy.next(scope, shuffleCapability())
         L.d("Cycling shuffle scope [scope=$scope action=$action]")
         // Every request supersedes any genre selection still being computed.
-        shuffleRequestGeneration += 1
-        genreShuffleJob?.cancel()
-        genreShuffleJob = null
+        invalidatePendingShuffleSelection()
         when (action) {
             // In-place reorders keep queue membership (playlist, filtered or edited queue), the
             // parent and the decoding current item; the owner defers them during Fast Resume.
@@ -738,6 +740,12 @@ constructor(
             ShuffleControlPolicy.Action.NONE ->
                 L.w("Ignoring shuffle request; no safe transition from $scope yet")
         }
+    }
+
+    private fun invalidatePendingShuffleSelection() {
+        shuffleRequestGeneration += 1
+        genreShuffleJob?.cancel()
+        genreShuffleJob = null
     }
 
     /** Whether the Now Playing shuffle control currently has a safe transition. */
@@ -768,20 +776,25 @@ constructor(
                 is Playlist -> commandFactory.songFromPlaylist(currentSong, parent, ShuffleMode.OFF)
                 else -> null
             }
-        if (
-            command != null &&
-                playbackManager.replaceQueuePreservingCurrent(
-                    command.queue,
-                    shuffled = false,
-                    shuffleScope = ShuffleScope.OFF,
-                )
-        ) {
+        if (command == null || command.queue.none { it.uid == currentSong.uid }) {
+            // The current song is outside the saved context (e.g. skipped to within the genre
+            // queue). Never substitute an unrelated All Songs queue: keep the current membership,
+            // unshuffled.
+            L.w("Playback context cannot hold the current song; unshuffling the queue in place")
+            playbackManager.shuffled(false)
             return
         }
-        // The current song is outside the saved context (e.g. skipped to within the genre queue).
-        // Never substitute an unrelated All Songs queue: keep the current membership, unshuffled.
-        L.w("Playback context cannot hold the current song; unshuffling the queue in place")
-        playbackManager.shuffled(false)
+        if (
+            !playbackManager.replaceQueuePreservingCurrent(
+                command.queue,
+                shuffled = false,
+                shuffleScope = ShuffleScope.OFF,
+            )
+        ) {
+            // The context is valid but the owner cannot install it seamlessly right now. Keep GENRE
+            // (and the saved context) rather than discarding it; the user can retry.
+            L.w("Playback context restore was refused by the queue owner; keeping genre shuffle")
+        }
     }
 
     private fun applyGenreShuffle() {

@@ -156,7 +156,8 @@ interface PlaybackStateManager {
      * the playback context when genre shuffle is turned off.
      *
      * @return false, with no state changed, when the current song is not hydrated or not in
-     *   [queue].
+     *   [queue], when a primitive window or raw Fast Resume owns the queue, or when the seamless
+     *   plan is rejected.
      */
     fun replaceQueuePreservingCurrent(
         queue: List<Song>,
@@ -666,7 +667,7 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         stateMirror =
             stateMirror.copy(shuffleScope = normalizedShuffleScope(shuffled, shuffleScope))
         val replaced =
-            stateHolder.replaceQueuePreservingCurrent(queue, shuffled, StateAck.NewPlayback)
+            stateHolder.replaceQueuePreservingCurrent(queue, shuffled, StateAck.QueueReordered)
         if (!replaced) {
             stateMirror = stateMirror.copy(shuffleScope = previousScope)
         }

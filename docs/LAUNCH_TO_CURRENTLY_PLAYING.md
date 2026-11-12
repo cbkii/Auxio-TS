@@ -32,8 +32,8 @@ runtime concerns rather than unit-test claims.
   non-empty device library is published, including the committed cache that TS18 cold start
   publishes without a source scan. Hydration stays non-lossy and identity-checked: every persisted
   item, including the current one, must resolve or primitive authority is retained. A forced full
-  rescan happens only after hydration has failed against a library that no complete enumeration
-  produced. Building a *new* All Songs membership still requires `SourceScanOutcome.Success`.
+  rescan is requested only when no usable library is available, or after hydration has failed
+  against a library that no complete enumeration produced. Building a *new* All Songs membership still requires `SourceScanOutcome.Success`.
 - **Playback context.** The persisted parent (album/artist/genre/playlist, or none for All Songs)
   belongs to the whole queue-session lineage written by `saveState`, so it is restored even after
   pre-hydration queue edits. Queue membership, parent, shuffle scope and current item remain
@@ -43,10 +43,12 @@ runtime concerns rather than unit-test claims.
 - **Shuffle control** (`ShuffleControlPolicy`). `OFF → ALL` and `ALL → OFF` reorder the existing
   queue in place and are available during Fast Resume. `ALL → GENRE` and `GENRE → OFF` need the
   hydrated song and replace membership *around* the decoding item
-  (`replaceQueuePreservingCurrent`: no `setMediaItems`, `prepare`, seek or parent change). Genre
+  (`replaceQueuePreservingCurrent`: no `setMediaItems`, `prepare`, seek or parent change; published
+  as a queue reorder, not new playback). New playback or a queue edit discards a genre selection
+  still being computed. Genre
   shuffle keeps the parent, so `GENRE → OFF` restores the parent's (or All Songs') unshuffled
   membership; if the current song is outside that context the queue is unshuffled in place
-  instead. Without genre data the cycle skips `GENRE` rather than sticking in `ALL`.
+  instead, and if the owner refuses the seamless install `GENRE` is kept rather than discarded. Without genre data the cycle skips `GENRE` rather than sticking in `ALL`.
 
 ## Exact-device validation
 

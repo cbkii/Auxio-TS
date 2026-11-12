@@ -80,15 +80,21 @@ interface PlaybackStateHolder {
      * Replace the queue membership around the currently decoding item without replacing that item,
      * re-preparing the player, seeking or changing the playback parent.
      *
+     * Acknowledged as [StateAck.QueueReordered]: the parent and current song are unchanged, so this
+     * is not new playback (which would, for example, cancel the auto-stop timer).
+     *
      * @param queue The new queue. Must contain the current canonical song.
      * @param shuffled Whether the new queue is shuffled (current item first in the shuffle order).
-     * @return false, with no state changed, when the current item is not a hydrated song that is
-     *   part of [queue].
+     * @return false, with no state changed, when a primitive window or raw Fast Resume owns the
+     *   queue, the current item is not a hydrated song in [queue], or the seamless plan is
+     *   rejected. true when the player was changed; the mirror is then resynchronised from the
+     *   player, even in the (invariant-violating) case where the installed topology did not match
+     *   [queue].
      */
     fun replaceQueuePreservingCurrent(
         queue: List<Song>,
         shuffled: Boolean,
-        ack: StateAck.NewPlayback,
+        ack: StateAck.QueueReordered,
     ): Boolean
 
     /**

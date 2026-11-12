@@ -418,7 +418,7 @@ class PrimitiveTransportOwnerTest {
             holder.replaceQueuePreservingCurrent(
                 listOf(songs[3], songs[0], songs[1], songs[4]),
                 shuffled = true,
-                ack = StateAck.NewPlayback,
+                ack = StateAck.QueueReordered,
             )
 
         assertTrue(replaced)
@@ -444,7 +444,7 @@ class PrimitiveTransportOwnerTest {
             holder.replaceQueuePreservingCurrent(
                 listOf(songs[0], songs[3]),
                 shuffled = false,
-                ack = StateAck.NewPlayback,
+                ack = StateAck.QueueReordered,
             )
         )
         assertEquals(before, items)
@@ -457,7 +457,7 @@ class PrimitiveTransportOwnerTest {
             holder.replaceQueuePreservingCurrent(
                 listOf(songAt(0)),
                 shuffled = false,
-                ack = StateAck.NewPlayback,
+                ack = StateAck.QueueReordered,
             )
         )
         assertEquals(before, items)

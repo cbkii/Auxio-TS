@@ -1774,7 +1774,7 @@ class ExoPlaybackStateHolder(
     override fun replaceQueuePreservingCurrent(
         queue: List<Song>,
         shuffled: Boolean,
-        ack: StateAck.NewPlayback,
+        ack: StateAck.QueueReordered,
     ): Boolean {
         if (activePrimitiveWindow != null || rawFastResumeItem != null) return false
         val current = player.currentMediaItem?.song ?: canonicalCurrentSourceLease?.song
@@ -1804,7 +1804,10 @@ class ExoPlaybackStateHolder(
                 shuffledMapping = emptyList(),
             )
         ) {
-            // The player was already edited; mirror whatever it now holds rather than diverge.
+            // The player was already edited, so reporting "no change" would let the manager restore
+            // the old scope over a changed player. Report the change and resynchronise the mirror
+            // from what the player now holds; its scope is normalised against the real shuffle
+            // flag.
             L.e("In-place queue replacement failed its topology invariant; resynchronising")
         }
         playbackManager.ack(this, ack)
