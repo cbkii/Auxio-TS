@@ -3057,15 +3057,14 @@ class ExoPlaybackStateHolder(
         if (homePlayGate.consumeIfReady(player.playbackState == Player.STATE_READY)) {
             clearHomePlay()
             transportIntentVersion += 1
-            val focusWasHeld = isAudioFocusHeld
-            if (!requestAudioFocus()) return
-            // Audio-focus admission is a Binder boundary. Recheck after it, immediately
-            // before committing playWhenReady, so a slow focus reply cannot shed the deadline.
-            if (!homePlayGate.permitsCommit(deadline)) {
-                if (!focusWasHeld) abandonAudioFocus()
-                return
-            }
-            player.playWhenReady = true
+            HomePlayCommitPolicy.admit(
+                focusWasHeld = isAudioFocusHeld,
+                requestFocus = { requestAudioFocus() },
+                // Recheck after Binder focus admission, immediately before Play.
+                deadlinePermitsCommit = { homePlayGate.permitsCommit(deadline) },
+                releaseNewFocus = { abandonAudioFocus() },
+                commitPlay = { player.playWhenReady = true },
+            )
         }
     }
 
