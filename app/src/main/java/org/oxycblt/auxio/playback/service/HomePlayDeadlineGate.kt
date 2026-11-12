@@ -50,7 +50,9 @@ internal class HomePlayDeadlineGate(private val elapsedMs: () -> Long) {
     }
 }
 
-/** Ordered focus admission and playback commit; callback seam is exercised by deterministic tests. */
+/**
+ * Ordered focus admission and playback commit; callback seam is exercised by deterministic tests.
+ */
 internal object HomePlayCommitPolicy {
     fun admit(
         focusWasHeld: Boolean,
