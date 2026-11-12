@@ -1803,6 +1803,10 @@ class ExoPlaybackStateHolder(
         ) {
             return false
         }
+        // An explicit queue-context replacement supersedes an earlier bounded HOME Play.
+        // Cancel only after the preflight checks, before mutating the playlist; automatic
+        // raw/primitive canonical handoff uses a separate path and retains its own intent.
+        clearHomePlay()
         val positionBefore = player.currentPosition.coerceAtLeast(0L)
         val uriBefore = player.currentMediaItem?.localConfiguration?.uri
         if (
