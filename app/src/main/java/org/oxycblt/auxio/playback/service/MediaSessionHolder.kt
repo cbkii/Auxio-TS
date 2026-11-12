@@ -118,6 +118,7 @@ private constructor(
     private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
     private val homePlayLabel: String
         get() = context.getString(R.string.lbl_play)
+
     private val canonicalServiceClass =
         TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
     private val mediaButtonReceiver = MediaButtonIntentFactory.receiverComponent(context)
