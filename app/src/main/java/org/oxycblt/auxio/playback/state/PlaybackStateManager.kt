@@ -151,6 +151,21 @@ interface PlaybackStateManager {
     fun play(command: PlaybackCommand, shuffleScope: ShuffleScope, play: Boolean)
 
     /**
+     * Replace the queue membership around the current song while it keeps decoding: no player
+     * replacement, re-preparation, seek or parent change. Used for genre shuffle and for restoring
+     * the playback context when genre shuffle is turned off.
+     *
+     * @return false, with no state changed, when the current song is not hydrated or not in
+     *   [queue], when a primitive window or raw Fast Resume owns the queue, or when the seamless
+     *   plan is rejected.
+     */
+    fun replaceQueuePreservingCurrent(
+        queue: List<Song>,
+        shuffled: Boolean,
+        shuffleScope: ShuffleScope,
+    ): Boolean
+
+    /**
      * Go to the next [Song] in the queue. Will go to the first [Song] in the queue if there is no
      * [Song] ahead to skip to.
      */
@@ -672,6 +687,24 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
     }
 
     @Synchronized
+    override fun replaceQueuePreservingCurrent(
+        queue: List<Song>,
+        shuffled: Boolean,
+        shuffleScope: ShuffleScope,
+    ): Boolean {
+        val stateHolder = stateHolder ?: return false
+        val previousScope = stateMirror.shuffleScope
+        stateMirror =
+            stateMirror.copy(shuffleScope = normalizedShuffleScope(shuffled, shuffleScope))
+        val replaced =
+            stateHolder.replaceQueuePreservingCurrent(queue, shuffled, StateAck.QueueReordered)
+        if (!replaced) {
+            stateMirror = stateMirror.copy(shuffleScope = previousScope)
+        }
+        return replaced
+    }
+
+    @Synchronized
     override fun shuffled(shuffled: Boolean) {
         val stateHolder = stateHolder ?: return
         L.d("Reordering queue [shuffled=$shuffled]")
@@ -880,13 +913,13 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
             }
             is StateAck.QueueReordered -> {
                 val rawQueue = stateHolder.resolveQueue()
+                val (isShuffled, shuffleScope) = resolveShuffleState(stateHolder, rawQueue)
                 stateMirror =
                     stateMirror.copy(
                         queue = rawQueue.resolveSongs(),
                         index = rawQueue.resolveIndex(),
-                        isShuffled = rawQueue.isShuffled,
-                        shuffleScope =
-                            normalizedShuffleScope(rawQueue.isShuffled, stateMirror.shuffleScope),
+                        isShuffled = isShuffled,
+                        shuffleScope = shuffleScope,
                         rawQueue = rawQueue,
                     )
                 listeners.forEach {
@@ -900,14 +933,14 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
             is StateAck.NewPlayback -> {
                 isInitialized = true
                 val rawQueue = stateHolder.resolveQueue()
+                val (isShuffled, shuffleScope) = resolveShuffleState(stateHolder, rawQueue)
                 stateMirror =
                     stateMirror.copy(
                         parent = stateHolder.parent,
                         queue = rawQueue.resolveSongs(),
                         index = rawQueue.resolveIndex(),
-                        isShuffled = rawQueue.isShuffled,
-                        shuffleScope =
-                            normalizedShuffleScope(rawQueue.isShuffled, stateMirror.shuffleScope),
+                        isShuffled = isShuffled,
+                        shuffleScope = shuffleScope,
                         rawQueue = rawQueue,
                     )
                 listeners.forEach {
@@ -1053,6 +1086,21 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         )
 
         isInitialized = true
+    }
+
+    /**
+     * A holder hint (raw Fast Resume) carries the persisted scope that the single raw item cannot
+     * express; otherwise the resolved queue shape is authoritative and the previous app-level scope
+     * only refines it (ALL vs GENRE).
+     */
+    private fun resolveShuffleState(
+        stateHolder: PlaybackStateHolder,
+        rawQueue: RawQueue,
+    ): Pair<Boolean, ShuffleScope> {
+        val hint = stateHolder.shuffleScopeHint
+        if (hint != null) return (hint != ShuffleScope.OFF) to hint
+        return rawQueue.isShuffled to
+            normalizedShuffleScope(rawQueue.isShuffled, stateMirror.shuffleScope)
     }
 
     private fun defaultShuffleScope(isShuffled: Boolean) =

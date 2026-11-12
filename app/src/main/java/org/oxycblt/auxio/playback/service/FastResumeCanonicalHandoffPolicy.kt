@@ -35,7 +35,49 @@ internal object FastResumeCanonicalHandoffPolicy {
         ALL_SONGS,
     }
 
+    /**
+     * Whether the last source enumeration covered every configured source. This is required only
+     * when Fast Resume must construct a *new* queue membership (the All Songs fallback), and it
+     * decides whether a failed hydration justifies a forced rescan.
+     */
     fun isAuthoritative(outcome: SourceScanOutcome?): Boolean = outcome is SourceScanOutcome.Success
+
+    /**
+     * Whether the published device library may be used to hydrate the *persisted* Fast Resume
+     * queue.
+     *
+     * TS18 cold starts publish the committed cached library without enumerating sources (Topway
+     * startup deliberately skips the scan), so no [SourceScanOutcome] exists for this process.
+     * Waiting for [SourceScanOutcome.Success] therefore delayed the handoff until the bounded retry
+     * forced a full rescan. Hydration itself is non-lossy (every persisted item, including the
+     * current one, must resolve) and identity-checked, so a coherent library snapshot is sufficient
+     * even when unrelated sources are unresolved: an item on an absent source simply fails
+     * hydration and primitive authority is retained.
+     */
+    fun mayHydratePersistedQueue(
+        generation: Long,
+        expectedGeneration: Long,
+        outcome: SourceScanOutcome?,
+        expectedOutcome: SourceScanOutcome?,
+    ): Boolean =
+        generation == expectedGeneration && mayHydratePersistedQueue(outcome, expectedOutcome)
+
+    /** As above, for callers that already hold the current library generation. */
+    fun mayHydratePersistedQueue(
+        outcome: SourceScanOutcome?,
+        expectedOutcome: SourceScanOutcome?,
+    ): Boolean = outcome == expectedOutcome && outcome !is SourceScanOutcome.AuthoritativeEmpty
+
+    /**
+     * A full forced rescan is only justified when hydration has already failed against the current
+     * library generation and that library was not produced by a complete source enumeration.
+     */
+    fun shouldForceRescan(
+        hydrationFailedForCurrentGeneration: Boolean,
+        libraryAvailable: Boolean,
+        outcome: SourceScanOutcome?,
+    ): Boolean =
+        !libraryAvailable || (hydrationFailedForCurrentGeneration && !isAuthoritative(outcome))
 
     fun isAuthoritative(
         generation: Long,
@@ -52,10 +94,12 @@ internal object FastResumeCanonicalHandoffPolicy {
     fun rawCanonicalTarget(
         hasPersistedQueue: Boolean,
         allowAllSongsFallback: Boolean,
+        libraryAuthoritative: Boolean = true,
     ): RawCanonicalTarget? =
         when {
             hasPersistedQueue -> RawCanonicalTarget.PERSISTED_QUEUE
-            allowAllSongsFallback -> RawCanonicalTarget.ALL_SONGS
+            // A new All Songs membership must not be built from an incompletely enumerated library.
+            allowAllSongsFallback && libraryAuthoritative -> RawCanonicalTarget.ALL_SONGS
             else -> null
         }
 

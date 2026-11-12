@@ -73,6 +73,7 @@ constructor(
 ) : ViewModel(), PlaybackStateManager.Listener, PlaybackSettings.Listener {
     private var lastPositionJob: Job? = null
     private var genreShuffleJob: Job? = null
+    private var shuffleRequestGeneration = 0L
 
     private val _song = MutableStateFlow(playbackManager.currentSong)
     /** The currently playing song. */
@@ -193,6 +194,8 @@ constructor(
     }
 
     override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
+        // A queue edit supersedes any genre selection still being computed for the old queue.
+        invalidatePendingShuffleSelection()
         _rawPlaybackMetadata.value = playbackManager.rawPlaybackMetadata
         // Other types of queue changes preserve the current song.
         if (change.type == QueueChange.Type.SONG) {
@@ -214,6 +217,8 @@ constructor(
         isShuffled: Boolean,
     ) {
         L.d("New playback started, updating playback information")
+        // New playback (even of the same song) supersedes any pending genre selection.
+        invalidatePendingShuffleSelection()
         _song.value = playbackManager.currentSong
         _rawPlaybackMetadata.value = playbackManager.rawPlaybackMetadata
         _parent.value = parent
@@ -720,54 +725,75 @@ constructor(
     }
 
     fun cycleShuffleScope() {
-        when (_shuffleScope.value) {
-            ShuffleScope.OFF -> {
-                L.d("Cycling shuffle scope: OFF -> ALL")
-                rebuildQueueFromPlaybackContext(ShuffleMode.ON, ShuffleScope.ALL)
-            }
-            ShuffleScope.ALL -> {
-                L.d("Cycling shuffle scope: ALL -> GENRE")
-                applyGenreShuffle()
-            }
-            ShuffleScope.GENRE -> {
-                L.d("Cycling shuffle scope: GENRE -> OFF")
-                genreShuffleJob?.cancel()
-                rebuildQueueFromPlaybackContext(ShuffleMode.OFF, ShuffleScope.OFF)
-            }
+        val scope = _shuffleScope.value
+        val action = ShuffleControlPolicy.next(scope, shuffleCapability())
+        L.d("Cycling shuffle scope [scope=$scope action=$action]")
+        // Every request supersedes any genre selection still being computed.
+        invalidatePendingShuffleSelection()
+        when (action) {
+            // In-place reorders keep queue membership (playlist, filtered or edited queue), the
+            // parent and the decoding current item; the owner defers them during Fast Resume.
+            ShuffleControlPolicy.Action.SHUFFLE_QUEUE -> playbackManager.shuffled(true)
+            ShuffleControlPolicy.Action.UNSHUFFLE_QUEUE -> playbackManager.shuffled(false)
+            ShuffleControlPolicy.Action.GENRE_SHUFFLE -> applyGenreShuffle()
+            ShuffleControlPolicy.Action.RESTORE_CONTEXT -> restorePlaybackContext()
+            ShuffleControlPolicy.Action.NONE ->
+                L.w("Ignoring shuffle request; no safe transition from $scope yet")
         }
     }
 
-    private fun rebuildQueueFromPlaybackContext(shuffle: ShuffleMode, shuffleScope: ShuffleScope) {
-        val currentSong = playbackManager.currentSong
-        val currentPositionMs = playbackManager.progression.calculateElapsedPositionMs()
-        val wasPlaying = playbackManager.progression.isPlaying
-        val parent = _parent.value
-        val command =
-            when {
-                currentSong == null -> commandFactory.all(shuffle)
-                parent is Album -> commandFactory.songFromAlbum(currentSong, shuffle)
-                parent is Artist -> commandFactory.songFromArtist(currentSong, parent, shuffle)
-                parent is Genre -> commandFactory.songFromGenre(currentSong, parent, shuffle)
-                parent is Playlist -> commandFactory.songFromPlaylist(currentSong, parent, shuffle)
-                else -> commandFactory.songFromAll(currentSong, shuffle)
-            } ?: commandFactory.all(shuffle)
-        if (command == null) {
-            L.w("Skipping shuffle transition; no target queue is available")
-            return
-        }
+    private fun invalidatePendingShuffleSelection() {
+        shuffleRequestGeneration += 1
+        genreShuffleJob?.cancel()
+        genreShuffleJob = null
+    }
 
-        val currentUid = currentSong?.uid
-        if (currentUid != null && command.queue.none { it.uid == currentUid }) {
-            L.w("Skipping shuffle transition; current song is not in target queue")
+    /** Whether the Now Playing shuffle control currently has a safe transition. */
+    fun isShuffleControlEnabled(): Boolean =
+        ShuffleControlPolicy.isEnabled(_shuffleScope.value, shuffleCapability())
+
+    private fun shuffleCapability(): ShuffleControlPolicy.Capability {
+        val song = _song.value
+        return ShuffleControlPolicy.capability(
+            hasHydratedSong = song != null,
+            hasPrimitivePlayback = _rawPlaybackMetadata.value != null,
+            hydratedSongHasGenres = song?.genres?.isNotEmpty() == true,
+        )
+    }
+
+    /**
+     * Leave genre shuffle by restoring the unshuffled membership of the playback context (the
+     * parent, or All Songs when the queue has no parent) around the current song.
+     */
+    private fun restorePlaybackContext() {
+        val currentSong = playbackManager.currentSong ?: return
+        val command =
+            when (val parent = playbackManager.parent) {
+                null -> commandFactory.songFromAll(currentSong, ShuffleMode.OFF)
+                is Album -> commandFactory.songFromAlbum(currentSong, ShuffleMode.OFF)
+                is Artist -> commandFactory.songFromArtist(currentSong, parent, ShuffleMode.OFF)
+                is Genre -> commandFactory.songFromGenre(currentSong, parent, ShuffleMode.OFF)
+                is Playlist -> commandFactory.songFromPlaylist(currentSong, parent, ShuffleMode.OFF)
+                else -> null
+            }
+        if (command == null || command.queue.none { it.uid == currentSong.uid }) {
+            // The current song is outside the saved context (e.g. skipped to within the genre
+            // queue). Never substitute an unrelated All Songs queue: keep the current membership,
+            // unshuffled.
+            L.w("Playback context cannot hold the current song; unshuffling the queue in place")
+            playbackManager.shuffled(false)
             return
         }
-        playImpl(command, shuffleScope, play = wasPlaying)
-        if (currentUid == null || playbackManager.currentSong?.uid == currentUid) {
-            playbackManager.seekTo(currentPositionMs)
-        } else {
-            L.w(
-                "Shuffle transition did not preserve current song; current=${playbackManager.currentSong?.uid}, expected=$currentUid"
+        if (
+            !playbackManager.replaceQueuePreservingCurrent(
+                command.queue,
+                shuffled = false,
+                shuffleScope = ShuffleScope.OFF,
             )
+        ) {
+            // The context is valid but the owner cannot install it seamlessly right now. Keep GENRE
+            // (and the saved context) rather than discarding it; the user can retry.
+            L.w("Playback context restore was refused by the queue owner; keeping genre shuffle")
         }
     }
 
@@ -778,7 +804,7 @@ constructor(
         if (currentGenres.isEmpty()) {
             return
         }
-        genreShuffleJob?.cancel()
+        val generation = shuffleRequestGeneration
         genreShuffleJob =
             viewModelScope.launch {
                 val selection =
@@ -798,36 +824,31 @@ constructor(
                             random = kotlin.random.Random.Default,
                         )
                     }
-                if (playbackManager.currentSong?.uid != currentSongUid) {
+                // Fence against a newer shuffle request, a different current song or a scope that
+                // changed underneath the computation (new playback, MediaSession shuffle, restore).
+                if (
+                    generation != shuffleRequestGeneration ||
+                        playbackManager.currentSong?.uid != currentSongUid ||
+                        playbackManager.shuffleScope != ShuffleScope.ALL
+                ) {
+                    L.d("Discarding stale genre shuffle selection")
                     return@launch
                 }
                 if (selection.queue.size < 2) {
+                    // Nothing else shares the genre; skip GENRE rather than leaving ALL stuck.
+                    playbackManager.shuffled(false)
                     return@launch
                 }
-                val positionMs = playbackManager.progression.calculateElapsedPositionMs()
-                val wasPlaying = playbackManager.progression.isPlaying
-                val queue = selection.queue.preserveCurrentFirst(currentSongUid)
-                val command = commandFactory.songsFrom(currentSong, queue, ShuffleMode.ON)
-                if (command == null) {
-                    L.w("Skipping genre shuffle; current song is not in target queue")
-                    return@launch
-                }
-                playImpl(command, ShuffleScope.GENRE, play = wasPlaying)
-                if (playbackManager.currentSong?.uid == currentSongUid) {
-                    playbackManager.seekTo(positionMs)
-                } else {
-                    L.w(
-                        "Genre shuffle did not preserve current song; " +
-                            "current=${playbackManager.currentSong?.uid}, expected=$currentSongUid"
+                if (
+                    !playbackManager.replaceQueuePreservingCurrent(
+                        selection.queue,
+                        shuffled = true,
+                        shuffleScope = ShuffleScope.GENRE,
                     )
+                ) {
+                    L.w("Skipping genre shuffle; current song is not the decoding canonical item")
                 }
             }
-    }
-
-    private fun List<Song>.preserveCurrentFirst(currentUid: Any): List<Song> {
-        val index = indexOfFirst { it.uid == currentUid }
-        if (index <= 0) return this
-        return drop(index) + take(index)
     }
 
     /**
