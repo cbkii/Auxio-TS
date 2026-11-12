@@ -628,23 +628,21 @@ private constructor(
     private fun invalidateSessionState() {
         L.d("Updating media session playback state")
         if (!hasPlayableSessionState()) {
-            mediaSession.setPlaybackState(MediaSessionInitializationPolicy.emptyPlaybackState(homePlayLabel))
+            mediaSession.setPlaybackState(
+                MediaSessionInitializationPolicy.emptyPlaybackState(homePlayLabel)
+            )
             setSessionActive(false, "state-empty")
             return
         }
         setSessionActive(true, "state-playable")
+        // Advertise the protocol on playable states as well as initial/empty states.
         val state =
-            playbackManager.progression
-                .intoPlaybackState(PlaybackStateCompat.Builder())
-                .setActions(MediaSessionInterface.ACTIONS)
-                // Advertise the protocol on playable states as well as initial/empty states.
-        val stateWithHomePlay =
             MediaSessionInitializationPolicy.withDeadlineAction(
-                playbackManager.progression
-                    .intoPlaybackState(PlaybackStateCompat.Builder())
-                    .setActions(MediaSessionInterface.ACTIONS),
-                homePlayLabel,
-            )
+                    playbackManager.progression
+                        .intoPlaybackState(PlaybackStateCompat.Builder())
+                        .setActions(MediaSessionInterface.ACTIONS),
+                    homePlayLabel,
+                )
                 .setActiveQueueItemId(
                     playbackManager.index.toLong().takeIf { it in publishedQueueIds }
                         ?: MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong()
@@ -676,7 +674,9 @@ private constructor(
         if (hasPlayableSessionState()) {
             invalidateSessionState()
         } else {
-            mediaSession.setPlaybackState(MediaSessionInitializationPolicy.emptyPlaybackState(homePlayLabel))
+            mediaSession.setPlaybackState(
+                MediaSessionInitializationPolicy.emptyPlaybackState(homePlayLabel)
+            )
             setSessionActive(false, "attach-empty")
         }
     }
