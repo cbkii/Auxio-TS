@@ -36,4 +36,31 @@ class DeferredPlaybackColdControlPolicyTest {
         val shuffle = DeferredPlayback.ShuffleAll()
         assertSame(shuffle, DeferredPlaybackColdControlPolicy.applyPause(shuffle))
     }
+
+    @Test
+    fun boundedPlayJoinsAnUnboundedPlayAlreadyOwed() {
+        val owed =
+            DeferredPlayback.RestoreState(play = true, fallback = DeferredPlayback.ShuffleAll())
+        val bounded = DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 200L)
+        assertSame(owed, DeferredPlaybackColdControlPolicy.admit(owed, bounded))
+    }
+
+    @Test
+    fun boundedPlayReplacesPassiveOrBoundedPendingWork() {
+        val bounded = DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 200L)
+        val passive = DeferredPlayback.RestoreState(play = false)
+        val earlier = DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 100L)
+        assertSame(bounded, DeferredPlaybackColdControlPolicy.admit(passive, bounded))
+        assertSame(bounded, DeferredPlaybackColdControlPolicy.admit(earlier, bounded))
+        assertSame(bounded, DeferredPlaybackColdControlPolicy.admit(null, bounded))
+    }
+
+    @Test
+    fun newestUnboundedRequestStillWins() {
+        val bounded = DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 200L)
+        val explicit = DeferredPlayback.RestoreState(play = true)
+        val shuffle = DeferredPlayback.ShuffleAll()
+        assertSame(explicit, DeferredPlaybackColdControlPolicy.admit(bounded, explicit))
+        assertSame(shuffle, DeferredPlaybackColdControlPolicy.admit(explicit, shuffle))
+    }
 }

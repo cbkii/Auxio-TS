@@ -61,9 +61,14 @@ internal class RestoreIntentArbiter(
             deadlineElapsedMs = null
         }
         if (action.play) {
+            // A bounded Play joins an unbounded Play that is already owed (boot autoplay, a
+            // media key, the app's own button). Its deadline may drop only its own request.
+            val unboundedPlayOwed = !started && play && deadlineElapsedMs == null
             play = true
-            deadlineElapsedMs = action.deadlineElapsedMs
-            if (deadlineElapsedMs != null) fallback = action.fallback
+            if (!unboundedPlayOwed || action.deadlineElapsedMs == null) {
+                deadlineElapsedMs = action.deadlineElapsedMs
+                if (deadlineElapsedMs != null) fallback = action.fallback
+            }
         }
         if (action.skipDelta != 0) {
             skipDelta =

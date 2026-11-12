@@ -117,4 +117,43 @@ class RestoreIntentArbiterTest {
 
         assertEquals(-1, arbiter.snapshot().skipDelta)
     }
+
+    @Test
+    fun `bounded Play joins an unbounded Play already owed and cannot expire it`() {
+        var now = 100L
+        val arbiter = RestoreIntentArbiter(elapsedMs = { now })
+        val shuffle = DeferredPlayback.ShuffleAll()
+        arbiter.begin(DeferredPlayback.RestoreState(play = true, fallback = shuffle))
+        arbiter.begin(DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 200L))
+        now = 5_000L
+        val committed = arbiter.finish()
+        assertTrue(committed.play)
+        assertNull(committed.deadlineElapsedMs)
+        assertEquals(shuffle, committed.fallback)
+    }
+
+    @Test
+    fun `bounded Play still bounds a passive restore and a later explicit Play lifts the bound`() {
+        var now = 100L
+        val arbiter = RestoreIntentArbiter(elapsedMs = { now })
+        arbiter.begin(DeferredPlayback.RestoreState(play = false))
+        arbiter.begin(DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 200L))
+        assertEquals(200L, arbiter.snapshot().deadlineElapsedMs)
+        arbiter.begin(DeferredPlayback.RestoreState(play = true))
+        now = 5_000L
+        val committed = arbiter.finish()
+        assertTrue(committed.play)
+        assertNull(committed.deadlineElapsedMs)
+    }
+
+    @Test
+    fun `a newer bounded Play replaces an earlier bounded Play`() {
+        var now = 100L
+        val arbiter = RestoreIntentArbiter(elapsedMs = { now })
+        arbiter.begin(DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 200L))
+        now = 250L
+        arbiter.begin(DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 900L))
+        assertTrue(arbiter.snapshot().play)
+        assertEquals(900L, arbiter.snapshot().deadlineElapsedMs)
+    }
 }

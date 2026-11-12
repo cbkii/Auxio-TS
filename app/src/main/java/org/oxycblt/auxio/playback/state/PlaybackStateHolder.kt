@@ -71,10 +71,10 @@ interface PlaybackStateHolder {
      *
      * @param playing Whether the player should be playing audio.
      */
+    fun playing(playing: Boolean)
+
     /** Optional bounded HOME Play; unsupported holders refuse rather than starting late. */
     fun playingBefore(deadlineElapsedMs: Long) {}
-
-    fun playing(playing: Boolean)
 
     /**
      * Seek to a position in the current song.
