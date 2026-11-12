@@ -49,3 +49,22 @@ internal class HomePlayDeadlineGate(private val elapsedMs: () -> Long) {
         return true
     }
 }
+
+/** Ordered focus admission and playback commit; callback seam is exercised by deterministic tests. */
+internal object HomePlayCommitPolicy {
+    fun admit(
+        focusWasHeld: Boolean,
+        requestFocus: () -> Boolean,
+        deadlinePermitsCommit: () -> Boolean,
+        releaseNewFocus: () -> Unit,
+        commitPlay: () -> Unit,
+    ): Boolean {
+        if (!requestFocus()) return false
+        if (!deadlinePermitsCommit()) {
+            if (!focusWasHeld) releaseNewFocus()
+            return false
+        }
+        commitPlay()
+        return true
+    }
+}
