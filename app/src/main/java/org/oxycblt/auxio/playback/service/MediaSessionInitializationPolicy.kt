@@ -25,31 +25,38 @@ import android.support.v4.media.session.PlaybackStateCompat
 object MediaSessionInitializationPolicy {
     const val HOME_PLAY_V1 = "org.oxycblt.auxio.action.HOME_PLAY_V1"
 
-    fun deadlineAction(): PlaybackStateCompat.CustomAction =
+    fun deadlineAction(label: String): PlaybackStateCompat.CustomAction =
         PlaybackStateCompat.CustomAction.Builder(
                 HOME_PLAY_V1,
-                "Bounded Play",
+                label,
                 org.oxycblt.auxio.R.drawable.ic_play_24,
             )
             .build()
+
+    fun withDeadlineAction(
+        builder: PlaybackStateCompat.Builder,
+        label: String,
+    ): PlaybackStateCompat.Builder = builder.addCustomAction(deadlineAction(label))
 
     const val FLAGS =
         MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
             MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS or
             MediaSessionCompat.FLAG_HANDLES_QUEUE_COMMANDS
 
-    fun initialPlaybackState(): PlaybackStateCompat =
-        PlaybackStateCompat.Builder()
-            .setActions(MediaSessionInterface.ACTIONS)
-            .addCustomAction(deadlineAction())
+    fun initialPlaybackState(label: String): PlaybackStateCompat =
+        withDeadlineAction(
+                PlaybackStateCompat.Builder().setActions(MediaSessionInterface.ACTIONS),
+                label,
+            )
             .setState(PlaybackStateCompat.STATE_NONE, 0L, 0f, 0L)
             .build()
 
     /** Empty libraries remain explicitly stopped and, at the holder boundary, inactive. */
-    fun emptyPlaybackState(): PlaybackStateCompat =
-        PlaybackStateCompat.Builder()
-            .setActions(MediaSessionInterface.ACTIONS)
-            .addCustomAction(deadlineAction())
+    fun emptyPlaybackState(label: String): PlaybackStateCompat =
+        withDeadlineAction(
+                PlaybackStateCompat.Builder().setActions(MediaSessionInterface.ACTIONS),
+                label,
+            )
             .setState(PlaybackStateCompat.STATE_STOPPED, 0L, 0f, 0L)
             .build()
 }
