@@ -412,7 +412,9 @@ class PlaybackPanelFragment :
         binding.playbackSong.isClickable = hasRichSong
         binding.playbackArtist.isClickable = hasRichSong
         binding.playbackAlbum?.isClickable = hasRichSong
-        binding.playbackShuffle.isEnabled = hasRichSong
+        // Shuffle is capability-based: whole-queue shuffle works against the persisted Fast Resume
+        // queue, while genre shuffle waits for the hydrated song (see ShuffleControlPolicy).
+        binding.playbackShuffle.isEnabled = playbackModel.isShuffleControlEnabled()
         binding.playbackRepeat.isEnabled = playable
         binding.playbackPlayPause.isEnabled = playable
 
@@ -476,6 +478,7 @@ class PlaybackPanelFragment :
 
     private fun updateShuffleScope(scope: ShuffleScope) {
         requireBinding().playbackShuffle.apply {
+            isEnabled = playbackModel.isShuffleControlEnabled()
             when (scope) {
                 ShuffleScope.OFF -> {
                     isChecked = false

@@ -74,6 +74,9 @@ class PrimitiveTransportOwnerTest {
     @Volatile private var allQueueReads = 0
     private var library: Library? = null
     private var sourceOutcome: SourceScanOutcome? = null
+    private var savedState: PlaybackStateManager.SavedState? = null
+    private var rescans = 0
+    private var shuffleEnabled = false
 
     @Before
     fun setUp() {
@@ -149,6 +152,11 @@ class PrimitiveTransportOwnerTest {
                         items[args!![0] as Int] = args[1] as MediaItem
                         null
                     }
+                    "getShuffleModeEnabled" -> shuffleEnabled
+                    "setShuffleModeEnabled" -> {
+                        shuffleEnabled = args!![0] as Boolean
+                        null
+                    }
                     else -> defaultValue(method)
                 }
             }
@@ -188,6 +196,7 @@ class PrimitiveTransportOwnerTest {
                         } else QueueWindow(args!![0] as QueueDescriptor, 0, rows)
                     }
                     "readQueueWindow" -> QueueWindow(args!![0] as QueueDescriptor, 0, rows)
+                    "readState" -> savedState
                     else -> defaultValue(method)
                 }
             }
@@ -205,6 +214,10 @@ class PrimitiveTransportOwnerTest {
                     when (method.name) {
                         "getLibrary" -> library
                         "getLastSourceScanOutcome" -> sourceOutcome
+                        "requestIndex" -> {
+                            rescans += 1
+                            null
+                        }
                         else -> defaultValue(method)
                     }
                 },
@@ -353,6 +366,160 @@ class PrimitiveTransportOwnerTest {
         assertEquals(9100L, position)
         assertTrue(playing)
     }
+
+    @Test
+    fun cachedLibraryWithoutSourceScanHandsOffAndKeepsTheSavedPlaylistContext() {
+        val songs = (0..2).map(::songAt)
+        val playlist =
+            proxy<org.oxycblt.musikr.Playlist> { method, _ ->
+                if (method.name == "getUid") uid('p', 9) else defaultValue(method)
+            }
+        library = libraryOf(songs)
+        // No source enumeration has run in this process (TS18 cold start from the committed cache).
+        sourceOutcome = null
+        // The legacy heap no longer equals the persisted queue (it was edited before hydration);
+        // the playlist context must still be restored.
+        savedState =
+            PlaybackStateManager.SavedState(
+                positionMs = 0L,
+                repeatMode = RepeatMode.NONE,
+                parent = playlist,
+                heap = listOf(songs[2], songs[0]),
+                shuffledMapping = emptyList(),
+                index = 1,
+                songUid = songs[0].uid,
+                shuffleScope = ShuffleScope.OFF,
+            )
+        val current = items[index]
+
+        holder.onMusicChanges(MusicRepository.Changes(true, false, 1, 0, null))
+        drainUntil { holder.primitiveQueueWindow == null }
+
+        assertSame(current, items[index])
+        assertEquals(3, items.size)
+        assertSame(playlist, holder.parent)
+        assertEquals(2300L, position)
+        assertTrue(playing)
+        assertEquals(0, prepares)
+        assertEquals("Healthy cached library must not force a rescan", 0, rescans)
+    }
+
+    @Test
+    fun queueReplacementKeepsTheDecodingItemWithoutPrepareOrSeek() {
+        val songs = (0..4).map(::songAt)
+        ReflectionHelpers.setField(holder, "activePrimitiveWindow", null)
+        items.clear()
+        items.addAll(listOf(songs[1], songs[2]).map(::mediaItemOf))
+        index = 0
+        position = 5100L
+        val current = items[index]
+
+        val replaced =
+            holder.replaceQueuePreservingCurrent(
+                listOf(songs[3], songs[0], songs[1], songs[4]),
+                shuffled = true,
+                ack = StateAck.NewPlayback,
+            )
+
+        assertTrue(replaced)
+        assertSame(current, items[index])
+        assertEquals(2, index)
+        assertEquals(4, items.size)
+        assertEquals(5100L, position)
+        assertTrue(playing)
+        assertTrue(shuffleEnabled)
+        assertEquals(0, prepares)
+    }
+
+    @Test
+    fun queueReplacementRejectsWithoutTouchingThePlayer() {
+        val songs = (0..3).map(::songAt)
+        ReflectionHelpers.setField(holder, "activePrimitiveWindow", null)
+        items.clear()
+        items.addAll(listOf(songs[1], songs[2]).map(::mediaItemOf))
+        index = 0
+        val before = items.toList()
+
+        assertFalse(
+            holder.replaceQueuePreservingCurrent(
+                listOf(songs[0], songs[3]),
+                shuffled = false,
+                ack = StateAck.NewPlayback,
+            )
+        )
+        assertEquals(before, items)
+    }
+
+    @Test
+    fun queueReplacementIsRefusedWhilePrimitiveAuthorityOwnsTheQueue() {
+        val before = items.toList()
+        assertFalse(
+            holder.replaceQueuePreservingCurrent(
+                listOf(songAt(0)),
+                shuffled = false,
+                ack = StateAck.NewPlayback,
+            )
+        )
+        assertEquals(before, items)
+    }
+
+    @Test
+    fun rawFastResumePublishesThePersistedAndRequestedShuffleScope() {
+        ReflectionHelpers.setField(holder, "activePrimitiveWindow", null)
+        val uri = Uri.parse("file:///music/0.mp3")
+        ReflectionHelpers.setField(
+            holder,
+            "rawFastResumeItem",
+            RawFastResumeItem(uri, uri.toString(), null, "0", "Artist", null, 10000, 0, 1),
+        )
+        ReflectionHelpers.setField(
+            holder,
+            "rawFastResumeQueueDescriptor",
+            descriptor.copy(shuffleScope = ShuffleScope.GENRE),
+        )
+        assertEquals(ShuffleScope.GENRE, holder.shuffleScopeHint)
+
+        holder.shuffled(false)
+
+        assertEquals(ShuffleScope.OFF, holder.shuffleScopeHint)
+        assertTrue(playing)
+        assertEquals(0, prepares)
+    }
+
+    private fun songAt(at: Int): org.oxycblt.musikr.Song {
+        val songUid = uid('s', at)
+        val uri = Uri.parse("file:///music/$at.mp3")
+        return proxy { method, _ ->
+            when (method.name) {
+                "getUid" -> songUid
+                "getUri" -> uri
+                "getDurationMs" -> 10000L
+                else -> defaultValue(method)
+            }
+        }
+    }
+
+    private fun mediaItemOf(song: org.oxycblt.musikr.Song): MediaItem =
+        MediaItem.Builder().setUri(song.uri).setTag(song).build()
+
+    private fun libraryOf(songs: List<org.oxycblt.musikr.Song>): Library = proxy { method, _ ->
+        when (method.name) {
+            "empty" -> false
+            "getSongs" -> songs
+            "getAlbums",
+            "getArtists",
+            "getGenres",
+            "getPlaylists" -> emptyList<Any>()
+            else -> defaultValue(method)
+        }
+    }
+
+    private fun uid(item: Char, id: Int): org.oxycblt.musikr.Music.UID =
+        requireNotNull(
+            org.oxycblt.musikr.Music.UID.fromString(
+                "ua${item}00000000-0000-0000-0000-${"%012d".format(id)}"
+            )
+        )
 
     private fun installWindow(window: QueueWindow) {
         ReflectionHelpers.setField(holder, "activePrimitiveWindow", window)

@@ -63,8 +63,33 @@ interface PlaybackStateHolder {
      */
     val rawPlaybackMetadata: RawPlaybackMetadata?
 
+    /**
+     * Persisted shuffle scope that the holder knows better than the shape of [resolveQueue].
+     *
+     * Raw Fast Resume plays a single item before the persisted queue is hydrated, so the resolved
+     * queue cannot express a saved shuffle (or genre shuffle). Null when the resolved queue is
+     * authoritative.
+     */
+    val shuffleScopeHint: ShuffleScope?
+        get() = null
+
     /** Applies a completely new playback state to the holder. */
     fun newPlayback(command: PlaybackCommand, play: Boolean = true)
+
+    /**
+     * Replace the queue membership around the currently decoding item without replacing that item,
+     * re-preparing the player, seeking or changing the playback parent.
+     *
+     * @param queue The new queue. Must contain the current canonical song.
+     * @param shuffled Whether the new queue is shuffled (current item first in the shuffle order).
+     * @return false, with no state changed, when the current item is not a hydrated song that is
+     *   part of [queue].
+     */
+    fun replaceQueuePreservingCurrent(
+        queue: List<Song>,
+        shuffled: Boolean,
+        ack: StateAck.NewPlayback,
+    ): Boolean
 
     /**
      * Update the playing state of the audio player.
