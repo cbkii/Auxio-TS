@@ -3033,10 +3033,7 @@ class ExoPlaybackStateHolder(
         // Join that restore instead of arming a gate for the soon-to-be-replaced decoder.
         if (restoreIntentArbiter.snapshot().active) {
             restoreIntentArbiter.begin(
-                DeferredPlayback.RestoreState(
-                    play = true,
-                    deadlineElapsedMs = deadlineElapsedMs,
-                )
+                DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = deadlineElapsedMs)
             )
             return
         }
