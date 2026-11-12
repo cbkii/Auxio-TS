@@ -115,7 +115,7 @@ class PlaybackStateManagerShuffleScopeTest {
         val manager = newManager()
         rawQueue = RawQueue(heap = listOf(song), shuffledMapping = listOf(0), heapIndex = 0)
 
-        assertTrue(manager.replaceQueuePreservingCurrent(emptyList(), true, ShuffleScope.GENRE))
+        assertTrue(manager.replaceQueuePreservingCurrent(listOf(song), true, ShuffleScope.GENRE))
         assertEquals(ShuffleScope.GENRE, manager.shuffleScope)
     }
 
