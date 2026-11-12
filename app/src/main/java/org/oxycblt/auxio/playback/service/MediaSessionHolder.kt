@@ -116,7 +116,8 @@ private constructor(
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-    private val homePlayLabel = context.getString(R.string.lbl_play)
+    private val homePlayLabel: String
+        get() = context.getString(R.string.lbl_play)
     private val canonicalServiceClass =
         TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
     private val mediaButtonReceiver = MediaButtonIntentFactory.receiverComponent(context)
