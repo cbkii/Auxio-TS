@@ -2961,10 +2961,11 @@ class ExoPlaybackStateHolder(
         }
     }
 
-    private fun restoredPlayAllowed(intent: RestoreIntentArbiter.Snapshot): Boolean =
-        intent.play &&
-            (intent.deadlineElapsedMs?.let { android.os.SystemClock.elapsedRealtime() < it }
-                ?: true)
+    private fun restoredPlayAllowed(intent: RestoreIntentArbiter.Snapshot): Boolean {
+        if (!intent.play) return false
+        val deadline = intent.deadlineElapsedMs ?: return true
+        return android.os.SystemClock.elapsedRealtime() < deadline
+    }
 
     private fun shouldPlayImmediately(playActionRequested: Boolean): Boolean {
         return playActionRequested ||

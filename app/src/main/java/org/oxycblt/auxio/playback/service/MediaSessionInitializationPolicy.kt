@@ -29,7 +29,7 @@ object MediaSessionInitializationPolicy {
         PlaybackStateCompat.CustomAction.Builder(
                 HOME_PLAY_V1,
                 "Bounded Play",
-                org.oxycblt.auxio.R.drawable.ic_shuffle_off_24,
+                org.oxycblt.auxio.R.drawable.ic_play_24,
             )
             .build()
 
