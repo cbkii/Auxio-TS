@@ -476,6 +476,9 @@ class ExoPlaybackStateHolder(
 
     private fun startPrimitiveQueueRestore(action: DeferredPlayback.RestoreState) {
         val newlyStarted = restoreIntentArbiter.begin(action)
+        // A replacement restore must not inherit an already armed HOME deadline for the
+        // previous current source. Coalesced requests retain their shared intent.
+        if (newlyStarted) clearHomePlay()
         if (!newlyStarted && currentRestoreJob?.isActive == true) {
             Ts18FirstAudioLatency.mark("restore_coalesced")
             L.d("Coalescing saved-state restore into the active restore generation")
@@ -1673,6 +1676,8 @@ class ExoPlaybackStateHolder(
     }
 
     override fun seekTo(positionMs: Long) {
+        // A later explicit seek cancels an earlier HOME start, including after raw attach.
+        clearHomePlay()
         transportIntentVersion += 1
         primitiveNavigationGeneration += 1
         pendingPrimitiveTarget = null
@@ -3024,6 +3029,17 @@ class ExoPlaybackStateHolder(
     }
 
     override fun playingBefore(deadlineElapsedMs: Long) {
+        // A playable item may already be published while its restore is still running.
+        // Join that restore instead of arming a gate for the soon-to-be-replaced decoder.
+        if (restoreIntentArbiter.snapshot().active) {
+            restoreIntentArbiter.begin(
+                DeferredPlayback.RestoreState(
+                    play = true,
+                    deadlineElapsedMs = deadlineElapsedMs,
+                )
+            )
+            return
+        }
         clearHomePlay()
         val deadline = deadlineElapsedMs
         if (android.os.SystemClock.elapsedRealtime() >= deadline) return
