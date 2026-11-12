@@ -222,4 +222,66 @@ class FastResumeCanonicalHandoffPolicyTest {
                 FastResumeCanonicalHandoffPolicy.MAX_RETRY_ATTEMPTS,
         )
     }
+
+    @Test
+    fun cachedLibraryWithoutSourceScanMayHydratePersistedQueue() {
+        // TS18 cold start publishes the committed cache without a scan in this process.
+        assertTrue(
+            FastResumeCanonicalHandoffPolicy.mayHydratePersistedQueue(
+                generation = 3L,
+                expectedGeneration = 3L,
+                outcome = null,
+                expectedOutcome = null,
+            )
+        )
+        val partial = SourceScanOutcome.Partial(setOf("internal"), setOf("usb"))
+        assertTrue(
+            FastResumeCanonicalHandoffPolicy.mayHydratePersistedQueue(3L, 3L, partial, partial)
+        )
+    }
+
+    @Test
+    fun persistedQueueHydrationStillRequiresACoherentLibrarySnapshot() {
+        val success = SourceScanOutcome.Success(setOf("internal"))
+        assertFalse(
+            FastResumeCanonicalHandoffPolicy.mayHydratePersistedQueue(2L, 3L, success, success)
+        )
+        assertFalse(
+            FastResumeCanonicalHandoffPolicy.mayHydratePersistedQueue(3L, 3L, null, success)
+        )
+        val empty = SourceScanOutcome.AuthoritativeEmpty(setOf("internal"))
+        assertFalse(FastResumeCanonicalHandoffPolicy.mayHydratePersistedQueue(3L, 3L, empty, empty))
+    }
+
+    @Test
+    fun forcedRescanOnlyFollowsAFailedHydrationAgainstAnUnscannedLibrary() {
+        val success = SourceScanOutcome.Success(setOf("internal"))
+        // A healthy cached library is tried first; no rescan merely to recover playback context.
+        assertFalse(FastResumeCanonicalHandoffPolicy.shouldForceRescan(false, true, null))
+        assertTrue(FastResumeCanonicalHandoffPolicy.shouldForceRescan(true, true, null))
+        // A complete enumeration already happened; rescanning cannot add the missing item.
+        assertFalse(FastResumeCanonicalHandoffPolicy.shouldForceRescan(true, true, success))
+        // No usable library at all.
+        assertTrue(FastResumeCanonicalHandoffPolicy.shouldForceRescan(false, false, success))
+    }
+
+    @Test
+    fun allSongsFallbackRequiresCompleteSourceAuthority() {
+        assertNull(
+            FastResumeCanonicalHandoffPolicy.rawCanonicalTarget(
+                hasPersistedQueue = false,
+                allowAllSongsFallback = true,
+                libraryAuthoritative = false,
+            )
+        )
+        // The persisted queue is never replaced by All Songs, whatever the source state.
+        assertEquals(
+            FastResumeCanonicalHandoffPolicy.RawCanonicalTarget.PERSISTED_QUEUE,
+            FastResumeCanonicalHandoffPolicy.rawCanonicalTarget(
+                hasPersistedQueue = true,
+                allowAllSongsFallback = true,
+                libraryAuthoritative = false,
+            ),
+        )
+    }
 }

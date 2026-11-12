@@ -93,6 +93,7 @@ import org.oxycblt.auxio.playback.state.RawQueue
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.RestoreOutcome
 import org.oxycblt.auxio.playback.state.ShuffleMode
+import org.oxycblt.auxio.playback.state.ShuffleScope
 import org.oxycblt.auxio.playback.state.StateAck
 import org.oxycblt.musikr.Library
 import org.oxycblt.musikr.MusicParent
@@ -152,6 +153,8 @@ class ExoPlaybackStateHolder(
     private var fastResumeCanonicalRetryJob: Job? = null
     private var latestDeviceLibraryGeneration = 0L
     private var latestDeviceSourceOutcome: SourceScanOutcome? = null
+    /** Library generation against which persisted-queue hydration most recently failed. */
+    private var fastResumeHydrationFailedGeneration: Long? = null
     private val pendingPrimitivePromotionActions = mutableListOf<() -> Unit>()
     private var primitiveNavigationJob: Job? = null
     private var primitivePrefetchJob: Job? = null
@@ -224,6 +227,15 @@ class ExoPlaybackStateHolder(
 
     override val primitiveQueueWindow: QueueWindow?
         get() = activePrimitiveWindow
+
+    override val shuffleScopeHint: ShuffleScope?
+        get() =
+            if (rawFastResumeItem == null) {
+                null
+            } else {
+                pendingRawShuffle?.let { if (it) ShuffleScope.ALL else ShuffleScope.OFF }
+                    ?: rawFastResumeQueueDescriptor?.shuffleScope
+            }
 
     fun attach() {
         playbackManager.registerStateHolder(this)
@@ -637,7 +649,7 @@ class ExoPlaybackStateHolder(
         maybePrefetchPrimitiveWindow()
         armFastResumeCanonicalRetry()
         if (allowImmediatePromotion) {
-            authoritativeFastResumeLibrary()?.let { library ->
+            fastResumeHydrationLibrary()?.let { library ->
                 primitiveHandoffGate.onLibraryChanged(activePrimitiveWindow!!.promotionKey())
                 preparePrimitivePromotion(library, force = true)
             }
@@ -914,14 +926,20 @@ class ExoPlaybackStateHolder(
     private fun QueueWindow.promotionKey() =
         PrimitiveQueueHandoffGate.Key(descriptor.sessionId, descriptor.revision)
 
-    private fun authoritativeFastResumeLibrary(): Library? {
+    private fun fastResumeHydrationLibrary(): Library? {
         if (
-            latestDeviceSourceOutcome != musicRepository.lastSourceScanOutcome ||
-                !FastResumeCanonicalHandoffPolicy.isAuthoritative(latestDeviceSourceOutcome)
+            !FastResumeCanonicalHandoffPolicy.mayHydratePersistedQueue(
+                outcome = latestDeviceSourceOutcome,
+                expectedOutcome = musicRepository.lastSourceScanOutcome,
+            )
         ) {
             return null
         }
         return musicRepository.library?.takeIf { !it.empty() }
+    }
+
+    private fun recordFastResumeHydrationFailure(libraryGeneration: Long) {
+        fastResumeHydrationFailedGeneration = libraryGeneration
     }
 
     private fun armFastResumeCanonicalRetry() {
@@ -933,8 +951,16 @@ class ExoPlaybackStateHolder(
                     delay(FastResumeCanonicalHandoffPolicy.RETRY_INTERVAL_MS)
                     if (activePrimitiveWindow == null && rawFastResumeItem == null) return@launch
 
-                    val library = authoritativeFastResumeLibrary()
-                    if (library != null) {
+                    val library = fastResumeHydrationLibrary()
+                    val forceRescan =
+                        FastResumeCanonicalHandoffPolicy.shouldForceRescan(
+                            hydrationFailedForCurrentGeneration =
+                                fastResumeHydrationFailedGeneration ==
+                                    latestDeviceLibraryGeneration,
+                            libraryAvailable = library != null,
+                            outcome = latestDeviceSourceOutcome,
+                        )
+                    if (library != null && !forceRescan) {
                         activePrimitiveWindow?.let { window ->
                             val key = window.promotionKey()
                             primitiveHandoffGate.onRetry(key)
@@ -948,7 +974,8 @@ class ExoPlaybackStateHolder(
                             )
                         }
                     } else if (
-                        (activePrimitiveWindow != null || rawFastResumeItem != null) &&
+                        forceRescan &&
+                            (activePrimitiveWindow != null || rawFastResumeItem != null) &&
                             musicRepository.indexingState !is IndexingState.Indexing
                     ) {
                         L.i(
@@ -977,7 +1004,7 @@ class ExoPlaybackStateHolder(
         force: Boolean = false,
     ) {
         if (pendingPrimitiveMutations > 0 || pendingPrimitiveTarget != null) return
-        if (!FastResumeCanonicalHandoffPolicy.isAuthoritative(latestDeviceSourceOutcome)) {
+        if (fastResumeHydrationLibrary() !== library) {
             armFastResumeCanonicalRetry()
             return
         }
@@ -1028,7 +1055,7 @@ class ExoPlaybackStateHolder(
                     hydrated?.keptHeapIndices?.mapNotNull { songsByCanonicalPosition[it] }.orEmpty()
                 val restoredParent =
                     if (hydrated != null && hydrated.droppedCount == 0) {
-                        resolvePreparedParent(hydratedSongs, hydrated.shuffledMapping)
+                        resolvePreparedParent()
                     } else {
                         null
                     }
@@ -1057,7 +1084,7 @@ class ExoPlaybackStateHolder(
                                 "outcomeCurrent=" +
                                 "${latestDeviceSourceOutcome == musicRepository.lastSourceScanOutcome}]"
                         )
-                        authoritativeFastResumeLibrary()?.let { currentLibrary ->
+                        fastResumeHydrationLibrary()?.let { currentLibrary ->
                             preparePrimitivePromotion(currentLibrary, force = true)
                         }
                         return@withContext
@@ -1086,6 +1113,7 @@ class ExoPlaybackStateHolder(
                                 "items=${allItems.size}/${descriptor.totalCount} unresolved=$unresolved]"
                         )
                         Ts18FirstAudioLatency.mark("canonical_fail_open_current_unresolved")
+                        recordFastResumeHydrationFailure(libraryGeneration)
                         armFastResumeCanonicalRetry()
                         drainPendingPrimitivePromotionActions()
                         return@withContext
@@ -1118,16 +1146,20 @@ class ExoPlaybackStateHolder(
             }
     }
 
-    private suspend fun resolvePreparedParent(
-        songs: List<Song>,
-        shuffledMapping: List<Int>,
-    ): MusicParent? {
-        val saved = persistenceRepository.readState() ?: return null
-        if (saved.heap.size != songs.size) return null
-        if (saved.heap.map { it?.uid } != songs.map { it.uid }) return null
-        if (saved.shuffledMapping != shuffledMapping) return null
-        return saved.parent
-    }
+    /**
+     * Resolve the playback context (album/artist/genre/playlist, or null for All Songs) that owns
+     * the persisted queue lineage.
+     *
+     * Queue sessions are only ever created by [PersistenceRepository.saveState], in the same
+     * transaction as the legacy row that stores the parent UID; later primitive moves, inserts,
+     * removals and reorders mutate that session in place. The parent therefore remains the context
+     * of the hydrated queue even when the queue no longer equals the legacy heap snapshot.
+     * Requiring exact heap/mapping equality (the previous rule) discarded the parent after any
+     * pre-library queue edit, and the following canonical save then erased the persisted parent
+     * permanently.
+     */
+    private suspend fun resolvePreparedParent(): MusicParent? =
+        persistenceRepository.readState()?.parent
 
     private fun deferPrimitiveQueueInteractionUntilPromotion(
         reason: String,
@@ -1135,7 +1167,7 @@ class ExoPlaybackStateHolder(
     ): Boolean {
         if (pendingPrimitiveMutations > 0 || pendingPrimitiveTarget != null) return false
         val active = activePrimitiveWindow ?: return false
-        val library = authoritativeFastResumeLibrary() ?: return false
+        val library = fastResumeHydrationLibrary() ?: return false
         val key = active.promotionKey()
         return when (primitiveHandoffGate.requestHandoff(key, libraryReady = true)) {
             PrimitiveQueueHandoffGate.Decision.BYPASS -> false
@@ -1169,7 +1201,7 @@ class ExoPlaybackStateHolder(
                 musicRepository.library !== prepared.library ||
                 latestDeviceSourceOutcome != musicRepository.lastSourceScanOutcome ||
                 !primitiveHandoffGate.isPrepared(key) ||
-                authoritativeFastResumeLibrary() == null
+                fastResumeHydrationLibrary() == null
         ) {
             return false
         }
@@ -1511,7 +1543,7 @@ class ExoPlaybackStateHolder(
                     if (
                         !released && pendingPrimitiveMutations == 0 && activePrimitiveWindow != null
                     ) {
-                        authoritativeFastResumeLibrary()?.let {
+                        fastResumeHydrationLibrary()?.let {
                             preparePrimitivePromotion(it, force = true)
                         }
                     }
@@ -1691,6 +1723,10 @@ class ExoPlaybackStateHolder(
         if (deferPrimitiveQueueInteractionUntilPromotion("shuffle") { shuffled(shuffled) }) return
         if (rawFastResumeItem != null) {
             pendingRawShuffle = shuffled
+            // Publish the requested scope immediately (via shuffleScopeHint) so the UI,
+            // MediaSession
+            // and persistence agree; the reorder itself is applied once the queue is hydrated.
+            playbackManager.ack(this, StateAck.QueueReordered)
             armFastResumeCanonicalRetry()
             return
         }
@@ -1735,13 +1771,62 @@ class ExoPlaybackStateHolder(
         deferSave()
     }
 
+    override fun replaceQueuePreservingCurrent(
+        queue: List<Song>,
+        shuffled: Boolean,
+        ack: StateAck.QueueReordered,
+    ): Boolean {
+        if (activePrimitiveWindow != null || rawFastResumeItem != null) return false
+        val current = player.currentMediaItem?.song ?: canonicalCurrentSourceLease?.song
+        if (current == null) return false
+        val currentIndex = queue.indexOfFirst { it.uid == current.uid }
+        if (currentIndex < 0) return false
+        // Validate everything that can be checked before the first playlist edit so a rejection
+        // leaves the player untouched.
+        if (
+            player.currentMediaItem == null ||
+                SeamlessQueueHandoffPolicy.plan(
+                    originalItemCount = player.mediaItemCount,
+                    originalCurrentIndex = player.currentMediaItemIndex,
+                    canonicalItemCount = queue.size,
+                    targetCurrentIndex = currentIndex,
+                ) == null
+        ) {
+            return false
+        }
+        val positionBefore = player.currentPosition.coerceAtLeast(0L)
+        val uriBefore = player.currentMediaItem?.localConfiguration?.uri
+        if (
+            !installCanonicalQueueAroundCurrentSource(
+                songs = queue,
+                currentHeapIndex = currentIndex,
+                shuffleModeEnabled = shuffled,
+                shuffledMapping = emptyList(),
+            )
+        ) {
+            // The player was already edited, so reporting "no change" would let the manager restore
+            // the old scope over a changed player. Report the change and resynchronise the mirror
+            // from what the player now holds; its scope is normalised against the real shuffle
+            // flag.
+            L.e("In-place queue replacement failed its topology invariant; resynchronising")
+        }
+        playbackManager.ack(this, ack)
+        deferSave()
+        L.i(
+            "Replaced queue around current source [count=${queue.size} shuffled=$shuffled " +
+                "positionBefore=$positionBefore positionAfter=${player.currentPosition} " +
+                "uriStable=${uriBefore == player.currentMediaItem?.localConfiguration?.uri}]"
+        )
+        return true
+    }
+
     private fun queueRawNavigation(delta: Int) {
         val pending = rawFastResumePendingNavigation
         rawFastResumePendingNavigation =
             RawPendingNavigation(((pending?.skipDelta ?: 0) + delta).coerceIn(-32, 32), null)
         // Preserve the existing source while its canonical queue is unavailable.
         // Reconciliation consumes the latest delta, not the worker's old snapshot.
-        authoritativeFastResumeLibrary()?.let {
+        fastResumeHydrationLibrary()?.let {
             reconcileRawFastResume(it, latestDeviceLibraryGeneration, latestDeviceSourceOutcome)
         }
         armFastResumeCanonicalRetry()
@@ -2114,7 +2199,7 @@ class ExoPlaybackStateHolder(
             playbackManager.ack(this, StateAck.QueueWindowChanged)
             deferSave()
             maybePrefetchPrimitiveWindow()
-            authoritativeFastResumeLibrary()?.let { library ->
+            fastResumeHydrationLibrary()?.let { library ->
                 mainHandler.post { preparePrimitivePromotion(library, force = true) }
             }
         } else {
@@ -2248,12 +2333,12 @@ class ExoPlaybackStateHolder(
         latestDeviceLibraryGeneration = changes.deviceGeneration
         latestDeviceSourceOutcome = changes.deviceSourceScanOutcome
         val library = musicRepository.library?.takeIf { !it.empty() }
-        val authoritativeLibrary = authoritativeFastResumeLibrary()
+        val hydrationLibrary = fastResumeHydrationLibrary()
 
         activePrimitiveWindow?.let { window ->
-            if (authoritativeLibrary == null) {
+            if (hydrationLibrary == null) {
                 L.i(
-                    "Device library generation is not authoritative for Fast Resume handoff " +
+                    "Device library generation is not usable for Fast Resume handoff " +
                         "[generation=${changes.deviceGeneration} " +
                         "outcome=${changes.deviceSourceScanOutcome?.javaClass?.simpleName}]"
                 )
@@ -2263,26 +2348,26 @@ class ExoPlaybackStateHolder(
             val key = window.promotionKey()
             primitiveHandoffGate.onLibraryChanged(key)
             L.d(
-                "Authoritative library obtained while primitive queue is active; starting " +
+                "Usable library obtained while primitive queue is active; starting " +
                     "automatic canonical handoff"
             )
             Ts18FirstAudioLatency.mark("library_ready")
-            preparePrimitivePromotion(authoritativeLibrary, changes.deviceGeneration, force = true)
+            preparePrimitivePromotion(hydrationLibrary, changes.deviceGeneration, force = true)
             return
         }
         rawFastResumeItem?.let {
-            if (authoritativeLibrary == null) {
+            if (hydrationLibrary == null) {
                 L.i(
-                    "Device library generation is not authoritative for raw Fast Resume handoff " +
+                    "Device library generation is not usable for raw Fast Resume handoff " +
                         "[generation=${changes.deviceGeneration} " +
                         "outcome=${changes.deviceSourceScanOutcome?.javaClass?.simpleName}]"
                 )
                 armFastResumeCanonicalRetry()
                 return
             }
-            L.d("Authoritative library obtained while raw Fast Resume is active; reconciling")
+            L.d("Usable library obtained while raw Fast Resume is active; reconciling")
             reconcileRawFastResume(
-                library = authoritativeLibrary,
+                library = hydrationLibrary,
                 libraryGeneration = changes.deviceGeneration,
                 sourceOutcome = changes.deviceSourceScanOutcome,
             )
@@ -2470,7 +2555,7 @@ class ExoPlaybackStateHolder(
                 resolved,
             ) ?: return null
         val songs = hydrated.keptHeapIndices.map { songsByCanonicalPosition[it] ?: return null }
-        val restoredParent = resolvePreparedParent(songs, hydrated.shuffledMapping)
+        val restoredParent = resolvePreparedParent()
         return PersistedQueueHydration(
             songs = songs,
             currentHeapIndex = hydrated.currentHeapIndex,
@@ -2487,7 +2572,7 @@ class ExoPlaybackStateHolder(
         if (
             musicRepository.library !== library ||
                 sourceOutcome != musicRepository.lastSourceScanOutcome ||
-                !FastResumeCanonicalHandoffPolicy.isAuthoritative(
+                !FastResumeCanonicalHandoffPolicy.mayHydratePersistedQueue(
                     generation = libraryGeneration,
                     expectedGeneration = latestDeviceLibraryGeneration,
                     outcome = sourceOutcome,
@@ -2522,6 +2607,8 @@ class ExoPlaybackStateHolder(
                     FastResumeCanonicalHandoffPolicy.rawCanonicalTarget(
                         hasPersistedQueue = descriptor != null,
                         allowAllSongsFallback = allowAllSongsFallback,
+                        libraryAuthoritative =
+                            FastResumeCanonicalHandoffPolicy.isAuthoritative(sourceOutcome),
                     )
                 val hydration =
                     when (target) {
@@ -2587,6 +2674,7 @@ class ExoPlaybackStateHolder(
                         )
                         Ts18FirstAudioLatency.mark("reconciliation_end_unmatched")
                         rawFastResumeReconciliationJob = null
+                        recordFastResumeHydrationFailure(libraryGeneration)
                         armFastResumeCanonicalRetry()
                         return@withContext
                     }
