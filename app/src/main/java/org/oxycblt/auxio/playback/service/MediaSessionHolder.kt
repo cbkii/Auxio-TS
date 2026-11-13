@@ -116,6 +116,9 @@ private constructor(
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+    private val homePlayLabel: String
+        get() = context.getString(R.string.lbl_play)
+
     private val canonicalServiceClass =
         TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
     private val mediaButtonReceiver = MediaButtonIntentFactory.receiverComponent(context)
@@ -182,7 +185,7 @@ private constructor(
         mediaSession.apply {
             setFlags(MediaSessionInitializationPolicy.FLAGS)
             setCallback(mediaSessionInterface)
-            setPlaybackState(MediaSessionInitializationPolicy.initialPlaybackState())
+            setPlaybackState(MediaSessionInitializationPolicy.initialPlaybackState(homePlayLabel))
             if (BuildConfig.TOPWAY_COMPAT_ENABLED) {
                 setSessionActivity(
                     android.app.PendingIntent.getActivity(
@@ -371,6 +374,12 @@ private constructor(
             L.d("Updating media metadata to $song with $parent")
             val requestToken = artworkRequestToken.incrementAndGet()
             if (song == null) {
+                // Index/queue acknowledgements can precede rich Song hydration. The primitive
+                // decoder still owns a real item; publish it instead of a transient empty title.
+                playbackManager.rawPlaybackMetadata?.let {
+                    updateRawMediaMetadata(it)
+                    return
+                }
                 // Nothing playing, reset the MediaSession and close the notification.
                 L.d("Nothing playing, resetting media session")
                 mediaSession.setMetadata(emptyMetadata)
@@ -627,15 +636,21 @@ private constructor(
     private fun invalidateSessionState() {
         L.d("Updating media session playback state")
         if (!hasPlayableSessionState()) {
-            mediaSession.setPlaybackState(MediaSessionInitializationPolicy.emptyPlaybackState())
+            mediaSession.setPlaybackState(
+                MediaSessionInitializationPolicy.emptyPlaybackState(homePlayLabel)
+            )
             setSessionActive(false, "state-empty")
             return
         }
         setSessionActive(true, "state-playable")
+        // Advertise the protocol on playable states as well as initial/empty states.
         val state =
-            playbackManager.progression
-                .intoPlaybackState(PlaybackStateCompat.Builder())
-                .setActions(MediaSessionInterface.ACTIONS)
+            MediaSessionInitializationPolicy.withDeadlineAction(
+                    playbackManager.progression
+                        .intoPlaybackState(PlaybackStateCompat.Builder())
+                        .setActions(MediaSessionInterface.ACTIONS),
+                    homePlayLabel,
+                )
                 .setActiveQueueItemId(
                     playbackManager.index.toLong().takeIf { it in publishedQueueIds }
                         ?: MediaSessionCompat.QueueItem.UNKNOWN_ID.toLong()
@@ -667,7 +682,9 @@ private constructor(
         if (hasPlayableSessionState()) {
             invalidateSessionState()
         } else {
-            mediaSession.setPlaybackState(MediaSessionInitializationPolicy.emptyPlaybackState())
+            mediaSession.setPlaybackState(
+                MediaSessionInitializationPolicy.emptyPlaybackState(homePlayLabel)
+            )
             setSessionActive(false, "attach-empty")
         }
     }

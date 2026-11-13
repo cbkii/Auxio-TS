@@ -261,8 +261,11 @@ class FastResumeCanonicalHandoffPolicyTest {
         assertTrue(FastResumeCanonicalHandoffPolicy.shouldForceRescan(true, true, null))
         // A complete enumeration already happened; rescanning cannot add the missing item.
         assertFalse(FastResumeCanonicalHandoffPolicy.shouldForceRescan(true, true, success))
-        // No usable library at all.
+        // No usable library at all, unless a completed enumeration proved it empty.
         assertTrue(FastResumeCanonicalHandoffPolicy.shouldForceRescan(false, false, success))
+        val empty = SourceScanOutcome.AuthoritativeEmpty(setOf("internal", "usb"))
+        assertFalse(FastResumeCanonicalHandoffPolicy.shouldForceRescan(false, false, empty))
+        assertFalse(FastResumeCanonicalHandoffPolicy.shouldForceRescan(true, true, empty))
     }
 
     @Test

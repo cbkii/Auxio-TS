@@ -27,6 +27,71 @@ import org.oxycblt.auxio.playback.state.DeferredPlayback
 
 class RestoreIntentArbiterTest {
     @Test
+    fun `expired bounded restore stays silent and drops fallback`() {
+        var now = 100L
+        val arbiter = RestoreIntentArbiter(elapsedMs = { now })
+        arbiter.begin(
+            DeferredPlayback.RestoreState(
+                play = true,
+                deadlineElapsedMs = 200L,
+                fallback = DeferredPlayback.ShuffleAll(),
+            )
+        )
+        assertTrue(arbiter.snapshot().play)
+        now = 200L
+        val committed = arbiter.finish()
+        assertFalse(committed.play)
+        assertNull(committed.fallback)
+        assertEquals(200L, committed.deadlineElapsedMs)
+        assertFalse(arbiter.snapshot().active)
+    }
+
+    @Test
+    fun `bounded restore cannot dispatch an unbounded fallback while still inside deadline`() {
+        val arbiter = RestoreIntentArbiter(elapsedMs = { 100L })
+        arbiter.begin(
+            DeferredPlayback.RestoreState(
+                play = true,
+                deadlineElapsedMs = 200L,
+                fallback = DeferredPlayback.ShuffleAll(),
+            )
+        )
+        assertTrue(arbiter.snapshot().play)
+        assertNull(arbiter.snapshot().fallback)
+        assertNull(arbiter.finish().fallback)
+    }
+
+    @Test
+    fun `explicit seek cancels bounded start without promoting it to unbounded autoplay`() {
+        val arbiter = RestoreIntentArbiter(elapsedMs = { 100L })
+        arbiter.begin(
+            DeferredPlayback.RestoreState(
+                play = true,
+                deadlineElapsedMs = 200L,
+                fallback = DeferredPlayback.ShuffleAll(),
+            )
+        )
+        assertTrue(arbiter.updateSeek(4_321L))
+        val intent = arbiter.finish()
+        assertEquals(4_321L, intent.seekPositionMs)
+        assertFalse(intent.play)
+        assertNull(intent.fallback)
+        assertNull(intent.deadlineElapsedMs)
+    }
+
+    @Test
+    fun `cancel and explicit pause prevent stale bounded restore playback`() {
+        val arbiter = RestoreIntentArbiter(elapsedMs = { 100L })
+        arbiter.begin(DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 200L))
+        arbiter.updatePlay(false)
+        assertFalse(arbiter.finish().play)
+        arbiter.begin(DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 200L))
+        arbiter.cancel()
+        assertFalse(arbiter.snapshot().active)
+        assertFalse(arbiter.finish().play)
+    }
+
+    @Test
     fun `duplicate restore coalesces and play requests upgrade eventual intent`() {
         val arbiter = RestoreIntentArbiter()
 
@@ -84,5 +149,44 @@ class RestoreIntentArbiterTest {
         arbiter.begin(DeferredPlayback.RestoreState(play = false, skipDelta = -1))
 
         assertEquals(-1, arbiter.snapshot().skipDelta)
+    }
+
+    @Test
+    fun `bounded Play joins an unbounded Play already owed and cannot expire it`() {
+        var now = 100L
+        val arbiter = RestoreIntentArbiter(elapsedMs = { now })
+        val shuffle = DeferredPlayback.ShuffleAll()
+        arbiter.begin(DeferredPlayback.RestoreState(play = true, fallback = shuffle))
+        arbiter.begin(DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 200L))
+        now = 5_000L
+        val committed = arbiter.finish()
+        assertTrue(committed.play)
+        assertNull(committed.deadlineElapsedMs)
+        assertEquals(shuffle, committed.fallback)
+    }
+
+    @Test
+    fun `bounded Play still bounds a passive restore and a later explicit Play lifts the bound`() {
+        var now = 100L
+        val arbiter = RestoreIntentArbiter(elapsedMs = { now })
+        arbiter.begin(DeferredPlayback.RestoreState(play = false))
+        arbiter.begin(DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 200L))
+        assertEquals(200L, arbiter.snapshot().deadlineElapsedMs)
+        arbiter.begin(DeferredPlayback.RestoreState(play = true))
+        now = 5_000L
+        val committed = arbiter.finish()
+        assertTrue(committed.play)
+        assertNull(committed.deadlineElapsedMs)
+    }
+
+    @Test
+    fun `a newer bounded Play replaces an earlier bounded Play`() {
+        var now = 100L
+        val arbiter = RestoreIntentArbiter(elapsedMs = { now })
+        arbiter.begin(DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 200L))
+        now = 250L
+        arbiter.begin(DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = 900L))
+        assertTrue(arbiter.snapshot().play)
+        assertEquals(900L, arbiter.snapshot().deadlineElapsedMs)
     }
 }

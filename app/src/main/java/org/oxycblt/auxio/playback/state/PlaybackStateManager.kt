@@ -276,6 +276,18 @@ interface PlaybackStateManager {
     fun playing(isPlaying: Boolean)
 
     /**
+     * Start playback only if it can be committed before [deadlineElapsedMs] on the elapsedRealtime
+     * clock. A request that cannot meet its deadline is dropped, never played late.
+     *
+     * @param deadlineElapsedMs The last instant at which playback may still be committed.
+     */
+    fun playingBefore(deadlineElapsedMs: Long) {
+        playDeferred(
+            DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = deadlineElapsedMs)
+        )
+    }
+
+    /**
      * Update the current [RepeatMode].
      *
      * @param repeatMode The new [RepeatMode].
@@ -405,6 +417,24 @@ interface PlaybackStateManager {
 internal object DeferredPlaybackColdControlPolicy {
     fun applyPause(pending: DeferredPlayback?): DeferredPlayback? =
         if (pending is DeferredPlayback.RestoreState) pending.copy(play = false) else pending
+
+    /**
+     * The action to keep while no player can consume it yet. The newest request wins, except that a
+     * bounded Play joins an unbounded Play that is already owed instead of replacing it: a deadline
+     * may drop its own request, never an earlier one that carried none.
+     */
+    fun admit(pending: DeferredPlayback?, incoming: DeferredPlayback): DeferredPlayback =
+        if (
+            incoming is DeferredPlayback.RestoreState &&
+                incoming.deadlineElapsedMs != null &&
+                pending is DeferredPlayback.RestoreState &&
+                pending.play &&
+                pending.deadlineElapsedMs == null
+        ) {
+            pending
+        } else {
+            incoming
+        }
 }
 
 class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
@@ -705,7 +735,8 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         val stateHolder = stateHolder
         if (stateHolder == null || !stateHolder.handleDeferred(action)) {
             L.d("Internal player not present or did not consume action, waiting")
-            pendingDeferredPlayback = action
+            pendingDeferredPlayback =
+                DeferredPlaybackColdControlPolicy.admit(pendingDeferredPlayback, action)
         }
     }
 
@@ -736,6 +767,16 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
             L.d("Pending action consumed")
             pendingDeferredPlayback = null
         }
+    }
+
+    @Synchronized
+    override fun playingBefore(deadlineElapsedMs: Long) {
+        val holder = stateHolder
+        if (holder != null) holder.playingBefore(deadlineElapsedMs)
+        else
+            playDeferred(
+                DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = deadlineElapsedMs)
+            )
     }
 
     @Synchronized

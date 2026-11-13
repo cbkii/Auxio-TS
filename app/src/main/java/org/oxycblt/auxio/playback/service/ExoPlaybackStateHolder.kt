@@ -130,6 +130,10 @@ class ExoPlaybackStateHolder(
     @Volatile private var currentRestoreJob: Job? = null
     @Volatile private var restoreGeneration = 0L
     private val restoreIntentArbiter = RestoreIntentArbiter()
+    // Main-thread owner of a bounded HOME request waiting for decoder readiness. No audio
+    // focus or playWhenReady is acquired until STATE_READY inside the original deadline.
+    private val homePlayGate = HomePlayDeadlineGate { android.os.SystemClock.elapsedRealtime() }
+    private var homePlayExpiry: Job? = null
     private var openAudioEffectSession = false
     private val audioManager = context.getSystemService(AudioManager::class.java)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -472,6 +476,9 @@ class ExoPlaybackStateHolder(
 
     private fun startPrimitiveQueueRestore(action: DeferredPlayback.RestoreState) {
         val newlyStarted = restoreIntentArbiter.begin(action)
+        // A replacement restore must not inherit an already armed HOME deadline for the
+        // previous current source. Coalesced requests retain their shared intent.
+        if (newlyStarted) clearHomePlay()
         if (!newlyStarted && currentRestoreJob?.isActive == true) {
             Ts18FirstAudioLatency.mark("restore_coalesced")
             L.d("Coalescing saved-state restore into the active restore generation")
@@ -552,8 +559,11 @@ class ExoPlaybackStateHolder(
                                     window = playableWindow,
                                     targetLogicalPosition = latestTarget,
                                     positionMs = position,
-                                    play = shouldPlayImmediately(finalIntent.play),
+                                    play =
+                                        finalIntent.deadlineElapsedMs == null &&
+                                            restoredPlayAllowed(finalIntent),
                                 )
+                                armHomePlay(finalIntent)
                                 Ts18FirstAudioLatency.mark("primitive_window_attached")
                                 if (!publishQueueReadyIfCurrent(generation)) return@withContext true
                                 completeRestore(
@@ -1613,6 +1623,7 @@ class ExoPlaybackStateHolder(
     }
 
     private fun cancelActiveRestore(reason: String, notify: Boolean = true) {
+        clearHomePlay()
         val job = currentRestoreJob
         val outcome = playbackManager.restoreOutcome
         val jobActive = job?.isActive == true
@@ -1635,6 +1646,7 @@ class ExoPlaybackStateHolder(
     }
 
     override fun playing(playing: Boolean) {
+        clearHomePlay()
         transportIntentVersion += 1
         if (restoreIntentArbiter.updatePlay(playing)) {
             Ts18FirstAudioLatency.mark("restore_play_state_coalesced")
@@ -1664,6 +1676,8 @@ class ExoPlaybackStateHolder(
     }
 
     override fun seekTo(positionMs: Long) {
+        // A later explicit seek cancels an earlier HOME start, including after raw attach.
+        clearHomePlay()
         transportIntentVersion += 1
         primitiveNavigationGeneration += 1
         pendingPrimitiveTarget = null
@@ -1794,6 +1808,10 @@ class ExoPlaybackStateHolder(
         ) {
             return false
         }
+        // An explicit queue-context replacement supersedes an earlier bounded HOME Play.
+        // Cancel only after the preflight checks, before mutating the playlist; automatic
+        // raw/primitive canonical handoff uses a separate path and retains its own intent.
+        clearHomePlay()
         val positionBefore = player.currentPosition.coerceAtLeast(0L)
         val uriBefore = player.currentMediaItem?.localConfiguration?.uri
         if (
@@ -2160,6 +2178,7 @@ class ExoPlaybackStateHolder(
 
     override fun onPlaybackStateChanged(playbackState: Int) {
         super<Player.Listener>.onPlaybackStateChanged(playbackState)
+        tryHomePlay()
 
         PlaybackReadinessPolicy.fromPlayer(
                 playbackState = playbackState,
@@ -2430,7 +2449,9 @@ class ExoPlaybackStateHolder(
                         )
                     startRawFastResume(
                         item = validation.item,
-                        play = shouldPlayImmediately(finalIntent.play),
+                        play =
+                            finalIntent.deadlineElapsedMs == null &&
+                                restoredPlayAllowed(finalIntent),
                         descriptor = rawDescriptor,
                         allowAllSongsFallback = rawDescriptor == null,
                         pendingNavigation =
@@ -2439,6 +2460,7 @@ class ExoPlaybackStateHolder(
                                 seekPositionMs = finalIntent.seekPositionMs,
                             ),
                     )
+                    armHomePlay(finalIntent)
                     optionalWorkGate.onRestoreFinished()
                     playbackManager.notifyRestoreOutcome(RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
                 }
@@ -2991,6 +3013,62 @@ class ExoPlaybackStateHolder(
         }
 
         return queue
+    }
+
+    private fun clearHomePlay() {
+        homePlayGate.cancel()
+        homePlayExpiry?.cancel()
+        homePlayExpiry = null
+    }
+
+    private fun armHomePlay(intent: RestoreIntentArbiter.Snapshot) {
+        clearHomePlay()
+        val deadline = intent.deadlineElapsedMs ?: return
+        if (!restoredPlayAllowed(intent)) return
+        playingBefore(deadline)
+    }
+
+    override fun playingBefore(deadlineElapsedMs: Long) {
+        // A playable item may already be published while its restore is still running.
+        // Join that restore instead of arming a gate for the soon-to-be-replaced decoder.
+        if (restoreIntentArbiter.snapshot().active) {
+            restoreIntentArbiter.begin(
+                DeferredPlayback.RestoreState(play = true, deadlineElapsedMs = deadlineElapsedMs)
+            )
+            return
+        }
+        clearHomePlay()
+        val deadline = deadlineElapsedMs
+        if (android.os.SystemClock.elapsedRealtime() >= deadline) return
+        homePlayGate.arm(deadline)
+        homePlayExpiry =
+            restoreScope.launch(Dispatchers.Main) {
+                delay((deadline - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L))
+                homePlayGate.expire(deadline)
+            }
+        tryHomePlay()
+    }
+
+    private fun tryHomePlay() {
+        val deadline = homePlayGate.expiresAt ?: return
+        if (homePlayGate.consumeIfReady(player.playbackState == Player.STATE_READY)) {
+            clearHomePlay()
+            transportIntentVersion += 1
+            HomePlayCommitPolicy.admit(
+                focusWasHeld = isAudioFocusHeld,
+                requestFocus = { requestAudioFocus() },
+                // Recheck after Binder focus admission, immediately before Play.
+                deadlinePermitsCommit = { homePlayGate.permitsCommit(deadline) },
+                releaseNewFocus = { abandonAudioFocus() },
+                commitPlay = { player.playWhenReady = true },
+            )
+        }
+    }
+
+    private fun restoredPlayAllowed(intent: RestoreIntentArbiter.Snapshot): Boolean {
+        if (!intent.play) return false
+        val deadline = intent.deadlineElapsedMs ?: return true
+        return android.os.SystemClock.elapsedRealtime() < deadline
     }
 
     private fun shouldPlayImmediately(playActionRequested: Boolean): Boolean {

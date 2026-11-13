@@ -104,6 +104,9 @@ interface PlaybackStateHolder {
      */
     fun playing(playing: Boolean)
 
+    /** Optional bounded HOME Play; unsupported holders refuse rather than starting late. */
+    fun playingBefore(deadlineElapsedMs: Long) {}
+
     /**
      * Seek to a position in the current song.
      *
@@ -409,12 +412,12 @@ private constructor(
      */
     fun intoPlaybackState(builder: PlaybackStateCompat.Builder): PlaybackStateCompat.Builder =
         builder.setState(
-            // State represents the user's preference, not the actual player state.
-            // Doing this produces a better experience in the media control UI.
-            if (isPlaying) {
-                PlaybackStateCompat.STATE_PLAYING
-            } else {
-                PlaybackStateCompat.STATE_PAUSED
+            // External controllers use PLAYING to acknowledge transport and commit handover.
+            // Preserve desired playback internally, but never publish buffering as that fact.
+            when {
+                isAdvancing -> PlaybackStateCompat.STATE_PLAYING
+                isPlaying -> PlaybackStateCompat.STATE_BUFFERING
+                else -> PlaybackStateCompat.STATE_PAUSED
             },
             initPositionMs,
             if (isAdvancing) {

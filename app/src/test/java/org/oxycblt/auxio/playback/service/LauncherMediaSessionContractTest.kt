@@ -31,6 +31,7 @@ import coil3.ImageLoader
 import java.lang.reflect.Proxy
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -68,6 +69,7 @@ class LauncherMediaSessionContractTest {
     private lateinit var holder: MediaSessionHolder
     private lateinit var callback: MediaSessionInterface
     private var raw: RawPlaybackMetadata? = null
+    private var progression = Progression.nil()
     private var shuffled = false
     private var index = 6
     private val commands = mutableListOf<Pair<String, Any?>>()
@@ -84,7 +86,7 @@ class LauncherMediaSessionContractTest {
                     "getParent",
                     "getQueueWindow" -> null
                     "getRawPlaybackMetadata" -> raw
-                    "getProgression" -> Progression.nil()
+                    "getProgression" -> progression
                     "getQueue" -> emptyList<Any>()
                     "getIndex" -> index
                     "getRepeatMode" -> RepeatMode.NONE
@@ -143,7 +145,7 @@ class LauncherMediaSessionContractTest {
                 "playDeferred" to
                     DeferredPlayback.RestoreState(
                         play = true,
-                        fallback = DeferredPlayback.ShuffleAll(play = true),
+                        fallback = null,
                         deadlineElapsedMs = deadline,
                     )
             ),
@@ -256,6 +258,56 @@ class LauncherMediaSessionContractTest {
         assertEquals(
             MediaSession.QueueItem.UNKNOWN_ID.toLong(),
             publication.publishedState?.activeQueueItemId,
+        )
+    }
+
+    @Test
+    fun `index acknowledgement keeps current primitive metadata and explicit source loss clears it`() {
+        raw = rawTrack()
+        holder.onRawPlaybackMetadataChanged(raw)
+        holder.onIndexMoved(index)
+        assertEquals(
+            raw?.uriString,
+            publishedMetadata().getString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID),
+        )
+        assertEquals(
+            "Cold track",
+            publishedMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE),
+        )
+        raw = rawTrack().copy(uriString = "file:///storage/usbdisk0/next.flac", title = "Next")
+        index++
+        holder.onIndexMoved(index)
+        assertEquals("Next", publishedMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE))
+        raw = null
+        holder.onIndexMoved(index)
+        assertTrue(
+            publishedMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE).isNullOrEmpty()
+        )
+    }
+
+    @Test
+    fun `session acknowledges Play only when decoder advances and keeps raw metadata while buffering`() {
+        raw = rawTrack()
+        holder.onRawPlaybackMetadataChanged(raw)
+        assertSessionProgression(true, false, PlaybackState.STATE_BUFFERING)
+        assertSessionProgression(true, true, PlaybackState.STATE_PLAYING)
+        assertSessionProgression(true, false, PlaybackState.STATE_BUFFERING)
+        assertSessionProgression(false, false, PlaybackState.STATE_PAUSED)
+    }
+
+    private fun assertSessionProgression(desired: Boolean, advancing: Boolean, expected: Int) {
+        progression = Progression.from(desired, advancing, 1200L)
+        holder.onProgressionChanged(progression)
+        assertEquals(expected, publication().publishedState?.state)
+        assertEquals(if (advancing) 1f else 0f, publication().publishedState?.playbackSpeed)
+        assertEquals(
+            "Cold track",
+            publishedMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE),
+        )
+        assertTrue(
+            publication().publishedState?.customActions?.any {
+                it.action == "org.oxycblt.auxio.action.HOME_PLAY_V1"
+            } == true
         )
     }
 

@@ -22,6 +22,7 @@ Files marked “Remove” are deleted rather than placed in an active archive. H
 | `docs/DEVELOPMENT.md` | authoritative/current | Keep as current authority or bounded overlay. |
 | `docs/DOCUMENTATION_INVENTORY.md` | authoritative/current | Keep as current authority or bounded overlay. |
 | `docs/DOFUN_VARIETY_COMPATIBILITY.md` | current topic guide | Keep; subordinate to canonical architecture. |
+| `docs/HOME_PLAY_DEADLINE.md` | current topic guide | Keep; subordinate to canonical architecture. |
 | `docs/LAUNCH_TO_CURRENTLY_PLAYING.md` | current topic guide | Keep; subordinate to canonical architecture. |
 | `docs/LSPOSED_BRIDGE_STABLE_RELEASE_ENGINEERING_BRIEF.md` | historical record | Remove from active repository surface. |
 | `docs/PRODUCT_SCOPE.md` | authoritative/current | Keep as current authority or bounded overlay. |
