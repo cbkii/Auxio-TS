@@ -374,6 +374,12 @@ private constructor(
             L.d("Updating media metadata to $song with $parent")
             val requestToken = artworkRequestToken.incrementAndGet()
             if (song == null) {
+                // Index/queue acknowledgements can precede rich Song hydration. The primitive
+                // decoder still owns a real item; publish it instead of a transient empty title.
+                playbackManager.rawPlaybackMetadata?.let {
+                    updateRawMediaMetadata(it)
+                    return
+                }
                 // Nothing playing, reset the MediaSession and close the notification.
                 L.d("Nothing playing, resetting media session")
                 mediaSession.setMetadata(emptyMetadata)

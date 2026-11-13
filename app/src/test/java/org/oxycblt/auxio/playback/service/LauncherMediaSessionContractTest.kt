@@ -259,6 +259,30 @@ class LauncherMediaSessionContractTest {
         )
     }
 
+    @Test
+    fun `index acknowledgement keeps current primitive metadata and explicit source loss clears it`() {
+        raw = rawTrack()
+        holder.onRawPlaybackMetadataChanged(raw)
+        holder.onIndexMoved(index)
+        assertEquals(
+            raw?.uriString,
+            publishedMetadata().getString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID),
+        )
+        assertEquals(
+            "Cold track",
+            publishedMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE),
+        )
+        raw = rawTrack().copy(uriString = "file:///storage/usbdisk0/next.flac", title = "Next")
+        index++
+        holder.onIndexMoved(index)
+        assertEquals("Next", publishedMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE))
+        raw = null
+        holder.onIndexMoved(index)
+        assertTrue(
+            publishedMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE).isNullOrEmpty()
+        )
+    }
+
     private fun assertRawQueue() {
         val publication = publication()
         val queue = requireNotNull(publication.publishedQueue)

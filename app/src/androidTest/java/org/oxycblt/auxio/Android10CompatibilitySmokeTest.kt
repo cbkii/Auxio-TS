@@ -199,6 +199,72 @@ class Android10CompatibilitySmokeTest {
         assertNull(failure.get(), failure.get())
     }
 
+    @Test
+    fun frameworkBrowserConnectsWithoutAndroidXClientHints() {
+        // ts-theme uses the framework client, unlike the compat smoke above. Exercise the
+        // actual exported Auxio wrapper and AndroidX server using that exact protocol edge.
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val completed = CountDownLatch(1)
+        val failure = AtomicReference<String?>()
+        lateinit var browser: android.media.browse.MediaBrowser
+        instrumentation.runOnMainSync {
+            browser =
+                android.media.browse.MediaBrowser(
+                    context,
+                    ComponentName(context, MusicService::class.java),
+                    object : android.media.browse.MediaBrowser.ConnectionCallback() {
+                        override fun onConnected() {
+                            try {
+                                val controller =
+                                    android.media.session.MediaController(
+                                        context,
+                                        browser.sessionToken,
+                                    )
+                                assertEquals(context.packageName, controller.packageName)
+                                assertTrue(browser.root.isNotEmpty())
+                                val state = requireNotNull(controller.playbackState)
+                                assertTrue(
+                                    state.actions and
+                                        android.media.session.PlaybackState.ACTION_PREPARE != 0L
+                                )
+                                assertTrue(
+                                    state.customActions.any {
+                                        it.action == "org.oxycblt.auxio.action.HOME_PLAY_V1"
+                                    }
+                                )
+                            } catch (error: Throwable) {
+                                failure.set(error.toString())
+                            } finally {
+                                completed.countDown()
+                            }
+                        }
+
+                        override fun onConnectionFailed() {
+                            failure.set("Framework browser connection failed")
+                            completed.countDown()
+                        }
+
+                        override fun onConnectionSuspended() {
+                            failure.set("Framework browser connection suspended")
+                            completed.countDown()
+                        }
+                    },
+                    null,
+                )
+            browser.connect()
+        }
+        try {
+            assertTrue(
+                "Framework browser callback timed out",
+                completed.await(30, TimeUnit.SECONDS),
+            )
+            assertNull(failure.get(), failure.get())
+        } finally {
+            instrumentation.runOnMainSync { browser.disconnect() }
+        }
+    }
+
     private fun launchTopwayAlias(action: String) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val launchIntent =
