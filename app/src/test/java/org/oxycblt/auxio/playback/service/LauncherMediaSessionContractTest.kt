@@ -69,6 +69,7 @@ class LauncherMediaSessionContractTest {
     private lateinit var holder: MediaSessionHolder
     private lateinit var callback: MediaSessionInterface
     private var raw: RawPlaybackMetadata? = null
+    private var progression = Progression.nil()
     private var shuffled = false
     private var index = 6
     private val commands = mutableListOf<Pair<String, Any?>>()
@@ -85,7 +86,7 @@ class LauncherMediaSessionContractTest {
                     "getParent",
                     "getQueueWindow" -> null
                     "getRawPlaybackMetadata" -> raw
-                    "getProgression" -> Progression.nil()
+                    "getProgression" -> progression
                     "getQueue" -> emptyList<Any>()
                     "getIndex" -> index
                     "getRepeatMode" -> RepeatMode.NONE
@@ -281,6 +282,32 @@ class LauncherMediaSessionContractTest {
         holder.onIndexMoved(index)
         assertTrue(
             publishedMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE).isNullOrEmpty()
+        )
+    }
+
+    @Test
+    fun `session acknowledges Play only when decoder advances and keeps raw metadata while buffering`() {
+        raw = rawTrack()
+        holder.onRawPlaybackMetadataChanged(raw)
+        assertSessionProgression(true, false, PlaybackState.STATE_BUFFERING)
+        assertSessionProgression(true, true, PlaybackState.STATE_PLAYING)
+        assertSessionProgression(true, false, PlaybackState.STATE_BUFFERING)
+        assertSessionProgression(false, false, PlaybackState.STATE_PAUSED)
+    }
+
+    private fun assertSessionProgression(desired: Boolean, advancing: Boolean, expected: Int) {
+        progression = Progression.from(desired, advancing, 1200L)
+        holder.onProgressionChanged(progression)
+        assertEquals(expected, publication().publishedState?.state)
+        assertEquals(if (advancing) 1f else 0f, publication().publishedState?.playbackSpeed)
+        assertEquals(
+            "Cold track",
+            publishedMetadata().getString(MediaMetadataCompat.METADATA_KEY_TITLE),
+        )
+        assertTrue(
+            publication().publishedState?.customActions?.any {
+                it.action == "org.oxycblt.auxio.action.HOME_PLAY_V1"
+            } == true
         )
     }
 
