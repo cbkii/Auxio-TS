@@ -402,7 +402,7 @@ private constructor(
                     albumTitle = album,
                     durationMs = song.durationMs,
                     mediaId = song.uid.toString(),
-                    mediaUri = song.uri.toString(),
+                    mediaUri = playbackManager.currentSourceUri ?: song.uri.toString(),
                     artworkUri =
                         song.cover?.let {
                             Uri.withAppendedPath(CoverProvider.CONTENT_URI, it.id).toString()
@@ -540,7 +540,7 @@ private constructor(
                     albumTitle = metadata.album,
                     durationMs = metadata.durationMs,
                     mediaId = metadata.uriString,
-                    mediaUri = metadata.uriString,
+                    mediaUri = playbackManager.currentSourceUri ?: metadata.uriString,
                     artworkUri = null,
                     hasArtwork = false,
                 )
@@ -726,7 +726,7 @@ private constructor(
                         albumTitle = song.album.name.resolve(context),
                         durationMs = song.durationMs,
                         mediaId = song.uid.toString(),
-                        mediaUri = song.uri.toString(),
+                        mediaUri = playbackManager.currentSourceUri ?: song.uri.toString(),
                         artworkUri = null,
                         hasArtwork = false,
                     )
@@ -738,7 +738,7 @@ private constructor(
                         albumTitle = rawMetadata.album,
                         durationMs = rawMetadata.durationMs,
                         mediaId = rawMetadata.uriString,
-                        mediaUri = rawMetadata.uriString,
+                        mediaUri = playbackManager.currentSourceUri ?: rawMetadata.uriString,
                         artworkUri = null,
                         hasArtwork = false,
                     )

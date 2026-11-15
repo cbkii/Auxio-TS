@@ -61,6 +61,9 @@ interface PlaybackStateManager {
     /** Raw pre-library playback metadata, non-null only during TS18 raw fast resume. */
     val rawPlaybackMetadata: RawPlaybackMetadata?
 
+    val currentSourceUri: String?
+        get() = rawPlaybackMetadata?.uriString
+
     /** Ask the playback owner, independently of metadata published to UI/session listeners. */
     val ownsPlaybackWork: Boolean
         get() = currentSong != null || rawPlaybackMetadata != null
@@ -489,6 +492,9 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
     override val rawPlaybackMetadata
         get() = stateMirror.rawPlaybackMetadata
+
+    override val currentSourceUri: String?
+        get() = stateHolder?.currentSourceUri
 
     @Volatile
     override var restoreOutcome: RestoreOutcome = RestoreOutcome.NOT_REQUESTED

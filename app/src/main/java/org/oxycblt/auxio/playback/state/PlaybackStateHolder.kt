@@ -33,6 +33,10 @@ import org.oxycblt.musikr.Song
  * @author Alexander Capehart (OxygenCobalt)
  */
 interface PlaybackStateHolder {
+    /** Physical decoder source; canonical metadata hydration must not change this identity. */
+    val currentSourceUri: String?
+        get() = rawPlaybackMetadata?.uriString
+
     /** Player/queue ownership remains authoritative during an empty publication mirror. */
     val ownsPlaybackWork: Boolean
         get() =

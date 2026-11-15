@@ -352,6 +352,9 @@ class ExoPlaybackStateHolder(
                 pendingPrimitiveTarget != null ||
                 queueCommitInProgress
 
+    override val currentSourceUri: String?
+        get() = player.currentMediaItem?.localConfiguration?.uri?.toString()
+
     override val rawPlaybackMetadata: RawPlaybackMetadata?
         get() {
             rawFastResumeItem?.let {

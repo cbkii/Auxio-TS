@@ -426,6 +426,7 @@ class PrimitiveTransportOwnerTest {
         drainUntil { holder.primitiveQueueWindow == null }
 
         assertSame(current, items[index])
+        assertEquals(current.localConfiguration?.uri?.toString(), holder.currentSourceUri)
         assertEquals(3, items.size)
         assertSame(playlist, holder.parent)
         assertEquals(2300L, position)
