@@ -77,7 +77,7 @@ class CrossUidTransitionSeedTest {
                     repeat(samples) { data.putShort(if (it % (16 + index * 2) < 8) 800 else -800) }
                     file.writeBytes(data.array())
                     QueueItemRefEntity(
-                        987L,
+                        1L,
                         index,
                         index,
                         null,
@@ -92,7 +92,7 @@ class CrossUidTransitionSeedTest {
             database.withTransaction {
                 dao.insertQueueSession(
                     QueueSessionEntity(
-                        987L,
+                        1L,
                         0,
                         0L,
                         RepeatMode.NONE,
@@ -104,7 +104,7 @@ class CrossUidTransitionSeedTest {
                 )
                 dao.insertQueueItemRefs(rows)
             }
-            assertEquals(3, dao.getAllQueueItems(987L).size)
+            assertEquals(3, dao.getAllQueueItems(1L).size)
         } finally {
             database.close()
         }

@@ -32,7 +32,12 @@ android {
             setVersionName("0.0.0-TS18-TESTING")
             setVersionCode(2100000000)
         }
-        def buildCommit = System.getenv("GITHUB_SHA") ?: "local-unrecorded"
+        // Cross-repository API29 qualification builds a pinned peer, not the runner's PR merge SHA.
+        def pinnedSource = System.getenv("AUXIO_TS_SOURCE_SHA")
+        if (pinnedSource != null && !(pinnedSource ==~ /[a-f0-9]{40}/)) {
+            throw new GradleException("AUXIO_TS_SOURCE_SHA must be an immutable source SHA")
+        }
+        def buildCommit = pinnedSource ?: System.getenv("GITHUB_SHA") ?: "local-unrecorded"
         buildConfigField "String", "BUILD_COMMIT", "\"${buildCommit.replace("\\", "\\\\").replace("\"", "\\\"")}\""
         buildConfigField "boolean", "TOPWAY_COMPAT_ENABLED", "true"
         buildConfigField "boolean", "TS18_TESTING", (System.getenv("AUXIO_TS_TESTING_APK") == "1").toString()
