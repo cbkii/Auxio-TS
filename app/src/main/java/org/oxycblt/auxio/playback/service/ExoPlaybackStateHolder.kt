@@ -127,6 +127,7 @@ class ExoPlaybackStateHolder(
     private val restoreScope = CoroutineScope(Dispatchers.IO + saveJob)
     private val mainScope = CoroutineScope(Dispatchers.Main.immediate + mainJob)
     private var currentSaveJob: Job? = null
+    private val persistenceGeneration = java.util.concurrent.atomic.AtomicLong()
     @Volatile private var currentRestoreJob: Job? = null
     @Volatile private var restoreGeneration = 0L
     private val restoreIntentArbiter = RestoreIntentArbiter()
@@ -179,6 +180,20 @@ class ExoPlaybackStateHolder(
     private var primitiveNavigationGeneration = 0L
     private var transportIntentVersion = 0L
     private var pendingRawShuffle: Boolean? = null
+    private var rawShuffleGeneration = 0L
+    private var pendingRawMutations = 0
+    private var queueCommitInProgress = false
+    private var transportLogStart = 0L
+    private var transportLogCount = 0
+    private var transportCommandId = 0L
+
+    private fun traceTransport(event: String, target: Int = -1) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - transportLogStart >= 1000L) { transportLogStart = now; transportLogCount = 0 }
+        if (transportLogCount++ >= 24) return
+        val descriptor = activePrimitiveWindow?.descriptor ?: rawFastResumeQueueDescriptor
+        L.tag("TS18Transport").i("event=$event command=$transportCommandId transport=$transportIntentVersion restore=$restoreGeneration navigation=$primitiveNavigationGeneration session=${descriptor?.sessionId ?: -1} revision=${descriptor?.revision ?: -1} committed=${descriptor?.currentLogicalPosition ?: player.currentMediaItemIndex} target=$target player=${player.playbackState} play=${player.playWhenReady} raw=${rawFastResumeItem != null} primitive=${activePrimitiveWindow != null} commit=$queueCommitInProgress")
+    }
     private var pendingLibraryRestoreAfterRawFailure: DeferredPlayback.RestoreState? = null
     private var markedFirstAdvancingAudio = false
 
@@ -321,6 +336,11 @@ class ExoPlaybackStateHolder(
     override val audioSessionId: Int
         get() = player.audioSessionId
 
+    override val ownsPlaybackWork: Boolean
+        get() = player.mediaItemCount > 0 || currentRestoreJob?.isActive == true ||
+            activePrimitiveWindow != null || rawFastResumeItem != null ||
+            pendingPrimitiveTarget != null || queueCommitInProgress
+
     override val rawPlaybackMetadata: RawPlaybackMetadata?
         get() {
             rawFastResumeItem?.let {
@@ -369,6 +389,10 @@ class ExoPlaybackStateHolder(
 
     override fun handleDeferred(action: DeferredPlayback): Boolean {
         if (action is DeferredPlayback.RestoreState) {
+            if (!action.play && action.fallback == null && ownsPlaybackWork) {
+                traceTransport("prepare-joined")
+                return true
+            }
             Ts18FirstAudioLatency.mark("restore_requested")
             startPrimitiveQueueRestore(action)
             return true
@@ -475,6 +499,7 @@ class ExoPlaybackStateHolder(
     }
 
     private fun startPrimitiveQueueRestore(action: DeferredPlayback.RestoreState) {
+        traceTransport("prepare-admitted")
         val newlyStarted = restoreIntentArbiter.begin(action)
         // A replacement restore must not inherit an already armed HOME deadline for the
         // previous current source. Coalesced requests retain their shared intent.
@@ -623,6 +648,7 @@ class ExoPlaybackStateHolder(
         allowImmediatePromotion: Boolean = true,
     ) {
         val localTarget = window.globalToLocal(targetLogicalPosition) ?: return
+        persistenceGeneration.incrementAndGet()
         val mediaItems = window.items.mapNotNull { it.buildPrimitiveMediaItemOrNull() }
         if (mediaItems.size != window.items.size) {
             L.w("Primitive queue window contains unresolved media references")
@@ -635,6 +661,7 @@ class ExoPlaybackStateHolder(
                 updatedAtMs = System.currentTimeMillis(),
             )
         activePrimitiveWindow = window.copy(descriptor = descriptor)
+        traceTransport("window-committed", targetLogicalPosition)
         canonicalCurrentSourceLease = null
         clearRawFastResumeState()
         pendingLibraryRestoreAfterRawFailure = null
@@ -1223,8 +1250,8 @@ class ExoPlaybackStateHolder(
         val audioSessionBefore = player.audioSessionId
         val currentUriBefore = player.currentMediaItem?.localConfiguration?.uri
 
+        persistenceGeneration.incrementAndGet()
         Ts18FirstAudioLatency.mark("canonical_commit_start")
-        activePrimitiveWindow = null
         if (
             !installCanonicalQueueAroundCurrentSource(
                 songs = prepared.songs,
@@ -1257,6 +1284,7 @@ class ExoPlaybackStateHolder(
         playbackManager.notifyRestoreOutcome(RestoreOutcome.RESTORED_EXISTING_SESSION)
         playbackManager.ack(this, StateAck.NewPlayback)
         playbackManager.ack(this, StateAck.ProgressionChanged)
+        traceTransport("canonical-committed")
         Ts18FirstAudioLatency.mark("primitive_queue_promoted")
         Ts18FirstAudioLatency.mark("canonical_active")
         startupReadinessController.publishPlaybackReadiness(PlaybackReadinessState.CANONICAL)
@@ -1277,6 +1305,20 @@ class ExoPlaybackStateHolder(
     }
 
     private fun installCanonicalQueueAroundCurrentSource(
+        songs: List<Song>,
+        currentHeapIndex: Int,
+        shuffleModeEnabled: Boolean,
+        shuffledMapping: List<Int>,
+    ): Boolean {
+        queueCommitInProgress = true
+        return try {
+            installCanonicalQueueAroundCurrentSourceNow(songs, currentHeapIndex, shuffleModeEnabled, shuffledMapping)
+        } finally {
+            queueCommitInProgress = false
+        }
+    }
+
+    private fun installCanonicalQueueAroundCurrentSourceNow(
         songs: List<Song>,
         currentHeapIndex: Int,
         shuffleModeEnabled: Boolean,
@@ -1646,6 +1688,9 @@ class ExoPlaybackStateHolder(
     }
 
     override fun playing(playing: Boolean) {
+        persistenceGeneration.incrementAndGet()
+        transportCommandId += 1
+        traceTransport("direction")
         clearHomePlay()
         transportIntentVersion += 1
         if (restoreIntentArbiter.updatePlay(playing)) {
@@ -1676,6 +1721,9 @@ class ExoPlaybackStateHolder(
     }
 
     override fun seekTo(positionMs: Long) {
+        persistenceGeneration.incrementAndGet()
+        transportCommandId += 1
+        traceTransport("seek")
         // A later explicit seek cancels an earlier HOME start, including after raw attach.
         clearHomePlay()
         transportIntentVersion += 1
@@ -1705,6 +1753,7 @@ class ExoPlaybackStateHolder(
     }
 
     override fun newPlayback(command: PlaybackCommand, play: Boolean) {
+        persistenceGeneration.incrementAndGet()
         cancelActiveRestore("new-playback")
         clearRawFastResumeState()
         clearPrimitiveQueueState()
@@ -1732,16 +1781,81 @@ class ExoPlaybackStateHolder(
         deferSave()
     }
 
+    /** Reorder the persisted raw queue without replacing the currently decoding source. */
+    private fun persistRawShuffle(shuffled: Boolean) {
+        val raw = rawFastResumeItem ?: return
+        val initial = rawFastResumeQueueDescriptor
+        if (initial == null) {
+            // No complete persisted queue exists. Do not manufacture one from a partial library.
+            playbackManager.ack(this, StateAck.QueueReordered)
+            return
+        }
+        val generation = ++rawShuffleGeneration
+        pendingRawShuffle = shuffled
+        pendingRawMutations += 1
+        rawFastResumeReconciliationJob?.cancel()
+        rawFastResumeReconciliationJob = null
+        playbackManager.ack(this, StateAck.QueueReordered)
+        restoreScope.launch {
+            try {
+                primitiveMutationMutex.withLock {
+                    val descriptor = withContext(Dispatchers.Main) {
+                        rawFastResumeQueueDescriptor?.takeIf {
+                            !released && rawFastResumeItem === raw &&
+                                generation == rawShuffleGeneration && it.sessionId == initial.sessionId
+                        }
+                    } ?: return@withLock
+                    val rows = persistenceRepository.readAllQueueItems(descriptor)
+                    if (rows.size != descriptor.totalCount) return@withLock
+                    val current = rows.singleOrNull {
+                        it.logicalPosition == descriptor.currentLogicalPosition
+                    }?.canonicalPosition ?: return@withLock
+                    val order = if (shuffled) {
+                        rows.map { it.canonicalPosition }.filter { it != current }.shuffled()
+                            .toMutableList().also {
+                                it.add(descriptor.currentLogicalPosition.coerceIn(0, it.size), current)
+                            }
+                    } else rows.sortedBy { it.canonicalPosition }.map { it.canonicalPosition }
+                    val stillOwned = withContext(Dispatchers.Main) {
+                        !released && rawFastResumeItem === raw && generation == rawShuffleGeneration &&
+                            rawFastResumeQueueDescriptor == descriptor
+                    }
+                    if (!stillOwned) return@withLock
+                    val committed = persistenceRepository.reorderQueue(
+                        descriptor, order, if (shuffled) ShuffleScope.ALL else ShuffleScope.OFF
+                    )
+                    withContext(Dispatchers.Main) {
+                        // A newer toggle can join an in-flight DB transaction. Advance its lease,
+                        // but only the latest request may settle the visible requested scope.
+                        if (!released && rawFastResumeItem === raw && rawFastResumeQueueDescriptor == descriptor) {
+                            if (committed != null) {
+                                persistenceGeneration.incrementAndGet()
+                                rawFastResumeQueueDescriptor = committed
+                            }
+                            L.tag("TS18Transport").i("rawShuffle=${if (committed != null) "committed" else "rejected"} generation=$generation revision=${committed?.revision ?: descriptor.revision}")
+                            deferSave()
+                        }
+                    }
+                }
+            } finally {
+                withContext(NonCancellable + Dispatchers.Main) {
+                    pendingRawMutations -= 1
+                    if (generation == rawShuffleGeneration && rawFastResumeItem === raw) {
+                        pendingRawShuffle = null
+                        playbackManager.ack(this@ExoPlaybackStateHolder, StateAck.QueueReordered)
+                    }
+                    if (!released && pendingRawMutations == 0) armFastResumeCanonicalRetry()
+                }
+            }
+        }
+    }
+
     override fun shuffled(shuffled: Boolean) {
+        persistenceGeneration.incrementAndGet()
         cancelActiveRestore("queue-reordered")
         if (deferPrimitiveQueueInteractionUntilPromotion("shuffle") { shuffled(shuffled) }) return
         if (rawFastResumeItem != null) {
-            pendingRawShuffle = shuffled
-            // Publish the requested scope immediately (via shuffleScopeHint) so the UI,
-            // MediaSession
-            // and persistence agree; the reorder itself is applied once the queue is hydrated.
-            playbackManager.ack(this, StateAck.QueueReordered)
-            armFastResumeCanonicalRetry()
+            persistRawShuffle(shuffled)
             return
         }
         activePrimitiveWindow?.let { window ->
@@ -1851,6 +1965,9 @@ class ExoPlaybackStateHolder(
     }
 
     override fun next() {
+        persistenceGeneration.incrementAndGet()
+        transportCommandId += 1
+        traceTransport("next")
         if (restoreIntentArbiter.addSkip(1)) {
             Ts18FirstAudioLatency.mark("restore_skip_coalesced")
             return
@@ -1897,6 +2014,9 @@ class ExoPlaybackStateHolder(
     }
 
     override fun prev() {
+        persistenceGeneration.incrementAndGet()
+        transportCommandId += 1
+        traceTransport("previous")
         if (restoreIntentArbiter.addSkip(-1)) {
             Ts18FirstAudioLatency.mark("restore_skip_coalesced")
             return
@@ -1938,6 +2058,9 @@ class ExoPlaybackStateHolder(
     }
 
     override fun goto(index: Int) {
+        persistenceGeneration.incrementAndGet()
+        transportCommandId += 1
+        traceTransport("goto")
         cancelActiveRestore("queue-index")
         if (deferPrimitiveQueueInteractionUntilPromotion("goto") { goto(index) }) return
         activePrimitiveWindow?.let { window ->
@@ -2131,6 +2254,7 @@ class ExoPlaybackStateHolder(
     }
 
     override fun reset(ack: StateAck.NewPlayback) {
+        persistenceGeneration.incrementAndGet()
         cancelActiveRestore("reset")
         clearRawFastResumeState()
         clearPrimitiveQueueState()
@@ -2212,6 +2336,7 @@ class ExoPlaybackStateHolder(
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         super<Player.Listener>.onMediaItemTransition(mediaItem, reason)
+        if (queueCommitInProgress) return
 
         if (activePrimitiveWindow != null) {
             synchronizePrimitivePositionFromPlayer()
@@ -2235,6 +2360,7 @@ class ExoPlaybackStateHolder(
 
     override fun onEvents(player: Player, events: Player.Events) {
         super<Player.Listener>.onEvents(player, events)
+        if (queueCommitInProgress) return
 
         PlaybackReadinessPolicy.fromPlayer(
                 playbackState = player.playbackState,
@@ -2591,6 +2717,7 @@ class ExoPlaybackStateHolder(
         libraryGeneration: Long,
         sourceOutcome: SourceScanOutcome?,
     ) {
+        if (pendingRawMutations > 0) return
         if (
             musicRepository.library !== library ||
                 sourceOutcome != musicRepository.lastSourceScanOutcome ||
@@ -2681,6 +2808,8 @@ class ExoPlaybackStateHolder(
                 withContext(Dispatchers.Main) {
                     if (
                         rawFastResumeItem !== raw ||
+                            pendingRawMutations > 0 ||
+                            rawFastResumeQueueDescriptor != descriptor ||
                             libraryGeneration != latestDeviceLibraryGeneration ||
                             sourceOutcome != latestDeviceSourceOutcome ||
                             musicRepository.library !== library ||
@@ -2737,6 +2866,7 @@ class ExoPlaybackStateHolder(
                                     (navigation.seekPositionMs ?: 0L).coerceAtLeast(0L)
                             }
 
+                    persistenceGeneration.incrementAndGet()
                     val positionBefore = player.currentPosition.coerceAtLeast(0L)
                     val audioSessionBefore = player.audioSessionId
                     if (
@@ -2941,24 +3071,30 @@ class ExoPlaybackStateHolder(
     }
 
     private fun save(cb: () -> Unit) {
+        val generation = persistenceGeneration.get()
         saveJob {
             if (sessionOngoing) {
-                saveFastResumeSnapshot()
-                savePlaybackState()
+                persistenceRepository.commitIfCurrent({ generation == persistenceGeneration.get() }) {
+                    savePlaybackState()
+                }
+                if (generation == persistenceGeneration.get()) saveFastResumeSnapshot()
             }
             withContext(Dispatchers.Main) { cb() }
         }
     }
 
     private fun deferSave() {
+        val generation = persistenceGeneration.get()
         saveJob {
             L.d("Waiting for save buffer")
             delay(SAVE_BUFFER)
             yield()
             L.d("Committing saved state")
             if (sessionOngoing) {
-                saveFastResumeSnapshot()
-                savePlaybackState()
+                persistenceRepository.commitIfCurrent({ generation == persistenceGeneration.get() }) {
+                    savePlaybackState()
+                }
+                if (generation == persistenceGeneration.get()) saveFastResumeSnapshot()
             }
         }
     }

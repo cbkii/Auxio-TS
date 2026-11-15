@@ -77,6 +77,8 @@ class PrimitiveTransportOwnerTest {
     private var savedState: PlaybackStateManager.SavedState? = null
     private var rescans = 0
     private var shuffleEnabled = false
+    private var rejectReorder = false
+    private var reorderCalls = 0
 
     @Before
     fun setUp() {
@@ -169,6 +171,8 @@ class PrimitiveTransportOwnerTest {
                         rows
                     }
                     "reorderQueue" -> {
+                        reorderCalls += 1
+                        if (rejectReorder) return@proxy null
                         val order = (args!![1] as List<*>).filterIsInstance<Int>()
                         val currentCanonical =
                             rows[descriptor.currentLogicalPosition].canonicalPosition
@@ -481,6 +485,49 @@ class PrimitiveTransportOwnerTest {
 
         holder.shuffled(false)
 
+        assertEquals(ShuffleScope.OFF, holder.shuffleScopeHint)
+        assertTrue(playing)
+        assertEquals(0, prepares)
+    }
+
+    @Test
+    fun passivePrepareJoinsPlayerEvenWhenMetadataMirrorsAreEmpty() {
+        ReflectionHelpers.setField(holder, "activePrimitiveWindow", null)
+        assertNull(holder.rawPlaybackMetadata)
+        assertTrue(holder.ownsPlaybackWork)
+        assertTrue(holder.handleDeferred(DeferredPlayback.RestoreState(play = false, fallback = null)))
+        assertNull(ReflectionHelpers.getField<Any?>(holder, "currentRestoreJob"))
+        assertEquals(0, prepares)
+    }
+
+    @Test
+    fun rawShuffleCommitsOrderAndScopeWithoutChangingTheDecoder() {
+        rawFastResumePublishesThePersistedAndRequestedShuffleScope()
+        drainUntil { ReflectionHelpers.getField<Int>(holder, "pendingRawMutations") == 0 }
+        val current = items[index]
+        holder.shuffled(true)
+        holder.shuffled(false)
+        holder.seekTo(4700L)
+        holder.playing(false)
+        drainUntil { ReflectionHelpers.getField<Int>(holder, "pendingRawMutations") == 0 }
+        assertEquals(ShuffleScope.OFF, descriptor.shuffleScope)
+        assertEquals(listOf(0, 1, 2), rows.map { it.canonicalPosition })
+        assertEquals(ShuffleScope.OFF, holder.shuffleScopeHint)
+        assertSame(current, items[index])
+        assertEquals(4700L, position)
+        assertFalse(playing)
+        assertEquals(0, prepares)
+        assertTrue(reorderCalls > 0)
+    }
+
+    @Test
+    fun rejectedRawReorderDoesNotPublishUncommittedScope() {
+        rawFastResumePublishesThePersistedAndRequestedShuffleScope()
+        drainUntil { ReflectionHelpers.getField<Int>(holder, "pendingRawMutations") == 0 }
+        rejectReorder = true
+        holder.shuffled(true)
+        drainUntil { ReflectionHelpers.getField<Int>(holder, "pendingRawMutations") == 0 }
+        assertEquals(ShuffleScope.OFF, descriptor.shuffleScope)
         assertEquals(ShuffleScope.OFF, holder.shuffleScopeHint)
         assertTrue(playing)
         assertEquals(0, prepares)

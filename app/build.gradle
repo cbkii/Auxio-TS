@@ -35,6 +35,7 @@ android {
         def buildCommit = System.getenv("GITHUB_SHA") ?: "local-unrecorded"
         buildConfigField "String", "BUILD_COMMIT", "\"${buildCommit.replace("\\", "\\\\").replace("\"", "\\\"")}\""
         buildConfigField "boolean", "TOPWAY_COMPAT_ENABLED", "true"
+        buildConfigField "boolean", "TS18_TESTING", (System.getenv("AUXIO_TS_TESTING_APK") == "1").toString()
 
         minSdk min_sdk
         // randomly flickers between deprecated and required depending on what mood my gradle is in

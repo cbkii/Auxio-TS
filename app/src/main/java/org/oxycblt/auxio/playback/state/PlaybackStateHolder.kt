@@ -33,6 +33,10 @@ import org.oxycblt.musikr.Song
  * @author Alexander Capehart (OxygenCobalt)
  */
 interface PlaybackStateHolder {
+    /** Player/queue ownership remains authoritative during an empty publication mirror. */
+    val ownsPlaybackWork: Boolean
+        get() = rawPlaybackMetadata != null || primitiveQueueWindow != null || resolveQueue().heap.isNotEmpty()
+
     /** The current [Progression] state of the audio player. */
     val progression: Progression
 

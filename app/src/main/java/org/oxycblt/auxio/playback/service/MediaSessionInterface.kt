@@ -78,7 +78,7 @@ constructor(
         super.onPrepare()
         logTransport(
             command = "PREPARE",
-            result = "ADMITTED",
+            result = if (hasCurrentMedia()) "JOINED" else "REQUESTED",
             detail = "currentMedia=${hasCurrentMedia()}",
         )
         if (!hasCurrentMedia()) {
@@ -127,7 +127,7 @@ constructor(
         val hasCurrentSong = playbackManager.currentSong != null
         val hasRawPlaybackMetadata = playbackManager.rawPlaybackMetadata != null
         if (
-            shouldResumeExistingPlayback(
+            playbackManager.ownsPlaybackWork || shouldResumeExistingPlayback(
                 hasCurrentSong = hasCurrentSong,
                 hasRawPlaybackMetadata = hasRawPlaybackMetadata,
             )
@@ -250,7 +250,7 @@ constructor(
     }
 
     private fun hasCurrentMedia(): Boolean =
-        playbackManager.currentSong != null || playbackManager.rawPlaybackMetadata != null
+        playbackManager.ownsPlaybackWork || playbackManager.currentSong != null || playbackManager.rawPlaybackMetadata != null
 
     private fun startColdRestore(
         play: Boolean,
@@ -269,6 +269,7 @@ constructor(
     }
 
     private fun logTransport(command: String, result: String, detail: String? = null) {
+        L.tag("TS18Transport").i("origin=session command=$command result=$result")
         launcherTelemetry.log(
             category = DiagnosticJournal.CAT_PLAYBACK,
             event = "MediaSession transport",

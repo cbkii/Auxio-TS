@@ -61,6 +61,10 @@ interface PlaybackStateManager {
     /** Raw pre-library playback metadata, non-null only during TS18 raw fast resume. */
     val rawPlaybackMetadata: RawPlaybackMetadata?
 
+    /** Ask the playback owner, independently of metadata published to UI/session listeners. */
+    val ownsPlaybackWork: Boolean
+        get() = currentSong != null || rawPlaybackMetadata != null
+
     /** The current outcome of a startup playback restoration attempt. */
     val restoreOutcome: RestoreOutcome
 
@@ -511,6 +515,9 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
     override val isAudioFocusHeld: Boolean
         get() = stateHolder?.isAudioFocusHeld == true
 
+    override val ownsPlaybackWork: Boolean
+        get() = stateHolder?.ownsPlaybackWork == true || currentSong != null || rawPlaybackMetadata != null
+
     @Synchronized
     override fun addListener(listener: Listener) {
         L.d("Adding $listener to listeners")
@@ -722,7 +729,7 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
                 action.fallback == null &&
                 !PassivePreparationPolicy.mayRestore(
                     hasPendingAction = pendingDeferredPlayback != null,
-                    hasCurrentMedia = currentSong != null || rawPlaybackMetadata != null,
+                    hasCurrentMedia = ownsPlaybackWork,
                     restoreInProgress =
                         restoreOutcome == RestoreOutcome.WAITING_FOR_PLAYER ||
                             restoreOutcome == RestoreOutcome.WAITING_FOR_LIBRARY ||

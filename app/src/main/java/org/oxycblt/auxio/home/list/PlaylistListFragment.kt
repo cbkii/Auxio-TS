@@ -118,6 +118,7 @@ class PlaylistListFragment :
             homeModel.playlistList,
             musicModel.indexingState,
             musicModel.startupReadinessState,
+            playbackModel.rawPlaybackMetadata,
             ::updateNoMusicIndicator,
         )
         collectImmediately(listModel.selected, ::updateSelection)
@@ -186,6 +187,7 @@ class PlaylistListFragment :
         playlists: List<Playlist>,
         indexingState: IndexingState?,
         startupState: StartupReadinessState,
+        raw: org.oxycblt.auxio.playback.state.RawPlaybackMetadata?,
     ) {
         val binding = requireBinding()
         if (!empty && playlists.isEmpty()) {
@@ -193,6 +195,7 @@ class PlaylistListFragment :
                 empty = false,
                 indexingState = indexingState,
                 startupState = startupState,
+                cachedPlaybackAvailable = raw != null,
                 emptyMessage = R.string.lng_empty_playlists,
                 actionVisibleWhenNotEmpty = true,
             )
@@ -203,6 +206,7 @@ class PlaylistListFragment :
                 empty = empty,
                 indexingState = indexingState,
                 startupState = startupState,
+                cachedPlaybackAvailable = raw != null,
                 emptyMessage = R.string.lng_empty_playlists,
             )
             binding.homeNoMusicAction.text = getString(R.string.set_locations)
