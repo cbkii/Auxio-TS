@@ -40,8 +40,9 @@ import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 /**
  * Test-APK-only fault injection on the existing Auxio session. Every Next still executes the real
  * callback/player; the source process publishes a 250 ms blank BUFFERING interval before forwarding
- * it. There is no fixture session/player or production hook. A separate UID observes the real Binder
- * publications. This probes a forced gap, not evidence that the repaired source naturally emits one.
+ * it. There is no fixture session/player or production hook. A separate UID observes the real
+ * Binder publications. This probes a forced gap, not evidence that the repaired source naturally
+ * emits one.
  */
 internal object CrossUidMetadataGapProbe {
     @SuppressLint("PrivateApi", "BlockedPrivateApi")
@@ -72,8 +73,9 @@ internal object CrossUidMetadataGapProbe {
                     object : MediaBrowserCompat.ConnectionCallback() {
                         override fun onConnected() {
                             try {
-                                // Same-process instrumentation only, API29/debug/emulator checked by
-                                // the caller. Match the actual browser token before touching a holder.
+                                // Same-process instrumentation only; the caller checks
+                                // API29/debug/emulator. Match the actual browser token
+                                // before touching a holder.
                                 val thread =
                                     Class.forName("android.app.ActivityThread")
                                         .getDeclaredMethod("currentActivityThread")
@@ -87,7 +89,8 @@ internal object CrossUidMetadataGapProbe {
                                 val holder = field(fragment, "sessionHolder")
                                 val target = field(holder, "mediaSession") as MediaSessionCompat
                                 val callback =
-                                    field(holder, "mediaSessionInterface") as MediaSessionCompat.Callback
+                                    field(holder, "mediaSessionInterface")
+                                        as MediaSessionCompat.Callback
                                 session = target
                                 original = callback
                                 target.setCallback(
@@ -101,9 +104,12 @@ internal object CrossUidMetadataGapProbe {
 
                                         override fun onSkipToNext() {
                                             check(!inGap) { "Overlapping probe commands" }
-                                            val state = checkNotNull(target.controller.playbackState)
+                                            val state =
+                                                checkNotNull(target.controller.playbackState)
                                             inGap = true
-                                            target.setMetadata(MediaMetadataCompat.Builder().build())
+                                            target.setMetadata(
+                                                MediaMetadataCompat.Builder().build()
+                                            )
                                             target.setPlaybackState(
                                                 PlaybackStateCompat.Builder(state)
                                                     .setState(
@@ -114,6 +120,7 @@ internal object CrossUidMetadataGapProbe {
                                                     )
                                                     .setActiveQueueItemId(
                                                         MediaSessionCompat.QueueItem.UNKNOWN_ID
+                                                            .toLong()
                                                     )
                                                     .build()
                                             )
@@ -174,7 +181,9 @@ internal object CrossUidMetadataGapProbe {
         var type: Class<*>? = instance.javaClass
         while (type != null) {
             try {
-                return checkNotNull(type.getDeclaredField(name).apply { isAccessible = true }.get(instance))
+                return checkNotNull(
+                    type.getDeclaredField(name).apply { isAccessible = true }.get(instance)
+                )
             } catch (_: NoSuchFieldException) {
                 type = type.superclass
             }
