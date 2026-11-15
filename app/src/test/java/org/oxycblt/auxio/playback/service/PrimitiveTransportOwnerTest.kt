@@ -34,6 +34,12 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
 import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -82,6 +88,7 @@ class PrimitiveTransportOwnerTest {
     private var callbackOnTopologyMutation = false
     private var synchronousCallbacks = 0
     private var publicationsDuringCommit = 0
+    private val fastSnapshotWrites = java.util.concurrent.atomic.AtomicInteger()
 
     @Before
     fun setUp() {
@@ -191,6 +198,10 @@ class PrimitiveTransportOwnerTest {
         val persistence =
             proxy<PersistenceRepository> { method, args ->
                 when (method.name) {
+                    "saveFastResumeSnapshot" -> {
+                        fastSnapshotWrites.incrementAndGet()
+                        true
+                    }
                     "updateQueuePosition" -> true
                     "readAllQueueItems" -> {
                         allQueueReads += 1
@@ -263,6 +274,42 @@ class PrimitiveTransportOwnerTest {
     @After
     fun tearDown() {
         holder.release()
+    }
+
+    @Test
+    fun queuedFastSnapshotClearCannotOverwriteANewerTransportGeneration() = runBlocking {
+        val mutex = ReflectionHelpers.getField<Mutex>(holder, "fastResumeSaveMutex")
+        val generation =
+            ReflectionHelpers.getField<java.util.concurrent.atomic.AtomicLong>(
+                holder,
+                "persistenceGeneration",
+            )
+        val commit =
+            ExoPlaybackStateHolder::class
+                .java
+                .declaredMethods
+                .single { it.name == "commitFastResumeSnapshot" }
+                .apply { isAccessible = true }
+        suspend fun clear(at: Long) =
+            suspendCoroutine<Unit> { continuation ->
+                val result = commit.invoke(holder, null, at, continuation)
+                if (result !== COROUTINE_SUSPENDED) continuation.resume(Unit)
+            }
+        mutex.lock()
+        val oldGeneration = generation.get()
+        val entered = CountDownLatch(1)
+        val stale =
+            async(Dispatchers.IO) {
+                entered.countDown()
+                clear(oldGeneration)
+            }
+        assertTrue(entered.await(1, TimeUnit.SECONDS))
+        generation.incrementAndGet()
+        mutex.unlock()
+        withTimeout(5000) { stale.await() }
+        assertEquals(0, fastSnapshotWrites.get())
+        clear(generation.get())
+        assertEquals(1, fastSnapshotWrites.get())
     }
 
     @Test

@@ -128,6 +128,7 @@ class ExoPlaybackStateHolder(
     private val mainScope = CoroutineScope(Dispatchers.Main.immediate + mainJob)
     private var currentSaveJob: Job? = null
     private val persistenceGeneration = java.util.concurrent.atomic.AtomicLong()
+    private val fastResumeSaveMutex = Mutex()
     @Volatile private var currentRestoreJob: Job? = null
     @Volatile private var restoreGeneration = 0L
     private val restoreIntentArbiter = RestoreIntentArbiter()
@@ -2438,7 +2439,8 @@ class ExoPlaybackStateHolder(
             fastResumeCanonicalRetryJob = null
             player.setMediaItems(emptyList())
             player.pause()
-            saveScope.launch { persistenceRepository.saveFastResumeSnapshot(null) }
+            val generation = persistenceGeneration.incrementAndGet()
+            saveScope.launch { commitFastResumeSnapshot(null, generation) }
             playbackManager.ack(this, StateAck.ProgressionChanged)
             return
         }
@@ -2994,7 +2996,18 @@ class ExoPlaybackStateHolder(
             player.repeatMode == Player.REPEAT_MODE_ONE && playbackSettings.pauseOnRepeat
     }
 
-    private suspend fun saveFastResumeSnapshot() {
+    private suspend fun commitFastResumeSnapshot(snapshot: FastResumeSnapshot?, generation: Long) {
+        fastResumeSaveMutex.withLock {
+            // Metadata resolution and a previous preference commit may suspend this writer.
+            // Re-check at the owning commit boundary; a late save/clear cannot replace a new item.
+            if (generation != persistenceGeneration.get()) return@withLock
+            if (!persistenceRepository.saveFastResumeSnapshot(snapshot)) {
+                L.w("Unable to persist TS18 fast-resume snapshot")
+            }
+        }
+    }
+
+    private suspend fun saveFastResumeSnapshot(generation: Long) {
         val (song, progression, raw) =
             withContext(Dispatchers.Main) {
                 Triple(playbackManager.currentSong, playbackManager.progression, rawFastResumeItem)
@@ -3029,9 +3042,7 @@ class ExoPlaybackStateHolder(
                         )
                     else -> null
                 }
-            if (!persistenceRepository.saveFastResumeSnapshot(snapshot)) {
-                L.w("Unable to persist pre-library fast-resume snapshot")
-            }
+            commitFastResumeSnapshot(snapshot, generation)
             return
         }
 
@@ -3073,9 +3084,7 @@ class ExoPlaybackStateHolder(
                 savedAtMs = System.currentTimeMillis(),
             )
 
-        if (!persistenceRepository.saveFastResumeSnapshot(snapshot)) {
-            L.w("Unable to persist TS18 fast-resume snapshot")
-        }
+        commitFastResumeSnapshot(snapshot, generation)
     }
 
     private suspend fun savePlaybackState() {
@@ -3126,7 +3135,7 @@ class ExoPlaybackStateHolder(
                 }) {
                     savePlaybackState()
                 }
-                if (generation == persistenceGeneration.get()) saveFastResumeSnapshot()
+                if (generation == persistenceGeneration.get()) saveFastResumeSnapshot(generation)
             }
             withContext(Dispatchers.Main) { if (generation == persistenceGeneration.get()) cb() }
         }
@@ -3145,7 +3154,7 @@ class ExoPlaybackStateHolder(
                 }) {
                     savePlaybackState()
                 }
-                if (generation == persistenceGeneration.get()) saveFastResumeSnapshot()
+                if (generation == persistenceGeneration.get()) saveFastResumeSnapshot(generation)
             }
         }
     }
