@@ -86,6 +86,7 @@ class LauncherMediaSessionContractTest {
                     "getParent",
                     "getQueueWindow" -> null
                     "getRawPlaybackMetadata" -> raw
+                    "getOwnsPlaybackWork" -> raw != null
                     "getProgression" -> progression
                     "getQueue" -> emptyList<Any>()
                     "getIndex" -> index

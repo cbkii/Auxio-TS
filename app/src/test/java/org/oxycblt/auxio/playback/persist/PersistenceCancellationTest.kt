@@ -110,10 +110,9 @@ class PersistenceCancellationTest {
     fun `reorder rejects a replaced session or revision before touching rows`() = runBlocking {
         val dao = database.queueDao()
         dao.insertQueueSession(
-            QueueSessionEntity(2L, 0, 6300L, RepeatMode.NONE, ShuffleScope.OFF, 3, 9L, 99L)
+            QueueSessionEntity(1L, 0, 6300L, RepeatMode.NONE, ShuffleScope.OFF, 3, 9L, 99L)
         )
         val repository = repository(dao)
-        assertNull(repository.reorderQueue(descriptor(), listOf(2, 1, 0), ShuffleScope.ALL))
         assertNull(
             repository.reorderQueue(
                 descriptor().copy(sessionId = 2L),
@@ -121,6 +120,7 @@ class PersistenceCancellationTest {
                 ShuffleScope.ALL,
             )
         )
+        assertNull(repository.reorderQueue(descriptor(), listOf(2, 1, 0), ShuffleScope.ALL))
         val session = requireNotNull(dao.getQueueSession())
         assertEquals(ShuffleScope.OFF, session.shuffleScope)
         assertEquals(6300L, session.positionMs)
