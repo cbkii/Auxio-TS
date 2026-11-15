@@ -3137,7 +3137,9 @@ class ExoPlaybackStateHolder(
                 }
                 if (generation == persistenceGeneration.get()) saveFastResumeSnapshot(generation)
             }
-            withContext(Dispatchers.Main) { if (generation == persistenceGeneration.get()) cb() }
+            // The generation fences persisted state only. The callback (session end) checks the
+            // live player itself; a newer transport generation must not strand the session.
+            withContext(Dispatchers.Main) { cb() }
         }
     }
 

@@ -313,6 +313,32 @@ class PrimitiveTransportOwnerTest {
     }
 
     @Test
+    fun newerTransportGenerationCannotStrandTheSessionEndCallback() {
+        val generation =
+            ReflectionHelpers.getField<java.util.concurrent.atomic.AtomicLong>(
+                holder,
+                "persistenceGeneration",
+            )
+        val save =
+            ExoPlaybackStateHolder::class
+                .java
+                .declaredMethods
+                .single { it.name == "save" }
+                .apply { isAccessible = true }
+        var ended = 0
+        val callback: () -> Unit = { ended += 1 }
+        save.invoke(holder, callback)
+        // Main is paused, so this newer command always precedes the callback check.
+        generation.incrementAndGet()
+        val deadline = System.currentTimeMillis() + 5000L
+        while (ended == 0 && System.currentTimeMillis() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(10L)
+        }
+        assertEquals(1, ended)
+    }
+
+    @Test
     fun rememberPausePreservesPlayingAndPausedIntentThroughLocalNavigation() {
         holder.next()
         assertTrue(playing)
