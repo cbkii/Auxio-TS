@@ -28,6 +28,7 @@ import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.test.platform.app.InstrumentationRegistry
+import com.tw.music.MusicService
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -64,7 +65,7 @@ internal object CrossUidMetadataGapProbe {
             browser =
                 MediaBrowserCompat(
                     context,
-                    ComponentName(context.packageName, "com.tw.music.MusicService"),
+                    ComponentName(context, MusicService::class.java),
                     object : MediaBrowserCompat.ConnectionCallback() {
                         override fun onConnected() {
                             try {
