@@ -28,7 +28,6 @@ import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.test.platform.app.InstrumentationRegistry
-import com.tw.music.MusicService
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -36,6 +35,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 
 /**
  * Test-APK-only fault injection on the existing Auxio session. Every Next still executes the real
@@ -65,7 +65,10 @@ internal object CrossUidMetadataGapProbe {
             browser =
                 MediaBrowserCompat(
                     context,
-                    ComponentName(context, MusicService::class.java),
+                    ComponentName(
+                        context,
+                        TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java),
+                    ),
                     object : MediaBrowserCompat.ConnectionCallback() {
                         override fun onConnected() {
                             try {
