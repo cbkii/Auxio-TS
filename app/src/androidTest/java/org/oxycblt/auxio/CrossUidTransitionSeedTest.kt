@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Auxio Project
- * Android10CompatibilitySmokeTest.kt is part of Auxio.
+ * CrossUidTransitionSeedTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -52,24 +52,61 @@ class CrossUidTransitionSeedTest {
         val database = PersistenceRoomModule().database(context)
         try {
             val dao = database.queueDao()
-            assertNull("Use a fresh emulator installation; existing queues are protected", dao.getQueueSession())
-            val rows = (0..2).map { index ->
-                val file = File(context.filesDir, "pair-transition-$index.wav")
-                val samples = 8000 * 20
-                val data = ByteBuffer.allocate(44 + samples * 2).order(ByteOrder.LITTLE_ENDIAN)
-                data.put("RIFF".toByteArray()).putInt(36 + samples * 2).put("WAVEfmt ".toByteArray())
-                data.putInt(16).putShort(1).putShort(1).putInt(8000).putInt(16000).putShort(2).putShort(16)
-                data.put("data".toByteArray()).putInt(samples * 2)
-                repeat(samples) { data.putShort(if (it % (16 + index * 2) < 8) 800 else -800) }
-                file.writeBytes(data.array())
-                QueueItemRefEntity(987L, index, index, null, android.net.Uri.fromFile(file).toString(), file.path,
-                    "Pair item $index", "Pair fixture", null, 20000L)
-            }
+            assertNull(
+                "Use a fresh emulator installation; existing queues are protected",
+                dao.getQueueSession(),
+            )
+            val rows =
+                (0..2).map { index ->
+                    val file = File(context.filesDir, "pair-transition-$index.wav")
+                    val samples = 8000 * 20
+                    val data = ByteBuffer.allocate(44 + samples * 2).order(ByteOrder.LITTLE_ENDIAN)
+                    data
+                        .put("RIFF".toByteArray())
+                        .putInt(36 + samples * 2)
+                        .put("WAVEfmt ".toByteArray())
+                    data
+                        .putInt(16)
+                        .putShort(1)
+                        .putShort(1)
+                        .putInt(8000)
+                        .putInt(16000)
+                        .putShort(2)
+                        .putShort(16)
+                    data.put("data".toByteArray()).putInt(samples * 2)
+                    repeat(samples) { data.putShort(if (it % (16 + index * 2) < 8) 800 else -800) }
+                    file.writeBytes(data.array())
+                    QueueItemRefEntity(
+                        987L,
+                        index,
+                        index,
+                        null,
+                        android.net.Uri.fromFile(file).toString(),
+                        file.path,
+                        "Pair item $index",
+                        "Pair fixture",
+                        null,
+                        20000L,
+                    )
+                }
             database.withTransaction {
-                dao.insertQueueSession(QueueSessionEntity(987L, 0, 0L, RepeatMode.NONE, ShuffleScope.OFF, rows.size, 1L, 1L))
+                dao.insertQueueSession(
+                    QueueSessionEntity(
+                        987L,
+                        0,
+                        0L,
+                        RepeatMode.NONE,
+                        ShuffleScope.OFF,
+                        rows.size,
+                        1L,
+                        1L,
+                    )
+                )
                 dao.insertQueueItemRefs(rows)
             }
             assertEquals(3, dao.getAllQueueItems(987L).size)
-        } finally { database.close() }
+        } finally {
+            database.close()
+        }
     }
 }

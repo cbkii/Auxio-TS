@@ -62,6 +62,7 @@ interface PersistenceRepository {
         commit()
         return isCurrent()
     }
+
     /** Read primitive queue session metadata without requiring a loaded Musikr library. */
     suspend fun readQueueDescriptor(): QueueDescriptor?
 
@@ -148,7 +149,10 @@ constructor(
 ) : PersistenceRepository {
     private class SupersededCommit : RuntimeException()
 
-    override suspend fun commitIfCurrent(isCurrent: () -> Boolean, commit: suspend () -> Unit): Boolean =
+    override suspend fun commitIfCurrent(
+        isCurrent: () -> Boolean,
+        commit: suspend () -> Unit,
+    ): Boolean =
         try {
             database.withTransaction {
                 if (!isCurrent()) return@withTransaction false
@@ -160,6 +164,7 @@ constructor(
             committedCanonicalQueue = null
             false
         }
+
     private val fastResumePrefs by lazy {
         context.getSharedPreferences(FAST_RESUME_PREFS, Context.MODE_PRIVATE)
     }

@@ -118,11 +118,13 @@ class Auxio : Application() {
         }
         if (BuildConfig.TS18_TESTING && !BuildConfig.DEBUG) {
             // The TESTING lane retains only explicitly tagged, numeric transport observations.
-            Timber.plant(object : Timber.Tree() {
-                override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-                    if (tag == "TS18Transport") android.util.Log.i(tag, message.take(768))
+            Timber.plant(
+                object : Timber.Tree() {
+                    override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
+                        if (tag == "TS18Transport") android.util.Log.i(tag, message.take(768))
+                    }
                 }
-            })
+            )
         }
         if (BuildConfig.DEBUG) {
             journal.configurePersistence(File(filesDir, "diagnostics/sessions"))

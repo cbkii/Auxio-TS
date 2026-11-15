@@ -49,6 +49,7 @@ import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
 import org.oxycblt.musikr.tag.Name
+import timber.log.Timber as L
 
 class MediaSessionInterface
 @Inject
@@ -127,10 +128,11 @@ constructor(
         val hasCurrentSong = playbackManager.currentSong != null
         val hasRawPlaybackMetadata = playbackManager.rawPlaybackMetadata != null
         if (
-            playbackManager.ownsPlaybackWork || shouldResumeExistingPlayback(
-                hasCurrentSong = hasCurrentSong,
-                hasRawPlaybackMetadata = hasRawPlaybackMetadata,
-            )
+            playbackManager.ownsPlaybackWork ||
+                shouldResumeExistingPlayback(
+                    hasCurrentSong = hasCurrentSong,
+                    hasRawPlaybackMetadata = hasRawPlaybackMetadata,
+                )
         ) {
             logTransport(
                 command = "PLAY",
@@ -250,7 +252,9 @@ constructor(
     }
 
     private fun hasCurrentMedia(): Boolean =
-        playbackManager.ownsPlaybackWork || playbackManager.currentSong != null || playbackManager.rawPlaybackMetadata != null
+        playbackManager.ownsPlaybackWork ||
+            playbackManager.currentSong != null ||
+            playbackManager.rawPlaybackMetadata != null
 
     private fun startColdRestore(
         play: Boolean,

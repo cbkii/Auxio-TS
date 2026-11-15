@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 
@@ -33,8 +34,11 @@ class TestingPublisherContracts(unittest.TestCase):
         self.assertIn('System.getenv("AUXIO_TS_TESTING_APK") == "1"', GRADLE)
         self.assertIn('setVersionName("0.0.0-TS18-TESTING")', GRADLE)
         self.assertIn("setVersionCode(2100000000)", GRADLE)
-        self.assertIn('versionName "26.9.8"', GRADLE)
-        self.assertIn("versionCode 26090800", GRADLE)
+        # Production versions advance independently of the fixed TESTING install identity.
+        self.assertRegex(GRADLE, r'versionName "[0-9]+\.[0-9]+\.[0-9]+"')
+        production_code = int(re.search(r"(?m)^        versionCode ([0-9]+)$", GRADLE).group(1))
+        self.assertGreater(production_code, 0)
+        self.assertLess(production_code, 2100000000)
         self.assertIn('testing_package com.tw.media', HELPER)
         self.assertIn('testing_version_code 2100000000', HELPER)
         self.assertIn("testDebugUnitTest", HELPER)

@@ -189,11 +189,18 @@ class ExoPlaybackStateHolder(
 
     private fun traceTransport(event: String, target: Int = -1) {
         val now = android.os.SystemClock.elapsedRealtime()
-        if (now - transportLogStart >= 1000L) { transportLogStart = now; transportLogCount = 0 }
+        if (now - transportLogStart >= 1000L) {
+            transportLogStart = now
+            transportLogCount = 0
+        }
         if (transportLogCount++ >= 24) return
         val descriptor = activePrimitiveWindow?.descriptor ?: rawFastResumeQueueDescriptor
-        L.tag("TS18Transport").i("event=$event command=$transportCommandId transport=$transportIntentVersion restore=$restoreGeneration navigation=$primitiveNavigationGeneration session=${descriptor?.sessionId ?: -1} revision=${descriptor?.revision ?: -1} committed=${descriptor?.currentLogicalPosition ?: player.currentMediaItemIndex} target=$target player=${player.playbackState} play=${player.playWhenReady} raw=${rawFastResumeItem != null} primitive=${activePrimitiveWindow != null} commit=$queueCommitInProgress")
+        L.tag("TS18Transport")
+            .i(
+                "event=$event command=$transportCommandId transport=$transportIntentVersion restore=$restoreGeneration navigation=$primitiveNavigationGeneration session=${descriptor?.sessionId ?: -1} revision=${descriptor?.revision ?: -1} committed=${descriptor?.currentLogicalPosition ?: player.currentMediaItemIndex} target=$target player=${player.playbackState} play=${player.playWhenReady} raw=${rawFastResumeItem != null} primitive=${activePrimitiveWindow != null} commit=$queueCommitInProgress"
+            )
     }
+
     private var pendingLibraryRestoreAfterRawFailure: DeferredPlayback.RestoreState? = null
     private var markedFirstAdvancingAudio = false
 
@@ -337,9 +344,13 @@ class ExoPlaybackStateHolder(
         get() = player.audioSessionId
 
     override val ownsPlaybackWork: Boolean
-        get() = player.mediaItemCount > 0 || currentRestoreJob?.isActive == true ||
-            activePrimitiveWindow != null || rawFastResumeItem != null ||
-            pendingPrimitiveTarget != null || queueCommitInProgress
+        get() =
+            player.mediaItemCount > 0 ||
+                currentRestoreJob?.isActive == true ||
+                activePrimitiveWindow != null ||
+                rawFastResumeItem != null ||
+                pendingPrimitiveTarget != null ||
+                queueCommitInProgress
 
     override val rawPlaybackMetadata: RawPlaybackMetadata?
         get() {
@@ -1312,7 +1323,12 @@ class ExoPlaybackStateHolder(
     ): Boolean {
         queueCommitInProgress = true
         return try {
-            installCanonicalQueueAroundCurrentSourceNow(songs, currentHeapIndex, shuffleModeEnabled, shuffledMapping)
+            installCanonicalQueueAroundCurrentSourceNow(
+                songs,
+                currentHeapIndex,
+                shuffleModeEnabled,
+                shuffledMapping,
+            )
         } finally {
             queueCommitInProgress = false
         }
@@ -1799,40 +1815,67 @@ class ExoPlaybackStateHolder(
         restoreScope.launch {
             try {
                 primitiveMutationMutex.withLock {
-                    val descriptor = withContext(Dispatchers.Main) {
-                        rawFastResumeQueueDescriptor?.takeIf {
-                            !released && rawFastResumeItem === raw &&
-                                generation == rawShuffleGeneration && it.sessionId == initial.sessionId
-                        }
-                    } ?: return@withLock
+                    val descriptor =
+                        withContext(Dispatchers.Main) {
+                            rawFastResumeQueueDescriptor?.takeIf {
+                                !released &&
+                                    rawFastResumeItem === raw &&
+                                    generation == rawShuffleGeneration &&
+                                    it.sessionId == initial.sessionId
+                            }
+                        } ?: return@withLock
                     val rows = persistenceRepository.readAllQueueItems(descriptor)
                     if (rows.size != descriptor.totalCount) return@withLock
-                    val current = rows.singleOrNull {
-                        it.logicalPosition == descriptor.currentLogicalPosition
-                    }?.canonicalPosition ?: return@withLock
-                    val order = if (shuffled) {
-                        rows.map { it.canonicalPosition }.filter { it != current }.shuffled()
-                            .toMutableList().also {
-                                it.add(descriptor.currentLogicalPosition.coerceIn(0, it.size), current)
+                    val current =
+                        rows
+                            .singleOrNull {
+                                it.logicalPosition == descriptor.currentLogicalPosition
                             }
-                    } else rows.sortedBy { it.canonicalPosition }.map { it.canonicalPosition }
-                    val stillOwned = withContext(Dispatchers.Main) {
-                        !released && rawFastResumeItem === raw && generation == rawShuffleGeneration &&
-                            rawFastResumeQueueDescriptor == descriptor
-                    }
+                            ?.canonicalPosition ?: return@withLock
+                    val order =
+                        if (shuffled) {
+                            rows
+                                .map { it.canonicalPosition }
+                                .filter { it != current }
+                                .shuffled()
+                                .toMutableList()
+                                .also {
+                                    it.add(
+                                        descriptor.currentLogicalPosition.coerceIn(0, it.size),
+                                        current,
+                                    )
+                                }
+                        } else rows.sortedBy { it.canonicalPosition }.map { it.canonicalPosition }
+                    val stillOwned =
+                        withContext(Dispatchers.Main) {
+                            !released &&
+                                rawFastResumeItem === raw &&
+                                generation == rawShuffleGeneration &&
+                                rawFastResumeQueueDescriptor == descriptor
+                        }
                     if (!stillOwned) return@withLock
-                    val committed = persistenceRepository.reorderQueue(
-                        descriptor, order, if (shuffled) ShuffleScope.ALL else ShuffleScope.OFF
-                    )
+                    val committed =
+                        persistenceRepository.reorderQueue(
+                            descriptor,
+                            order,
+                            if (shuffled) ShuffleScope.ALL else ShuffleScope.OFF,
+                        )
                     withContext(Dispatchers.Main) {
                         // A newer toggle can join an in-flight DB transaction. Advance its lease,
                         // but only the latest request may settle the visible requested scope.
-                        if (!released && rawFastResumeItem === raw && rawFastResumeQueueDescriptor == descriptor) {
+                        if (
+                            !released &&
+                                rawFastResumeItem === raw &&
+                                rawFastResumeQueueDescriptor == descriptor
+                        ) {
                             if (committed != null) {
                                 persistenceGeneration.incrementAndGet()
                                 rawFastResumeQueueDescriptor = committed
                             }
-                            L.tag("TS18Transport").i("rawShuffle=${if (committed != null) "committed" else "rejected"} generation=$generation revision=${committed?.revision ?: descriptor.revision}")
+                            L.tag("TS18Transport")
+                                .i(
+                                    "rawShuffle=${if (committed != null) "committed" else "rejected"} generation=$generation revision=${committed?.revision ?: descriptor.revision}"
+                                )
                             deferSave()
                         }
                     }
@@ -2337,6 +2380,7 @@ class ExoPlaybackStateHolder(
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         super<Player.Listener>.onMediaItemTransition(mediaItem, reason)
         if (queueCommitInProgress) return
+        persistenceGeneration.incrementAndGet()
 
         if (activePrimitiveWindow != null) {
             synchronizePrimitivePositionFromPlayer()
@@ -3074,12 +3118,14 @@ class ExoPlaybackStateHolder(
         val generation = persistenceGeneration.get()
         saveJob {
             if (sessionOngoing) {
-                persistenceRepository.commitIfCurrent({ generation == persistenceGeneration.get() }) {
+                persistenceRepository.commitIfCurrent({
+                    generation == persistenceGeneration.get()
+                }) {
                     savePlaybackState()
                 }
                 if (generation == persistenceGeneration.get()) saveFastResumeSnapshot()
             }
-            withContext(Dispatchers.Main) { cb() }
+            withContext(Dispatchers.Main) { if (generation == persistenceGeneration.get()) cb() }
         }
     }
 
@@ -3091,7 +3137,9 @@ class ExoPlaybackStateHolder(
             yield()
             L.d("Committing saved state")
             if (sessionOngoing) {
-                persistenceRepository.commitIfCurrent({ generation == persistenceGeneration.get() }) {
+                persistenceRepository.commitIfCurrent({
+                    generation == persistenceGeneration.get()
+                }) {
                     savePlaybackState()
                 }
                 if (generation == persistenceGeneration.get()) saveFastResumeSnapshot()

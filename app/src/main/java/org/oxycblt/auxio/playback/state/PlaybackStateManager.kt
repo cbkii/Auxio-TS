@@ -516,7 +516,10 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         get() = stateHolder?.isAudioFocusHeld == true
 
     override val ownsPlaybackWork: Boolean
-        get() = stateHolder?.ownsPlaybackWork == true || currentSong != null || rawPlaybackMetadata != null
+        get() =
+            stateHolder?.ownsPlaybackWork == true ||
+                currentSong != null ||
+                rawPlaybackMetadata != null
 
     @Synchronized
     override fun addListener(listener: Listener) {

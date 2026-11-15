@@ -57,6 +57,7 @@ fun FragmentHomeListBinding.updateLibraryEmptyState(
         }
     )
     homeNoMusicAction.isVisible =
-        if (actionVisibleWhenNotEmpty) true else empty && canShowSourceAction && !cachedPlaybackAvailable
+        if (actionVisibleWhenNotEmpty) true
+        else empty && canShowSourceAction && !cachedPlaybackAvailable
     homeNoMusicAction.isEnabled = homeNoMusicAction.isVisible
 }

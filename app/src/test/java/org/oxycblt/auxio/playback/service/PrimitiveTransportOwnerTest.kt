@@ -79,11 +79,23 @@ class PrimitiveTransportOwnerTest {
     private var shuffleEnabled = false
     private var rejectReorder = false
     private var reorderCalls = 0
+    private var callbackOnTopologyMutation = false
+    private var synchronousCallbacks = 0
+    private var publicationsDuringCommit = 0
 
     @Before
     fun setUp() {
         val context: Context = RuntimeEnvironment.getApplication()
-        val manager = proxy<PlaybackStateManager>()
+        val manager =
+            proxy<PlaybackStateManager> { method, _ ->
+                if (
+                    method.name == "ack" &&
+                        this::holder.isInitialized &&
+                        ReflectionHelpers.getField<Boolean>(holder, "queueCommitInProgress")
+                )
+                    publicationsDuringCommit += 1
+                defaultValue(method)
+            }
         val settings =
             proxy<PlaybackSettings> { method, _ ->
                 when (method.name) {
@@ -141,6 +153,13 @@ class PrimitiveTransportOwnerTest {
                         val last = args[1] as Int
                         items.subList(first, last).clear()
                         if (index >= last) index -= last - first
+                        if (callbackOnTopologyMutation) {
+                            synchronousCallbacks += 1
+                            holder.onMediaItemTransition(
+                                items.getOrNull(index),
+                                Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED,
+                            )
+                        }
                         null
                     }
                     "addMediaItems" -> {
@@ -148,6 +167,13 @@ class PrimitiveTransportOwnerTest {
                         val added = (args.last() as List<*>).filterIsInstance<MediaItem>()
                         items.addAll(at, added)
                         if (at <= index) index += added.size
+                        if (callbackOnTopologyMutation) {
+                            synchronousCallbacks += 1
+                            holder.onMediaItemTransition(
+                                items.getOrNull(index),
+                                Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED,
+                            )
+                        }
                         null
                     }
                     "replaceMediaItem" -> {
@@ -495,7 +521,9 @@ class PrimitiveTransportOwnerTest {
         ReflectionHelpers.setField(holder, "activePrimitiveWindow", null)
         assertNull(holder.rawPlaybackMetadata)
         assertTrue(holder.ownsPlaybackWork)
-        assertTrue(holder.handleDeferred(DeferredPlayback.RestoreState(play = false, fallback = null)))
+        assertTrue(
+            holder.handleDeferred(DeferredPlayback.RestoreState(play = false, fallback = null))
+        )
         assertNull(ReflectionHelpers.getField<Any?>(holder, "currentRestoreJob"))
         assertEquals(0, prepares)
     }
@@ -531,6 +559,14 @@ class PrimitiveTransportOwnerTest {
         assertEquals(ShuffleScope.OFF, holder.shuffleScopeHint)
         assertTrue(playing)
         assertEquals(0, prepares)
+    }
+
+    @Test
+    fun canonicalPromotionDoesNotPublishSynchronousIntermediatePlayerCallbacks() {
+        callbackOnTopologyMutation = true
+        cachedLibraryWithoutSourceScanHandsOffAndKeepsTheSavedPlaylistContext()
+        assertTrue(synchronousCallbacks >= 2)
+        assertEquals(0, publicationsDuringCommit)
     }
 
     private fun songAt(at: Int): org.oxycblt.musikr.Song {
