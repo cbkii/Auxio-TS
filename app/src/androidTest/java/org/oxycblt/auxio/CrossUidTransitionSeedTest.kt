@@ -108,5 +108,8 @@ class CrossUidTransitionSeedTest {
         } finally {
             database.close()
         }
+        if (arguments.getString("pair_gaps") == "1") {
+            CrossUidMetadataGapProbe.run()
+        }
     }
 }
