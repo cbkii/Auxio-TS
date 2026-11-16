@@ -2585,7 +2585,7 @@ class ExoPlaybackStateHolder(
         Ts18FirstAudioLatency.mark("snapshot_read_end")
         if (snapshot == null) {
             if (tryRestoreLegacyQueue(generation)) return
-            traceTransport("restore-no-snapshot")
+            withContext(Dispatchers.Main) { traceTransport("restore-no-snapshot") }
             L.d("No TS18 fast-resume snapshot available")
             optionalWorkGate.onNoSavedSession()
             withContext(Dispatchers.Main) {

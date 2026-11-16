@@ -67,6 +67,7 @@ class PrimitiveTransportOwnerTest {
     private lateinit var holder: ExoPlaybackStateHolder
     private val items = mutableListOf<MediaItem>()
     private var index = 0
+    private var offMainPlayerReads = 0
     private var position = 2300L
     private var playing = true
     private var prepares = 0
@@ -113,6 +114,7 @@ class PrimitiveTransportOwnerTest {
             }
         val player =
             proxy<ExoPlayer> { method, args ->
+                if (Looper.myLooper() != Looper.getMainLooper()) offMainPlayerReads += 1
                 when (method.name) {
                     "getPlayWhenReady",
                     "isPlaying" -> playing
@@ -641,6 +643,17 @@ class PrimitiveTransportOwnerTest {
         cachedLibraryWithoutSourceScanHandsOffAndKeepsTheSavedPlaylistContext()
         assertTrue(synchronousCallbacks >= 2)
         assertEquals(0, publicationsDuringCommit)
+    }
+
+    @Test
+    fun missingSnapshotDiagnosticsNeverReadPlayerOnTheRestoreWorker() {
+        ReflectionHelpers.setField(holder, "activePrimitiveWindow", null)
+        items.clear()
+        playing = false
+        holder.handleDeferred(DeferredPlayback.RestoreState(play = false))
+        drainUntil { ReflectionHelpers.getField<Any?>(holder, "currentRestoreJob") == null }
+        assertEquals(0, offMainPlayerReads)
+        assertEquals(0, prepares)
     }
 
     @Test
