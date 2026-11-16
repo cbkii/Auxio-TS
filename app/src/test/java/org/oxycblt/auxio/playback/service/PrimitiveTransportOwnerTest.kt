@@ -133,6 +133,26 @@ class PrimitiveTransportOwnerTest {
                     "getCurrentPosition" -> position
                     "getCurrentMediaItemIndex" -> index
                     "getCurrentMediaItem" -> items.getOrNull(index)
+                    "hasNextMediaItem" -> index + 1 < items.size
+                    "hasPreviousMediaItem" -> index > 0
+                    "seekToNext" -> {
+                        index += 1
+                        position = 0L
+                        holder.onMediaItemTransition(
+                            items[index],
+                            Player.MEDIA_ITEM_TRANSITION_REASON_SEEK,
+                        )
+                        null
+                    }
+                    "seekToPreviousMediaItem" -> {
+                        index -= 1
+                        position = 0L
+                        holder.onMediaItemTransition(
+                            items[index],
+                            Player.MEDIA_ITEM_TRANSITION_REASON_SEEK,
+                        )
+                        null
+                    }
                     "getMediaItemCount" -> items.size
                     "getMediaItemAt" -> items[args!![0] as Int]
                     "getRepeatMode" -> Player.REPEAT_MODE_OFF
@@ -688,6 +708,36 @@ class PrimitiveTransportOwnerTest {
         assertEquals(3, holder.resolveQueue().heap.size)
         assertEquals(songAt(1).uid, holder.resolveQueue().heap[index].uid)
         assertEquals(0, prepares)
+    }
+
+    @Test
+    fun capturedSizeQueueKeepsIdentityThroughThirtyNextCommandsAfterCachedHandoff() {
+        // Match the captured 1,069-item membership, without manufactured publication gaps.
+        rows = (0 until 1069).map(::item)
+        descriptor = descriptor.copy(totalCount = rows.size)
+        installWindow(QueueWindow(descriptor, 0, rows))
+        val songs = rows.indices.map(::songAt)
+        library = libraryOf(songs)
+        val retainedDecoder = items[0]
+        holder.onMusicChanges(MusicRepository.Changes(true, false, 1, 0, null))
+        drainUntil { holder.primitiveQueueWindow == null }
+        assertSame(retainedDecoder, items[0])
+        for (expected in 1..30) {
+            holder.next()
+            val queue = holder.resolveQueue()
+            assertEquals(1069, queue.heap.size)
+            assertEquals(expected, queue.heapIndex)
+            assertEquals(songs[expected].uid, queue.heap[queue.heapIndex].uid)
+            assertEquals(songs[expected].uri.toString(), holder.currentSourceUri)
+        }
+        // Previous must also resolve the original untagged decoder slot correctly.
+        repeat(30) { holder.prev() }
+        assertEquals(0, holder.resolveQueue().heapIndex)
+        assertEquals(songs[0].uid, holder.resolveQueue().heap[0].uid)
+        assertSame(retainedDecoder, items[0])
+        assertTrue(playing)
+        assertEquals(0, prepares)
+        assertEquals(0, rescans)
     }
 
     @Test
