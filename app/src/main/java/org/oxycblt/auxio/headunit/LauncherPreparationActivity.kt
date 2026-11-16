@@ -22,7 +22,9 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
-import org.oxycblt.auxio.MainActivity
+import org.oxycblt.auxio.AuxioService
+import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
+import org.oxycblt.auxio.IntegerTable
 
 /** Non-exported entry: only this app or a genuinely privileged root caller can prepare it. */
 class LauncherPreparationActivity : Activity() {
@@ -34,10 +36,12 @@ class LauncherPreparationActivity : Activity() {
             finish()
             return
         }
-        startActivity(
-            LauncherPreparation.issue(until)
-                .setClass(this, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // The already-authorised preparation entry starts only the existing service from
+        // our own Activity UID. MainActivity/Compose, browsing and autoplay are unnecessary.
+        startService(
+            Intent(this, TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java))
+                .setAction(AuxioService.ACTION_START)
+                .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BACKGROUND_READY)
         )
         finish()
     }

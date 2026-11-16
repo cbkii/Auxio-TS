@@ -205,7 +205,12 @@ class ExoPlaybackStateHolder(
     private var pendingLibraryRestoreAfterRawFailure: DeferredPlayback.RestoreState? = null
     private var markedFirstAdvancingAudio = false
 
-    private data class CanonicalCurrentSourceLease(val song: Song)
+    // The retained decoder item remains in the timeline after Next. Its mapping belongs to
+    // that immutable item, not to whichever item happens to be current on the next callback.
+    private data class CanonicalCurrentSourceLease(val item: MediaItem, val song: Song)
+
+    private fun retainedSong(item: MediaItem?): Song? =
+        canonicalCurrentSourceLease?.takeIf { it.item == item }?.song
 
     private data class RawPendingNavigation(val skipDelta: Int, val seekPositionMs: Long?)
 
@@ -315,8 +320,7 @@ class ExoPlaybackStateHolder(
             ?.let {
                 return it
             }
-        canonicalCurrentSourceLease
-            ?.song
+        retainedSong(player.currentMediaItem)
             ?.durationMs
             ?.takeIf { it > 0L }
             ?.let {
@@ -384,11 +388,7 @@ class ExoPlaybackStateHolder(
         musicRepository.library ?: return RawQueue(emptyList(), emptyList(), 0)
         val heap = (0 until player.mediaItemCount).map { player.getMediaItemAt(it) }
         val currentPlayerIndex = player.currentMediaItemIndex
-        val leasedSong = canonicalCurrentSourceLease?.song
-        val songs =
-            heap.mapIndexed { index, item ->
-                item.song ?: if (index == currentPlayerIndex) leasedSong else null
-            }
+        val songs = heap.map { item -> item.song ?: retainedSong(item) }
         if (songs.any { it == null }) {
             L.w("Canonical queue contains unresolved player items after handoff")
             return RawQueue.nil()
@@ -1355,7 +1355,7 @@ class ExoPlaybackStateHolder(
                 targetCurrentIndex = currentHeapIndex,
             ) ?: return false
         val sourceUri = currentMediaItem.localConfiguration?.uri
-        canonicalCurrentSourceLease = CanonicalCurrentSourceLease(songs[currentHeapIndex])
+        canonicalCurrentSourceLease = CanonicalCurrentSourceLease(currentMediaItem, songs[currentHeapIndex])
 
         if (plan.originalCurrentIndex + 1 < plan.originalItemCount) {
             player.removeMediaItems(plan.originalCurrentIndex + 1, plan.originalItemCount)
@@ -1952,7 +1952,7 @@ class ExoPlaybackStateHolder(
         ack: StateAck.QueueReordered,
     ): Boolean {
         if (activePrimitiveWindow != null || rawFastResumeItem != null) return false
-        val current = player.currentMediaItem?.song ?: canonicalCurrentSourceLease?.song
+        val current = player.currentMediaItem?.song ?: retainedSong(player.currentMediaItem)
         if (current == null) return false
         val currentIndex = queue.indexOfFirst { it.uid == current.uid }
         if (currentIndex < 0) return false
@@ -2395,10 +2395,8 @@ class ExoPlaybackStateHolder(
                 mainHandler.post { preparePrimitivePromotion(library, force = true) }
             }
         } else {
-            if (canonicalCurrentSourceLease != null && mediaItem?.song != null) {
-                L.i("Canonical current-source lease completed on media transition")
-                canonicalCurrentSourceLease = null
-            }
+            // Do not discard the retained item's mapping when leaving it: resolveQueue
+            // still needs that non-current slot, including when Previous returns to it.
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                 playbackManager.ack(this, StateAck.IndexMoved)
                 deferSave()
@@ -2586,6 +2584,8 @@ class ExoPlaybackStateHolder(
         val snapshot = persistenceRepository.readFastResumeSnapshot()
         Ts18FirstAudioLatency.mark("snapshot_read_end")
         if (snapshot == null) {
+            if (tryRestoreLegacyQueue(generation)) return
+            traceTransport("restore-no-snapshot")
             L.d("No TS18 fast-resume snapshot available")
             optionalWorkGate.onNoSavedSession()
             withContext(Dispatchers.Main) {
@@ -2640,6 +2640,8 @@ class ExoPlaybackStateHolder(
                     playbackManager.notifyRestoreOutcome(RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
                 }
                 is RawFastResumeValidator.Result.Invalid -> {
+                    traceTransport("restore-invalid-snapshot")
+                    if (tryRestoreLegacyQueue(generation)) return@withContext
                     optionalWorkGate.onNoSavedSession()
                     L.w(
                         "Ignoring invalid TS18 fast-resume snapshot: " +
@@ -2659,6 +2661,48 @@ class ExoPlaybackStateHolder(
                     }
                 }
             }
+        }
+    }
+
+    /** Upgrade/recovery path for an existing legacy queue without primitive refs/snapshot. */
+    private suspend fun tryRestoreLegacyQueue(generation: Long): Boolean {
+        val library = musicRepository.library ?: return false
+        val saved = persistenceRepository.readState() ?: return false
+        // Incomplete source hydration must not destructively filter the saved membership.
+        if (saved.heap.isEmpty() || saved.heap.any { it == null }) return false
+        if (saved.shuffledMapping.any { it !in saved.heap.indices }) return false
+        val heap = saved.heap.filterNotNull()
+        val mapping = saved.shuffledMapping
+        val order = mapping.ifEmpty { heap.indices.toList() }
+        if (order.distinct().size != heap.size || order.size != heap.size) return false
+        val savedHeapIndex = order.getOrNull(saved.index) ?: return false
+        if (heap[savedHeapIndex].uid != saved.songUid) return false
+        return withContext(Dispatchers.Main) {
+            if (
+                generation != restoreGeneration ||
+                    musicRepository.library !== library ||
+                    player.mediaItemCount > 0
+            ) return@withContext false
+            val intent = restoreIntentArbiter.finish()
+            val logical =
+                (saved.index.toLong() + intent.skipDelta)
+                    .coerceIn(0L, order.lastIndex.toLong())
+                    .toInt()
+            val position =
+                intent.seekPositionMs ?: if (intent.skipDelta != 0) 0L else saved.positionMs
+            applySavedState(
+                saved.parent,
+                RawQueue(heap, mapping, order[logical]),
+                position,
+                saved.repeatMode,
+                StateAck.NewPlayback,
+            )
+            sessionOngoing = true
+            if (intent.deadlineElapsedMs != null) armHomePlay(intent)
+            else if (restoredPlayAllowed(intent)) playing(true)
+            completeRestore(generation, RestoreOutcome.RESTORED_EXISTING_SESSION)
+            traceTransport("legacy-queue-restored")
+            true
         }
     }
 

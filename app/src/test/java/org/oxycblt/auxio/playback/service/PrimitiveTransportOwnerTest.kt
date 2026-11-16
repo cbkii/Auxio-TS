@@ -643,6 +643,57 @@ class PrimitiveTransportOwnerTest {
         assertEquals(0, publicationsDuringCommit)
     }
 
+    @Test
+    fun retainedDecoderSlotSurvivesThirtyTransitionsAndReturnToOriginal() {
+        cachedLibraryWithoutSourceScanHandsOffAndKeepsTheSavedPlaylistContext()
+        val retained = items[0]
+        repeat(30) { turn ->
+            index = (turn + 1) % items.size
+            holder.onMediaItemTransition(items[index], Player.MEDIA_ITEM_TRANSITION_REASON_SEEK)
+            val queue = holder.resolveQueue()
+            assertEquals(
+                "All slots must resolve after leaving the retained decoder",
+                3,
+                queue.heap.size,
+            )
+            assertEquals(index, queue.heapIndex)
+            assertEquals(songAt(index).uid, queue.heap[index].uid)
+        }
+        index = 0
+        holder.onMediaItemTransition(items[index], Player.MEDIA_ITEM_TRANSITION_REASON_SEEK)
+        assertSame(retained, items[index])
+        assertEquals(songAt(0).uid, holder.resolveQueue().heap[0].uid)
+        assertEquals(0, prepares)
+    }
+
+    @Test
+    fun backgroundRestoreRecoversLegacyQueueWithoutPrimitiveDescriptorOrSnapshot() {
+        val songs = (0..2).map(::songAt)
+        library = libraryOf(songs)
+        savedState =
+            PlaybackStateManager.SavedState(
+                2300L,
+                RepeatMode.NONE,
+                null,
+                songs,
+                emptyList(),
+                1,
+                songs[1].uid,
+                ShuffleScope.OFF,
+            )
+        ReflectionHelpers.setField(holder, "activePrimitiveWindow", null)
+        items.clear()
+        playing = false
+        assertTrue(holder.handleDeferred(DeferredPlayback.RestoreState(play = false)))
+        drainUntil { items.size == 3 }
+        assertEquals(1, index)
+        assertEquals(2300L, position)
+        assertFalse(playing)
+        assertEquals(1, prepares)
+        assertEquals(songAt(1).uid, holder.resolveQueue().heap[index].uid)
+        assertEquals(0, rescans)
+    }
+
     private fun songAt(at: Int): org.oxycblt.musikr.Song {
         val songUid = uid('s', at)
         val uri = Uri.parse("file:///music/$at.mp3")
