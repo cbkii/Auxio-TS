@@ -385,7 +385,8 @@ class ExoPlaybackStateHolder(
 
     override fun resolveQueue(): RawQueue {
         if (activePrimitiveWindow != null) return RawQueue.nil()
-        musicRepository.library ?: return RawQueue(emptyList(), emptyList(), 0)
+        // Canonical MediaItem tags already own this queue. A temporarily unavailable
+        // browse library must not erase the identity of an existing decoding timeline.
         val heap = (0 until player.mediaItemCount).map { player.getMediaItemAt(it) }
         val currentPlayerIndex = player.currentMediaItemIndex
         val songs = heap.map { item -> item.song ?: retainedSong(item) }
@@ -1355,7 +1356,8 @@ class ExoPlaybackStateHolder(
                 targetCurrentIndex = currentHeapIndex,
             ) ?: return false
         val sourceUri = currentMediaItem.localConfiguration?.uri
-        canonicalCurrentSourceLease = CanonicalCurrentSourceLease(currentMediaItem, songs[currentHeapIndex])
+        canonicalCurrentSourceLease =
+            CanonicalCurrentSourceLease(currentMediaItem, songs[currentHeapIndex])
 
         if (plan.originalCurrentIndex + 1 < plan.originalItemCount) {
             player.removeMediaItems(plan.originalCurrentIndex + 1, plan.originalItemCount)
@@ -2682,7 +2684,8 @@ class ExoPlaybackStateHolder(
                 generation != restoreGeneration ||
                     musicRepository.library !== library ||
                     player.mediaItemCount > 0
-            ) return@withContext false
+            )
+                return@withContext false
             val intent = restoreIntentArbiter.finish()
             val logical =
                 (saved.index.toLong() + intent.skipDelta)

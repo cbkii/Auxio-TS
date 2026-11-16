@@ -680,6 +680,17 @@ class PrimitiveTransportOwnerTest {
     }
 
     @Test
+    fun canonicalDecoderIdentityDoesNotDependOnBrowseLibraryAvailability() {
+        cachedLibraryWithoutSourceScanHandsOffAndKeepsTheSavedPlaylistContext()
+        library = null
+        index = 1
+        holder.onMediaItemTransition(items[index], Player.MEDIA_ITEM_TRANSITION_REASON_SEEK)
+        assertEquals(3, holder.resolveQueue().heap.size)
+        assertEquals(songAt(1).uid, holder.resolveQueue().heap[index].uid)
+        assertEquals(0, prepares)
+    }
+
+    @Test
     fun backgroundRestoreRecoversLegacyQueueWithoutPrimitiveDescriptorOrSnapshot() {
         val songs = (0..2).map(::songAt)
         library = libraryOf(songs)
