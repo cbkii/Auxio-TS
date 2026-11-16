@@ -23,8 +23,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import org.oxycblt.auxio.AuxioService
-import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.IntegerTable
+import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 
 /** Non-exported entry: only this app or a genuinely privileged root caller can prepare it. */
 class LauncherPreparationActivity : Activity() {
