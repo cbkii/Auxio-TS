@@ -409,7 +409,7 @@ class PrimitiveTransportOwnerTest {
                     assertEquals(rows[expected].uri, holder.currentSourceUri)
                     assertEquals(0L, position)
                     assertEquals(!paused, playing)
-                    assertEquals(scope, holder.shuffleScopeHint)
+                    assertEquals(scope, holder.primitiveQueueWindow?.descriptor?.shuffleScope)
                     if (expected == 1) assertSame(current, items[index])
                 }
             }

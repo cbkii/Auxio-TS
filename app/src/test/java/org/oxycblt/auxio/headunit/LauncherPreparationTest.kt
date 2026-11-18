@@ -60,10 +60,7 @@ class LauncherPreparationTest {
     fun expiredTrampolineFinishesWithoutStartingThePlayer() {
         val intent =
             Intent()
-                .putExtra(
-                    LauncherPreparationActivity.EXTRA_UNTIL,
-                    SystemClock.elapsedRealtime(),
-                )
+                .putExtra(LauncherPreparationActivity.EXTRA_UNTIL, SystemClock.elapsedRealtime())
         val controller =
             Robolectric.buildActivity(LauncherPreparationActivity::class.java, intent).create()
         assertTrue(controller.get().isFinishing)

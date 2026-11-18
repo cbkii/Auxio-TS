@@ -78,7 +78,7 @@ exact TS18 audibility and performance remain unqualified until independently obs
 
 ## Paired automatic HOME preparation
 
-The matching launcher selects immediate authorised Activity preparation while public browser/session discovery continues in parallel. It does not wait nine seconds for browser failure. The service-only entry superseded the earlier MainActivity nonce handoff in PR #287.
+The matching launcher first uses source-owned browser/session preparation. An observed non-dispatched failure can admit one authorised, drawn-mask Activity transaction within the original request deadline; it is not a root-first priming route or a fixed nine-second delay. The service-only entry superseded the earlier MainActivity nonce handoff in PR #287.
 
 Manifest capability `org.oxycblt.auxio.PREPARE_HOME_PROTOCOL=1` identifies the non-exported `org.oxycblt.auxio.headunit.LauncherPreparationActivity`. Only the app or an actually privileged caller can enter it. The Activity checks the original `org.oxycblt.auxio.extra.PREPARE_UNTIL` elapsed-realtime expiry, starts the existing canonical playback service from its own UID with Background Ready, then finishes its excluded, no-history task. It never opens MainActivity. The expiry bounds admission to passive preparation; the separate HOME Play deadline below governs audible playback.
 
