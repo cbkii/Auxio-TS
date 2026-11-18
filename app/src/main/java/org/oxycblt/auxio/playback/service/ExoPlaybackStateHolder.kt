@@ -198,7 +198,7 @@ class ExoPlaybackStateHolder(
         val descriptor = activePrimitiveWindow?.descriptor ?: rawFastResumeQueueDescriptor
         L.tag("TS18Transport")
             .i(
-                "event=$event command=$transportCommandId transport=$transportIntentVersion restore=$restoreGeneration navigation=$primitiveNavigationGeneration session=${descriptor?.sessionId ?: -1} revision=${descriptor?.revision ?: -1} committed=${descriptor?.currentLogicalPosition ?: player.currentMediaItemIndex} target=$target player=${player.playbackState} play=${player.playWhenReady} raw=${rawFastResumeItem != null} primitive=${activePrimitiveWindow != null} commit=$queueCommitInProgress"
+                "event=$event command=$transportCommandId transport=$transportIntentVersion restore=$restoreGeneration navigation=$primitiveNavigationGeneration session=${descriptor?.sessionId ?: -1} revision=${descriptor?.revision ?: -1} committed=${descriptor?.currentLogicalPosition ?: player.currentMediaItemIndex} target=$target positionMs=${player.currentPosition.coerceAtLeast(0L)} rewindPrev=${playbackSettings.rewindWithPrev} player=${player.playbackState} play=${player.playWhenReady} raw=${rawFastResumeItem != null} primitive=${activePrimitiveWindow != null} commit=$queueCommitInProgress"
             )
     }
 

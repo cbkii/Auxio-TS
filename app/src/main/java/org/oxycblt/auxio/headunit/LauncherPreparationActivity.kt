@@ -31,7 +31,7 @@ class LauncherPreparationActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val now = SystemClock.elapsedRealtime()
-        val until = intent.getLongExtra(LauncherPreparation.EXTRA_UNTIL, now + 10_000L)
+        val until = intent.getLongExtra(EXTRA_UNTIL, now + 10_000L)
         if (until <= now) {
             finish()
             return
@@ -45,36 +45,10 @@ class LauncherPreparationActivity : Activity() {
         )
         finish()
     }
-}
 
-/** One-use, process-local authority; an extra on the exported launcher alias is insufficient. */
-internal object LauncherPreparation {
-    const val EXTRA_UNTIL = "org.oxycblt.auxio.extra.PREPARE_UNTIL"
-    private const val ACTION = "org.oxycblt.auxio.action.PREPARE_HOME"
-    private const val EXTRA = "org.oxycblt.auxio.extra.PREPARE_NONCE"
-    private var nonce: String? = null
-    private var deadline = 0L
-
-    fun requested(intent: Intent?): Boolean = intent?.action == ACTION
-
-    @Synchronized
-    fun issue(until: Long = Long.MAX_VALUE): Intent {
-        val issued = java.util.UUID.randomUUID().toString()
-        nonce = issued
-        deadline = minOf(until, SystemClock.elapsedRealtime() + 10_000L)
-        return Intent(ACTION).putExtra(EXTRA, issued)
-    }
-
-    @Synchronized
-    fun consume(intent: Intent?): Boolean {
-        if (intent?.action != ACTION) return false
-        val offered = intent.getStringExtra(EXTRA)
-        intent.removeExtra(EXTRA)
-        if (offered == null || offered != nonce || SystemClock.elapsedRealtime() >= deadline) {
-            return false
-        }
-        nonce = null
-        deadline = 0L
-        return true
+    companion object {
+        const val EXTRA_UNTIL = "org.oxycblt.auxio.extra.PREPARE_UNTIL"
+        // Old MainActivity handoffs are rejected, including tasks restored after an upgrade.
+        internal const val LEGACY_ACTION = "org.oxycblt.auxio.action.PREPARE_HOME"
     }
 }

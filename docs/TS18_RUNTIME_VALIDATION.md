@@ -1,6 +1,32 @@
 # TS18 runtime validation checklist
 
 
+## v3.5.0 Music remediation matrix
+
+**Observed:** the original Boot 2 source session reports playing, active item `-1` and blank
+metadata despite 1,069 queued items; its four Previous entries record indices 30, 31, 31 and
+33 without decision-time positions. Those traces cannot qualify rewind semantics. The
+captured APK predates the merged saved-queue/canonical-identity repairs in PR #287.
+
+This matrix maps the remediation plan's Music issues to maintained checks. A named test is
+coverage, not a passed result for a new source head. Run the matching checks at that head;
+record build, API29 integration and physical results separately.
+
+| Issue | Automated coverage | Remaining exact-TS18 qualification |
+| --- | --- | --- |
+| M1 background readiness | `LauncherPreparationTest` enters only the existing service and rejects expired entry without starting any service/Activity; `PrimitiveTransportOwnerTest.backgroundRestoreRecoversLegacyQueueWithoutPrimitiveDescriptorOrSnapshot` restores a real multi-item saved-state shape through the owner; `StartupPlaybackPolicyTest` preserves silent preparation. | Real launcher UID/browser admission, no MainActivity, recents cleared, service disconnect/reconnection, process recreation and USB/SAF availability. The original bind failure's exact firmware cause remains unknown. |
+| M2 first HOME Play | `LauncherMediaSessionContractTest`, `HomePlayDeadlineTest`, `HomePlayDeadlineGateTest` and `RestoreIntentArbiterTest` cover one bounded request, slow restore/expiry, cancellation/Pause and newer intent. | One audible first tap within the original budget, from the real saved queue with a late source. Connection, playable state and actual audio need separate observations. |
+| M3 canonical identity | `PrimitiveTransportOwnerTest.capturedSizeQueueKeepsIdentityThroughThirtyNextCommandsAfterCachedHandoff` covers 1,069 members and 30 actual owner Next calls plus return to the retained decoder; the browse-unavailable case preserves identity independently. | Correct audible item, title/artist, active queue ID and position across 30 Next commands, including rapid bursts, delayed taps, process recreation and deferred browsing. Player/persistence boundaries in the owner test are doubles. |
+| M4 published display | `LauncherMediaSessionContractTest` exercises actual session publication; the companion launcher API29 actual-pair job covers the real browser/decoder/session across UIDs with deliberate metadata gaps. | Notification, session and launcher converge on each actual item. The three-item gap probe is distinct from the 1,069-member owner test and does not prove the full captured handoff path. |
+| M5 Previous | `PrimitiveTransportOwnerTest` checks live positions 0/2,999/3,000/3,001 ms with paused/playing and committed OFF/ALL order, plus Next→Next→Previous. | Primitive/raw rewind is above 3,000 ms when enabled; canonical playback delegates to the existing player's Previous policy. Verify both sides of the decision threshold, first-item/repeat behaviour and shuffled canonical playback against the actual player. Transport diagnostics now include numeric position and configured rewind state. |
+| M6 startup regression | Cached-library handoff, no extra prepare/scan, passive joining and incomplete legacy membership refusal have owner regressions. | Measure first playable/current-item publication and first audio against the same saved source/queue. No local test or merged CI result proves TS18 latency improved. |
+| P1 shuffle persistence | `PrimitiveTransportOwnerTest`, `PlaybackViewModelShuffleTest`, `PlaybackStateManagerShuffleScopeTest`, `PersistenceMigrationTest` and `PersistenceCancellationTest` cover scope/order, committed durability and rejected writes. | OFF→ALL→OFF before hydration; ALL→GENRE→OFF afterwards, then process recreation/reboot and ACC. Issue #288 remains a qualification item; do not clear data or treat requested in-memory scope as committed state. |
+
+The focused owner tests do not prove framework service admission or output audibility. Missing or
+incomplete saved references must remain unavailable rather than silently substituting All Songs.
+Run immediate startup first, then app/service restart, reboot, electrical cold boot and ACC
+sleep/wake as separate levels. A fresh kernel boot alone does not prove electrical cold state.
+
 ## Audit-remediation validation gate (PR #276)
 
 This gate supplements the normal launcher/bridge/storage/ACC checks below. Record the installed

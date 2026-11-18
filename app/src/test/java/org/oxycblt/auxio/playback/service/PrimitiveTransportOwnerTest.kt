@@ -72,6 +72,7 @@ class PrimitiveTransportOwnerTest {
     private var playing = true
     private var prepares = 0
     private var rememberPause = true
+    private var rewindWithPrev = false
     private var descriptor =
         QueueDescriptor(17, 3, 0, 2300, RepeatMode.NONE, ShuffleScope.OFF, 1, 1)
     private var rows = (0..2).map(::item)
@@ -108,7 +109,7 @@ class PrimitiveTransportOwnerTest {
             proxy<PlaybackSettings> { method, _ ->
                 when (method.name) {
                     "getRememberPause" -> rememberPause
-                    "getRewindWithPrev" -> false
+                    "getRewindWithPrev" -> rewindWithPrev
                     else -> defaultValue(method)
                 }
             }
@@ -378,6 +379,58 @@ class PrimitiveTransportOwnerTest {
         holder.next()
         assertFalse(playing)
         assertEquals(2, index)
+    }
+
+    @Test
+    fun primitivePreviousUsesLivePositionAtTheThresholdWithEitherCommittedShuffleScope() {
+        rewindWithPrev = true
+        for (scope in listOf(ShuffleScope.OFF, ShuffleScope.ALL)) {
+            val order = if (scope == ShuffleScope.ALL) listOf(2, 0, 1) else listOf(0, 1, 2)
+            rows =
+                order.mapIndexed { logical, canonical ->
+                    item(canonical).copy(logicalPosition = logical)
+                }
+            for (paused in listOf(false, true)) {
+                for (decisionPosition in listOf(0L, 2999L, 3000L, 3001L)) {
+                    descriptor = descriptor.copy(currentLogicalPosition = 1, shuffleScope = scope)
+                    installWindow(QueueWindow(descriptor, 0, rows))
+                    position = decisionPosition
+                    playing = !paused
+                    val current = items[index]
+
+                    holder.prev()
+
+                    val expected = if (decisionPosition > 3000L) 1 else 0
+                    assertEquals(
+                        "scope=$scope paused=$paused position=$decisionPosition",
+                        expected,
+                        index,
+                    )
+                    assertEquals(rows[expected].uri, holder.currentSourceUri)
+                    assertEquals(0L, position)
+                    assertEquals(!paused, playing)
+                    assertEquals(scope, holder.shuffleScopeHint)
+                    if (expected == 1) assertSame(current, items[index])
+                }
+            }
+        }
+        assertEquals(0, prepares)
+        assertEquals(0, rescans)
+    }
+
+    @Test
+    fun nextNextPreviousReturnsOneCommittedItemWithoutRewindingToAnOlderSavedTarget() {
+        rewindWithPrev = true
+        holder.next()
+        holder.next()
+        assertEquals(2, index)
+        holder.prev()
+        assertEquals(1, index)
+        assertEquals(rows[1].uri, holder.currentSourceUri)
+        assertEquals(0L, position)
+        assertTrue(playing)
+        assertEquals(0, prepares)
+        assertEquals(0, rescans)
     }
 
     @Test
@@ -765,6 +818,36 @@ class PrimitiveTransportOwnerTest {
         assertFalse(playing)
         assertEquals(1, prepares)
         assertEquals(songAt(1).uid, holder.resolveQueue().heap[index].uid)
+        assertEquals(0, rescans)
+    }
+
+    @Test
+    fun legacyRestoreRejectsIncompleteMembershipWithoutSubstitutingAllSongs() {
+        val songs = (0..2).map(::songAt)
+        library = libraryOf(songs)
+        savedState =
+            PlaybackStateManager.SavedState(
+                2300L,
+                RepeatMode.NONE,
+                null,
+                listOf(songs[0], null, songs[2]),
+                emptyList(),
+                0,
+                songs[0].uid,
+                ShuffleScope.OFF,
+            )
+        ReflectionHelpers.setField(holder, "activePrimitiveWindow", null)
+        items.clear()
+        playing = false
+
+        assertTrue(holder.handleDeferred(DeferredPlayback.RestoreState(play = false)))
+        drainUntil { ReflectionHelpers.getField<Any?>(holder, "currentRestoreJob") == null }
+
+        assertTrue(items.isEmpty())
+        assertFalse(playing)
+        assertSame(songs[0], savedState!!.heap[0])
+        assertNull(savedState!!.heap[1])
+        assertEquals(0, prepares)
         assertEquals(0, rescans)
     }
 
