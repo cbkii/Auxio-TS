@@ -33,7 +33,7 @@ import org.oxycblt.auxio.databinding.ActivityMainBinding
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.headunit.HeadUnitRoute
 import org.oxycblt.auxio.headunit.HeadUnitRoutePolicy
-import org.oxycblt.auxio.headunit.LauncherPreparation
+import org.oxycblt.auxio.headunit.LauncherPreparationActivity
 import org.oxycblt.auxio.headunit.StartupPanelCoordinator
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy
@@ -61,17 +61,10 @@ class MainActivity : AppCompatActivity() {
     @Inject lateinit var uiSettings: UISettings
     @Inject lateinit var playbackSettings: PlaybackSettings
     private var isFirstResume = true
-    private var prepareOnly = false
-    private var invalidPreparation = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         PerfTimer.trace("MainActivity.onCreate") {
             super.onCreate(savedInstanceState)
-            prepareOnly =
-                LauncherPreparation.consume(intent) ||
-                    (LauncherPreparation.requested(intent) &&
-                        savedInstanceState?.getBoolean(KEY_PREPARE_ONLY, false) == true)
-            invalidPreparation = LauncherPreparation.requested(intent) && !prepareOnly
             // Only treat a launch with no saved instance state as a cold launch, so that activity
             // recreation (e.g. configuration changes or restoration after process death) does not
             // re-trigger autoplay.
@@ -94,8 +87,8 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         PerfTimer.trace("MainActivity.onResume") {
             super.onResume()
-            if (invalidPreparation) {
-                // A killed process or expired/forged handoff cannot become an autoplay launch.
+            if (intent?.action == LauncherPreparationActivity.LEGACY_ACTION) {
+                // The retired UI handoff has no producer. A restored old task must stay inert.
                 isFirstResume = false
                 L.w("Ignoring invalid HOME preparation handoff; closing inert task")
                 // A stale/forged preparation must not leave a visible but nonfunctional
@@ -106,8 +99,7 @@ class MainActivity : AppCompatActivity() {
 
             val serviceClass =
                 TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
-            val trustedScanNonce =
-                if (prepareOnly) null else StartupScanAuthorityPolicy.issueTrustedUserVisibleStart()
+            val trustedScanNonce = StartupScanAuthorityPolicy.issueTrustedUserVisibleStart()
 
             startService(
                 Intent(this, serviceClass)
@@ -115,24 +107,6 @@ class MainActivity : AppCompatActivity() {
                     .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)
                     .putExtra(AuxioService.INTENT_KEY_TRUSTED_SCAN_NONCE, trustedScanNonce)
             )
-
-            if (prepareOnly) {
-                // Reuse the existing owner. Preparation never reloads or pauses live playback,
-                // chooses fallback music, acquires focus, or grants source-scan authority.
-                if (
-                    playbackModel.song.value == null &&
-                        playbackModel.rawPlaybackMetadata.value == null
-                ) {
-                    playbackModel.playDeferred(
-                        StartupPlaybackPolicy.restoreActionForBackgroundReady()
-                    )
-                }
-                isFirstResume = false
-                L.i(
-                    "HOME prepare-only Activity initialised elapsedMs=${android.os.SystemClock.elapsedRealtime()}"
-                )
-                return@trace
-            }
 
             if (!startIntentAction(intent)) {
                 // No intent action to do, restore the previously saved state.
@@ -167,17 +141,12 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         // Reject a stale/forged preparation *before* replacing an already-running task's
         // launch intent. Otherwise a bad alias intent can poison future onResume calls.
-        val requestedPreparation = LauncherPreparation.requested(intent)
-        val acceptedPreparation = requestedPreparation && LauncherPreparation.consume(intent)
-        if (requestedPreparation && !acceptedPreparation) {
-            L.w("Ignoring invalid HOME preparation delivered to existing activity")
+        if (intent.action == LauncherPreparationActivity.LEGACY_ACTION) {
+            L.w("Ignoring retired HOME preparation delivered to existing activity")
             return
         }
         clearIntentRoutingState(intent)
         setIntent(intent)
-        prepareOnly = acceptedPreparation
-        invalidPreparation = false
-        if (prepareOnly) return
         val genericLauncherEntry = HeadUnitRoutePolicy.isGenericLauncherAction(intent.action)
         startIntentAction(intent)
         if (genericLauncherEntry) {
@@ -187,11 +156,6 @@ class MainActivity : AppCompatActivity() {
             L.d("Warm launcher entry requesting generic route action=${intent.action}")
             startupPanelCoordinator.requestUserLauncherRoute()
         }
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        outState.putBoolean(KEY_PREPARE_ONLY, prepareOnly)
-        super.onSaveInstanceState(outState)
     }
 
     private fun setupTheme() {
@@ -305,6 +269,5 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val KEY_INTENT_USED = BuildConfig.APPLICATION_ID + ".key.FILE_INTENT_USED"
-        const val KEY_PREPARE_ONLY = BuildConfig.APPLICATION_ID + ".key.PREPARE_ONLY"
     }
 }
