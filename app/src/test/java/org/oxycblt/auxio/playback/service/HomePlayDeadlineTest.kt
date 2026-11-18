@@ -59,6 +59,10 @@ class HomePlayDeadlineTest {
                 deadlineElapsedMs = 1_000L,
             )
         )
+        // A bounded HOME request cannot dispatch the unbounded fallback on its own.
+        assertNull(arbiter.snapshot().fallback)
+        // A *later explicit* user Play is unbounded and retains the ordinary fallback.
+        assertTrue(arbiter.updatePlay(true))
         val live = arbiter.finish()
         assertTrue(live.play)
         org.junit.Assert.assertEquals(fallback, live.fallback)

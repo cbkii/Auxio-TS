@@ -32,6 +32,28 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class MediaSessionInitializationPolicyTest {
     @Test
+    fun `all session states advertise the bounded HOME Play protocol`() {
+        listOf(
+                MediaSessionInitializationPolicy.initialPlaybackState("Play"),
+                MediaSessionInitializationPolicy.emptyPlaybackState("Play"),
+                MediaSessionInitializationPolicy.withDeadlineAction(
+                        PlaybackStateCompat.Builder()
+                            .setActions(MediaSessionInterface.ACTIONS)
+                            .setState(PlaybackStateCompat.STATE_PAUSED, 123L, 0f),
+                        "Play",
+                    )
+                    .build(),
+            )
+            .forEach { state ->
+                assertTrue(
+                    state.customActions.any {
+                        it.action == MediaSessionInitializationPolicy.HOME_PLAY_V1
+                    }
+                )
+            }
+    }
+
+    @Test
     fun `initial flags expose media buttons transports and queue commands`() {
         val flags = MediaSessionInitializationPolicy.FLAGS
 
@@ -42,7 +64,7 @@ class MediaSessionInitializationPolicyTest {
 
     @Test
     fun `initial state is inactive but advertises canonical actions`() {
-        val state = MediaSessionInitializationPolicy.initialPlaybackState()
+        val state = MediaSessionInitializationPolicy.initialPlaybackState("Play")
 
         assertEquals(PlaybackStateCompat.STATE_NONE, state.state)
         assertEquals(0L, state.position)
@@ -51,7 +73,7 @@ class MediaSessionInitializationPolicyTest {
 
     @Test
     fun `empty ready state is explicitly stopped`() {
-        val state = MediaSessionInitializationPolicy.emptyPlaybackState()
+        val state = MediaSessionInitializationPolicy.emptyPlaybackState("Play")
 
         assertEquals(PlaybackStateCompat.STATE_STOPPED, state.state)
         assertEquals(0L, state.position)

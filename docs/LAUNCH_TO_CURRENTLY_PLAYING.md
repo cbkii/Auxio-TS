@@ -58,7 +58,7 @@ runtime concerns rather than unit-test claims.
 2. No saved session, empty library, recovery, and source-required states.
 3. Raw fast resume followed by normal `Song` reconciliation, including saved playlist, genre-filtered,
    genre-shuffle and All Songs shuffle contexts, with no source scan at boot.
-4. Shuffle `OFF → ALL → GENRE → OFF` during Fast Resume and after handoff, listening for any gap.
+4. During raw Fast Resume, exercise `OFF → ALL → OFF` and verify genre shuffle remains unavailable until hydration. After canonical handoff, exercise `OFF → ALL → GENRE → OFF`; listen for any audible gap.
 5. Explicit Now Playing and Queue launch during cold and warm app states.
 6. Manual close, drag, back, Settings, and Queue mutation during restore/sheet settling.
 7. DoFun launcher restart, process death, reboot, and real ACC sleep/wake.

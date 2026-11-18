@@ -49,6 +49,7 @@ import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
 import org.oxycblt.musikr.tag.Name
+import timber.log.Timber as L
 
 class MediaSessionInterface
 @Inject
@@ -78,7 +79,7 @@ constructor(
         super.onPrepare()
         logTransport(
             command = "PREPARE",
-            result = "ADMITTED",
+            result = if (hasCurrentMedia()) "JOINED" else "REQUESTED",
             detail = "currentMedia=${hasCurrentMedia()}",
         )
         if (!hasCurrentMedia()) {
@@ -127,10 +128,11 @@ constructor(
         val hasCurrentSong = playbackManager.currentSong != null
         val hasRawPlaybackMetadata = playbackManager.rawPlaybackMetadata != null
         if (
-            shouldResumeExistingPlayback(
-                hasCurrentSong = hasCurrentSong,
-                hasRawPlaybackMetadata = hasRawPlaybackMetadata,
-            )
+            playbackManager.ownsPlaybackWork ||
+                shouldResumeExistingPlayback(
+                    hasCurrentSong = hasCurrentSong,
+                    hasRawPlaybackMetadata = hasRawPlaybackMetadata,
+                )
         ) {
             logTransport(
                 command = "PLAY",
@@ -230,7 +232,7 @@ constructor(
 
     override fun onCustomAction(action: String, extras: Bundle?) {
         super.onCustomAction(action, extras)
-        if (action == "org.oxycblt.auxio.action.HOME_PLAY_V1") {
+        if (action == MediaSessionInitializationPolicy.HOME_PLAY_V1) {
             val now = android.os.SystemClock.elapsedRealtime()
             val deadline = extras?.getLong("deadline_elapsed_ms", -1L) ?: -1L
             if (
@@ -242,15 +244,17 @@ constructor(
                 return
             }
             logTransport("HOME_PLAY", "ADMITTED", "remainingMs=${deadline - now}")
-            if (hasCurrentMedia()) onPlay()
-            else startColdRestore(play = true, deadlineElapsedMs = deadline)
+            if (hasCurrentMedia()) playbackManager.playingBefore(deadline)
+            else startColdRestore(play = true, fallback = null, deadlineElapsedMs = deadline)
             return
         }
         context.sendBroadcast(Intent(action))
     }
 
     private fun hasCurrentMedia(): Boolean =
-        playbackManager.currentSong != null || playbackManager.rawPlaybackMetadata != null
+        playbackManager.ownsPlaybackWork ||
+            playbackManager.currentSong != null ||
+            playbackManager.rawPlaybackMetadata != null
 
     private fun startColdRestore(
         play: Boolean,
@@ -269,6 +273,7 @@ constructor(
     }
 
     private fun logTransport(command: String, result: String, detail: String? = null) {
+        L.tag("TS18Transport").i("origin=session command=$command result=$result")
         launcherTelemetry.log(
             category = DiagnosticJournal.CAT_PLAYBACK,
             event = "MediaSession transport",

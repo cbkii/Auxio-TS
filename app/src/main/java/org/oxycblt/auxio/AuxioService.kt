@@ -68,6 +68,7 @@ open class AuxioService :
         PerfTimer.trace("AuxioService.onCreate") {
             Ts18FirstAudioLatency.mark("service_on_create")
             super.onCreate()
+            android.util.Log.i("TS18Browser", "phase=create service=${javaClass.name}")
             isForeground = false
             startupForegroundActive = false
             playbackFragment = playbackFragmentFactory.create(this, this)
@@ -100,7 +101,7 @@ open class AuxioService :
         val binder = super.onBind(intent)
         android.util.Log.i(
             "TS18Browser",
-            "phase=bind binder=${binder != null} token=${sessionToken != null}",
+            "phase=bind service=${javaClass.name} action=${intent.action} binder=${binder != null} token=${sessionToken != null}",
         )
         onHandleForeground(intent, allowTrustedUserVisible = false)
         return binder
@@ -168,7 +169,10 @@ open class AuxioService :
         clientUid: Int,
         rootHints: Bundle?,
     ): BrowserRoot? {
-        android.util.Log.i("TS18Browser", "phase=root uid=$clientUid token=${sessionToken != null}")
+        android.util.Log.i(
+            "TS18Browser",
+            "phase=root client=$clientPackageName uid=$clientUid token=${sessionToken != null}",
+        )
         if (
             clientUid < 0 ||
                 clientPackageName.isBlank() ||

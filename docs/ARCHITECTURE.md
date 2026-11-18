@@ -14,6 +14,12 @@ Auxio-TS has one playback authority:
 
 Stock-compatible services, receivers, widgets and activities delegate into these authorities. They must not create another player, queue, MediaSession, notification or audio-focus owner.
 
+Passive PREPARE asks the current holder whether its player, queue, restoration or navigation already owns work. A missing UI/session metadata mirror cannot authorise loading an older persisted target. Primitive-to-canonical installation retains primitive identity and suppresses synchronous intermediate player publications until the owning handoff commits. Current source URI remains the identity across that conversion.
+
+Saved queue commits carry the holder's transport generation; the existing Room transaction rolls back a superseded commit. Raw OFF/ALL shuffle uses the existing persisted session and exact canonical ordering, with session/revision checks in the reorder transaction. Pending raw writes fence canonical hydration. Rejected writes return to committed scope, and neither reorder nor hydration may reset the decoding source or position. A process terminated before a transaction commits retains the previous committed state; an in-memory requested scope is not durable acknowledgement.
+
+Cached current-item playback and committed library browsing are separate capabilities. The playback banner remains available while browsing reports that its library is unavailable. TESTING builds retain only the narrowly tagged, bounded numeric transport observations; the production release journal remains a no-op.
+
 ## Authority boundaries
 
 | Authority | Owns | Does not own |

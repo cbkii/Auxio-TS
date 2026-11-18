@@ -59,6 +59,23 @@ class LauncherPreparationTest {
     }
 
     @Test
+    fun validPreparationStartsOnlyTheExistingBackgroundService() {
+        val intent =
+            Intent().putExtra(LauncherPreparation.EXTRA_UNTIL, SystemClock.elapsedRealtime() + 800L)
+        val controller =
+            Robolectric.buildActivity(LauncherPreparationActivity::class.java, intent).create()
+        assertTrue(controller.get().isFinishing)
+        assertNull(shadowOf(controller.get()).nextStartedActivity)
+        val service = shadowOf(controller.get()).nextStartedService
+        org.junit.Assert.assertNotNull(service)
+        org.junit.Assert.assertEquals(
+            org.oxycblt.auxio.IntegerTable.START_ID_BACKGROUND_READY,
+            service.getIntExtra(org.oxycblt.auxio.AuxioService.INTENT_KEY_START_ID, -1),
+        )
+        controller.destroy()
+    }
+
+    @Test
     fun expiredTrampolineFinishesWithoutStartingThePlayer() {
         val intent =
             Intent().putExtra(LauncherPreparation.EXTRA_UNTIL, SystemClock.elapsedRealtime())

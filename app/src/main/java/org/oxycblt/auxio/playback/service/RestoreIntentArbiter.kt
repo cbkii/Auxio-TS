@@ -61,9 +61,14 @@ internal class RestoreIntentArbiter(
             deadlineElapsedMs = null
         }
         if (action.play) {
+            // A bounded Play joins an unbounded Play that is already owed (boot autoplay, a
+            // media key, the app's own button). Its deadline may drop only its own request.
+            val unboundedPlayOwed = !started && play && deadlineElapsedMs == null
             play = true
-            deadlineElapsedMs = action.deadlineElapsedMs
-            if (deadlineElapsedMs != null) fallback = action.fallback
+            if (!unboundedPlayOwed || action.deadlineElapsedMs == null) {
+                deadlineElapsedMs = action.deadlineElapsedMs
+                if (deadlineElapsedMs != null) fallback = action.fallback
+            }
         }
         if (action.skipDelta != 0) {
             skipDelta =
@@ -90,6 +95,13 @@ internal class RestoreIntentArbiter(
     fun updateSeek(positionMs: Long): Boolean {
         if (!active) return false
         seekPositionMs = positionMs.coerceAtLeast(0L)
+        // Seeking is a newer user intent, not permission to upgrade bounded HOME Play to
+        // unlimited autoplay. Keep an independently owed unbounded Play unchanged.
+        if (deadlineElapsedMs != null) {
+            play = false
+            deadlineElapsedMs = null
+            fallback = null
+        }
         version += 1
         return true
     }
@@ -113,7 +125,9 @@ internal class RestoreIntentArbiter(
         // Fallback is executed as its own command. It must carry the latest Pause too,
         // including when Pause supersedes a bounded HOME Play during a slow restore.
         val effectiveFallback =
-            if (expired) null
+            // The fallback has its own direct playback path and does not carry a decoder
+            // deadline. A bounded HOME request must never escape into that unbounded path.
+            if (expired || deadlineElapsedMs != null) null
             else
                 when (val action = fallback) {
                     is DeferredPlayback.ShuffleAll -> action.copy(play = effectivePlay)
