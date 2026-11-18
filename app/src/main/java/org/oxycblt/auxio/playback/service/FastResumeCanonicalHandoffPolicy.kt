@@ -77,7 +77,9 @@ internal object FastResumeCanonicalHandoffPolicy {
         libraryAvailable: Boolean,
         outcome: SourceScanOutcome?,
     ): Boolean =
-        !libraryAvailable || (hydrationFailedForCurrentGeneration && !isAuthoritative(outcome))
+        outcome !is SourceScanOutcome.AuthoritativeEmpty &&
+            (!libraryAvailable ||
+                (hydrationFailedForCurrentGeneration && !isAuthoritative(outcome)))
 
     fun isAuthoritative(
         generation: Long,

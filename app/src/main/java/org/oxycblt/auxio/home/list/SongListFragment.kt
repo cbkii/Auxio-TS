@@ -117,6 +117,7 @@ class SongListFragment :
             homeModel.empty,
             musicModel.indexingState,
             musicModel.startupReadinessState,
+            playbackModel.rawPlaybackMetadata,
             ::updateNoMusicIndicator,
         )
         collectImmediately(listModel.selected, ::updateSelection)
@@ -207,12 +208,14 @@ class SongListFragment :
         empty: Boolean,
         indexingState: IndexingState?,
         startupState: StartupReadinessState,
+        raw: org.oxycblt.auxio.playback.state.RawPlaybackMetadata?,
     ) {
         requireBinding()
             .updateLibraryEmptyState(
                 empty = empty,
                 indexingState = indexingState,
                 startupState = startupState,
+                cachedPlaybackAvailable = raw != null,
                 emptyMessage = R.string.lng_empty_songs,
             )
     }

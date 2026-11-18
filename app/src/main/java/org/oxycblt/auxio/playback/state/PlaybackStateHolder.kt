@@ -33,6 +33,17 @@ import org.oxycblt.musikr.Song
  * @author Alexander Capehart (OxygenCobalt)
  */
 interface PlaybackStateHolder {
+    /** Physical decoder source; canonical metadata hydration must not change this identity. */
+    val currentSourceUri: String?
+        get() = rawPlaybackMetadata?.uriString
+
+    /** Player/queue ownership remains authoritative during an empty publication mirror. */
+    val ownsPlaybackWork: Boolean
+        get() =
+            rawPlaybackMetadata != null ||
+                primitiveQueueWindow != null ||
+                resolveQueue().heap.isNotEmpty()
+
     /** The current [Progression] state of the audio player. */
     val progression: Progression
 
@@ -103,6 +114,9 @@ interface PlaybackStateHolder {
      * @param playing Whether the player should be playing audio.
      */
     fun playing(playing: Boolean)
+
+    /** Optional bounded HOME Play; unsupported holders refuse rather than starting late. */
+    fun playingBefore(deadlineElapsedMs: Long) {}
 
     /**
      * Seek to a position in the current song.
@@ -409,12 +423,12 @@ private constructor(
      */
     fun intoPlaybackState(builder: PlaybackStateCompat.Builder): PlaybackStateCompat.Builder =
         builder.setState(
-            // State represents the user's preference, not the actual player state.
-            // Doing this produces a better experience in the media control UI.
-            if (isPlaying) {
-                PlaybackStateCompat.STATE_PLAYING
-            } else {
-                PlaybackStateCompat.STATE_PAUSED
+            // External controllers use PLAYING to acknowledge transport and commit handover.
+            // Preserve desired playback internally, but never publish buffering as that fact.
+            when {
+                isAdvancing -> PlaybackStateCompat.STATE_PLAYING
+                isPlaying -> PlaybackStateCompat.STATE_BUFFERING
+                else -> PlaybackStateCompat.STATE_PAUSED
             },
             initPositionMs,
             if (isAdvancing) {

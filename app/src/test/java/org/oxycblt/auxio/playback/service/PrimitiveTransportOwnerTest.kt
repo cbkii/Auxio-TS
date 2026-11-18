@@ -34,6 +34,12 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
 import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -61,6 +67,7 @@ class PrimitiveTransportOwnerTest {
     private lateinit var holder: ExoPlaybackStateHolder
     private val items = mutableListOf<MediaItem>()
     private var index = 0
+    private var offMainPlayerReads = 0
     private var position = 2300L
     private var playing = true
     private var prepares = 0
@@ -77,11 +84,26 @@ class PrimitiveTransportOwnerTest {
     private var savedState: PlaybackStateManager.SavedState? = null
     private var rescans = 0
     private var shuffleEnabled = false
+    private var rejectReorder = false
+    private var reorderCalls = 0
+    private var callbackOnTopologyMutation = false
+    private var synchronousCallbacks = 0
+    private var publicationsDuringCommit = 0
+    private val fastSnapshotWrites = java.util.concurrent.atomic.AtomicInteger()
 
     @Before
     fun setUp() {
         val context: Context = RuntimeEnvironment.getApplication()
-        val manager = proxy<PlaybackStateManager>()
+        val manager =
+            proxy<PlaybackStateManager> { method, _ ->
+                if (
+                    method.name == "ack" &&
+                        this::holder.isInitialized &&
+                        ReflectionHelpers.getField<Boolean>(holder, "queueCommitInProgress")
+                )
+                    publicationsDuringCommit += 1
+                defaultValue(method)
+            }
         val settings =
             proxy<PlaybackSettings> { method, _ ->
                 when (method.name) {
@@ -92,6 +114,7 @@ class PrimitiveTransportOwnerTest {
             }
         val player =
             proxy<ExoPlayer> { method, args ->
+                if (Looper.myLooper() != Looper.getMainLooper()) offMainPlayerReads += 1
                 when (method.name) {
                     "getPlayWhenReady",
                     "isPlaying" -> playing
@@ -110,6 +133,26 @@ class PrimitiveTransportOwnerTest {
                     "getCurrentPosition" -> position
                     "getCurrentMediaItemIndex" -> index
                     "getCurrentMediaItem" -> items.getOrNull(index)
+                    "hasNextMediaItem" -> index + 1 < items.size
+                    "hasPreviousMediaItem" -> index > 0
+                    "seekToNext" -> {
+                        index += 1
+                        position = 0L
+                        holder.onMediaItemTransition(
+                            items[index],
+                            Player.MEDIA_ITEM_TRANSITION_REASON_SEEK,
+                        )
+                        null
+                    }
+                    "seekToPreviousMediaItem" -> {
+                        index -= 1
+                        position = 0L
+                        holder.onMediaItemTransition(
+                            items[index],
+                            Player.MEDIA_ITEM_TRANSITION_REASON_SEEK,
+                        )
+                        null
+                    }
                     "getMediaItemCount" -> items.size
                     "getMediaItemAt" -> items[args!![0] as Int]
                     "getRepeatMode" -> Player.REPEAT_MODE_OFF
@@ -139,6 +182,13 @@ class PrimitiveTransportOwnerTest {
                         val last = args[1] as Int
                         items.subList(first, last).clear()
                         if (index >= last) index -= last - first
+                        if (callbackOnTopologyMutation) {
+                            synchronousCallbacks += 1
+                            holder.onMediaItemTransition(
+                                items.getOrNull(index),
+                                Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED,
+                            )
+                        }
                         null
                     }
                     "addMediaItems" -> {
@@ -146,6 +196,13 @@ class PrimitiveTransportOwnerTest {
                         val added = (args.last() as List<*>).filterIsInstance<MediaItem>()
                         items.addAll(at, added)
                         if (at <= index) index += added.size
+                        if (callbackOnTopologyMutation) {
+                            synchronousCallbacks += 1
+                            holder.onMediaItemTransition(
+                                items.getOrNull(index),
+                                Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED,
+                            )
+                        }
                         null
                     }
                     "replaceMediaItem" -> {
@@ -163,12 +220,18 @@ class PrimitiveTransportOwnerTest {
         val persistence =
             proxy<PersistenceRepository> { method, args ->
                 when (method.name) {
+                    "saveFastResumeSnapshot" -> {
+                        fastSnapshotWrites.incrementAndGet()
+                        true
+                    }
                     "updateQueuePosition" -> true
                     "readAllQueueItems" -> {
                         allQueueReads += 1
                         rows
                     }
                     "reorderQueue" -> {
+                        reorderCalls += 1
+                        if (rejectReorder) return@proxy null
                         val order = (args!![1] as List<*>).filterIsInstance<Int>()
                         val currentCanonical =
                             rows[descriptor.currentLogicalPosition].canonicalPosition
@@ -233,6 +296,68 @@ class PrimitiveTransportOwnerTest {
     @After
     fun tearDown() {
         holder.release()
+    }
+
+    @Test
+    fun queuedFastSnapshotClearCannotOverwriteANewerTransportGeneration() = runBlocking {
+        val mutex = ReflectionHelpers.getField<Mutex>(holder, "fastResumeSaveMutex")
+        val generation =
+            ReflectionHelpers.getField<java.util.concurrent.atomic.AtomicLong>(
+                holder,
+                "persistenceGeneration",
+            )
+        val commit =
+            ExoPlaybackStateHolder::class
+                .java
+                .declaredMethods
+                .single { it.name == "commitFastResumeSnapshot" }
+                .apply { isAccessible = true }
+        suspend fun clear(at: Long) =
+            suspendCoroutine<Unit> { continuation ->
+                val result = commit.invoke(holder, null, at, continuation)
+                if (result !== COROUTINE_SUSPENDED) continuation.resume(Unit)
+            }
+        mutex.lock()
+        val oldGeneration = generation.get()
+        val entered = CountDownLatch(1)
+        val stale =
+            async(Dispatchers.IO) {
+                entered.countDown()
+                clear(oldGeneration)
+            }
+        assertTrue(entered.await(1, TimeUnit.SECONDS))
+        generation.incrementAndGet()
+        mutex.unlock()
+        withTimeout(5000) { stale.await() }
+        assertEquals(0, fastSnapshotWrites.get())
+        clear(generation.get())
+        assertEquals(1, fastSnapshotWrites.get())
+    }
+
+    @Test
+    fun newerTransportGenerationCannotStrandTheSessionEndCallback() {
+        val generation =
+            ReflectionHelpers.getField<java.util.concurrent.atomic.AtomicLong>(
+                holder,
+                "persistenceGeneration",
+            )
+        val save =
+            ExoPlaybackStateHolder::class
+                .java
+                .declaredMethods
+                .single { it.name == "save" }
+                .apply { isAccessible = true }
+        var ended = 0
+        val callback: () -> Unit = { ended += 1 }
+        save.invoke(holder, callback)
+        // Main is paused, so this newer command always precedes the callback check.
+        generation.incrementAndGet()
+        val deadline = System.currentTimeMillis() + 5000L
+        while (ended == 0 && System.currentTimeMillis() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(10L)
+        }
+        assertEquals(1, ended)
     }
 
     @Test
@@ -396,6 +521,7 @@ class PrimitiveTransportOwnerTest {
         drainUntil { holder.primitiveQueueWindow == null }
 
         assertSame(current, items[index])
+        assertEquals(current.localConfiguration?.uri?.toString(), holder.currentSourceUri)
         assertEquals(3, items.size)
         assertSame(playlist, holder.parent)
         assertEquals(2300L, position)
@@ -484,6 +610,162 @@ class PrimitiveTransportOwnerTest {
         assertEquals(ShuffleScope.OFF, holder.shuffleScopeHint)
         assertTrue(playing)
         assertEquals(0, prepares)
+    }
+
+    @Test
+    fun passivePrepareJoinsPlayerEvenWhenMetadataMirrorsAreEmpty() {
+        ReflectionHelpers.setField(holder, "activePrimitiveWindow", null)
+        assertNull(holder.rawPlaybackMetadata)
+        assertTrue(holder.ownsPlaybackWork)
+        assertTrue(
+            holder.handleDeferred(DeferredPlayback.RestoreState(play = false, fallback = null))
+        )
+        assertNull(ReflectionHelpers.getField<Any?>(holder, "currentRestoreJob"))
+        assertEquals(0, prepares)
+    }
+
+    @Test
+    fun rawShuffleCommitsOrderAndScopeWithoutChangingTheDecoder() {
+        rawFastResumePublishesThePersistedAndRequestedShuffleScope()
+        drainUntil { ReflectionHelpers.getField<Int>(holder, "pendingRawMutations") == 0 }
+        val current = items[index]
+        holder.shuffled(true)
+        holder.shuffled(false)
+        holder.seekTo(4700L)
+        holder.playing(false)
+        drainUntil { ReflectionHelpers.getField<Int>(holder, "pendingRawMutations") == 0 }
+        assertEquals(ShuffleScope.OFF, descriptor.shuffleScope)
+        assertEquals(listOf(0, 1, 2), rows.map { it.canonicalPosition })
+        assertEquals(ShuffleScope.OFF, holder.shuffleScopeHint)
+        assertSame(current, items[index])
+        assertEquals(4700L, position)
+        assertFalse(playing)
+        assertEquals(0, prepares)
+        assertTrue(reorderCalls > 0)
+    }
+
+    @Test
+    fun rejectedRawReorderDoesNotPublishUncommittedScope() {
+        rawFastResumePublishesThePersistedAndRequestedShuffleScope()
+        drainUntil { ReflectionHelpers.getField<Int>(holder, "pendingRawMutations") == 0 }
+        rejectReorder = true
+        holder.shuffled(true)
+        drainUntil { ReflectionHelpers.getField<Int>(holder, "pendingRawMutations") == 0 }
+        assertEquals(ShuffleScope.OFF, descriptor.shuffleScope)
+        assertEquals(ShuffleScope.OFF, holder.shuffleScopeHint)
+        assertTrue(playing)
+        assertEquals(0, prepares)
+    }
+
+    @Test
+    fun canonicalPromotionDoesNotPublishSynchronousIntermediatePlayerCallbacks() {
+        callbackOnTopologyMutation = true
+        cachedLibraryWithoutSourceScanHandsOffAndKeepsTheSavedPlaylistContext()
+        assertTrue(synchronousCallbacks >= 2)
+        assertEquals(0, publicationsDuringCommit)
+    }
+
+    @Test
+    fun missingSnapshotDiagnosticsNeverReadPlayerOnTheRestoreWorker() {
+        ReflectionHelpers.setField(holder, "activePrimitiveWindow", null)
+        items.clear()
+        playing = false
+        holder.handleDeferred(DeferredPlayback.RestoreState(play = false))
+        drainUntil { ReflectionHelpers.getField<Any?>(holder, "currentRestoreJob") == null }
+        assertEquals(0, offMainPlayerReads)
+        assertEquals(0, prepares)
+    }
+
+    @Test
+    fun retainedDecoderSlotSurvivesThirtyTransitionsAndReturnToOriginal() {
+        cachedLibraryWithoutSourceScanHandsOffAndKeepsTheSavedPlaylistContext()
+        val retained = items[0]
+        repeat(30) { turn ->
+            index = (turn + 1) % items.size
+            holder.onMediaItemTransition(items[index], Player.MEDIA_ITEM_TRANSITION_REASON_SEEK)
+            val queue = holder.resolveQueue()
+            assertEquals(
+                "All slots must resolve after leaving the retained decoder",
+                3,
+                queue.heap.size,
+            )
+            assertEquals(index, queue.heapIndex)
+            assertEquals(songAt(index).uid, queue.heap[index].uid)
+        }
+        index = 0
+        holder.onMediaItemTransition(items[index], Player.MEDIA_ITEM_TRANSITION_REASON_SEEK)
+        assertSame(retained, items[index])
+        assertEquals(songAt(0).uid, holder.resolveQueue().heap[0].uid)
+        assertEquals(0, prepares)
+    }
+
+    @Test
+    fun canonicalDecoderIdentityDoesNotDependOnBrowseLibraryAvailability() {
+        cachedLibraryWithoutSourceScanHandsOffAndKeepsTheSavedPlaylistContext()
+        library = null
+        index = 1
+        holder.onMediaItemTransition(items[index], Player.MEDIA_ITEM_TRANSITION_REASON_SEEK)
+        assertEquals(3, holder.resolveQueue().heap.size)
+        assertEquals(songAt(1).uid, holder.resolveQueue().heap[index].uid)
+        assertEquals(0, prepares)
+    }
+
+    @Test
+    fun capturedSizeQueueKeepsIdentityThroughThirtyNextCommandsAfterCachedHandoff() {
+        // Match the captured 1,069-item membership, without manufactured publication gaps.
+        rows = (0 until 1069).map(::item)
+        descriptor = descriptor.copy(totalCount = rows.size)
+        installWindow(QueueWindow(descriptor, 0, rows))
+        val songs = rows.indices.map(::songAt)
+        library = libraryOf(songs)
+        val retainedDecoder = items[0]
+        holder.onMusicChanges(MusicRepository.Changes(true, false, 1, 0, null))
+        drainUntil { holder.primitiveQueueWindow == null }
+        assertSame(retainedDecoder, items[0])
+        for (expected in 1..30) {
+            holder.next()
+            val queue = holder.resolveQueue()
+            assertEquals(1069, queue.heap.size)
+            assertEquals(expected, queue.heapIndex)
+            assertEquals(songs[expected].uid, queue.heap[queue.heapIndex].uid)
+            assertEquals(songs[expected].uri.toString(), holder.currentSourceUri)
+        }
+        // Previous must also resolve the original untagged decoder slot correctly.
+        repeat(30) { holder.prev() }
+        assertEquals(0, holder.resolveQueue().heapIndex)
+        assertEquals(songs[0].uid, holder.resolveQueue().heap[0].uid)
+        assertSame(retainedDecoder, items[0])
+        assertTrue(playing)
+        assertEquals(0, prepares)
+        assertEquals(0, rescans)
+    }
+
+    @Test
+    fun backgroundRestoreRecoversLegacyQueueWithoutPrimitiveDescriptorOrSnapshot() {
+        val songs = (0..2).map(::songAt)
+        library = libraryOf(songs)
+        savedState =
+            PlaybackStateManager.SavedState(
+                2300L,
+                RepeatMode.NONE,
+                null,
+                songs,
+                emptyList(),
+                1,
+                songs[1].uid,
+                ShuffleScope.OFF,
+            )
+        ReflectionHelpers.setField(holder, "activePrimitiveWindow", null)
+        items.clear()
+        playing = false
+        assertTrue(holder.handleDeferred(DeferredPlayback.RestoreState(play = false)))
+        drainUntil { items.size == 3 }
+        assertEquals(1, index)
+        assertEquals(2300L, position)
+        assertFalse(playing)
+        assertEquals(1, prepares)
+        assertEquals(songAt(1).uid, holder.resolveQueue().heap[index].uid)
+        assertEquals(0, rescans)
     }
 
     private fun songAt(at: Int): org.oxycblt.musikr.Song {

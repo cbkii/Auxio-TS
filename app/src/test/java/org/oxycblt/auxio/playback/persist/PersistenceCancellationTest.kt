@@ -89,6 +89,96 @@ class PersistenceCancellationTest {
         )
 
     @Test
+    fun `a superseded save rolls back its database writes`() = runBlocking {
+        val dao = database.queueDao()
+        dao.insertQueueSession(
+            QueueSessionEntity(1L, 0, 0L, RepeatMode.NONE, ShuffleScope.OFF, 3, 1L, 0L)
+        )
+        val repository = repository(dao)
+        var current = true
+        val committed =
+            repository.commitIfCurrent({ current }) {
+                repository.updateQueuePosition(descriptor(), 2, 1900L, RepeatMode.NONE)
+                current = false
+            }
+        assertEquals(false, committed)
+        assertEquals(0, requireNotNull(dao.getQueueSession()).currentLogicalPosition)
+        assertEquals(0L, requireNotNull(dao.getQueueSession()).positionMs)
+    }
+
+    @Test
+    fun `reorder rejects a replaced session or revision before touching rows`() = runBlocking {
+        val dao = database.queueDao()
+        dao.insertQueueSession(
+            QueueSessionEntity(1L, 0, 6300L, RepeatMode.NONE, ShuffleScope.OFF, 3, 9L, 99L)
+        )
+        val repository = repository(dao)
+        assertNull(
+            repository.reorderQueue(
+                descriptor().copy(sessionId = 2L),
+                listOf(2, 1, 0),
+                ShuffleScope.ALL,
+            )
+        )
+        assertNull(repository.reorderQueue(descriptor(), listOf(2, 1, 0), ShuffleScope.ALL))
+        val session = requireNotNull(dao.getQueueSession())
+        assertEquals(ShuffleScope.OFF, session.shuffleScope)
+        assertEquals(6300L, session.positionMs)
+        assertEquals(9L, session.revision)
+    }
+
+    @Test
+    fun `committed raw order and scope reload together without changing current source or position`() =
+        runBlocking {
+            val dao = database.queueDao()
+            dao.insertQueueSession(
+                QueueSessionEntity(1L, 1, 6300L, RepeatMode.NONE, ShuffleScope.OFF, 3, 1L, 0L)
+            )
+            dao.insertQueueItemRefs(
+                (0..2).map { index ->
+                    QueueItemRefEntity(
+                        1L,
+                        index,
+                        index,
+                        null,
+                        "file:///pair/$index.wav",
+                        null,
+                        null,
+                        null,
+                        null,
+                        10000L,
+                    )
+                }
+            )
+            val firstOwner = repository(dao)
+            val initial = requireNotNull(firstOwner.readQueueDescriptor())
+            val shuffled =
+                requireNotNull(firstOwner.reorderQueue(initial, listOf(2, 0, 1), ShuffleScope.ALL))
+            // A fresh repository reader must restore the committed pair, with no in-memory hint.
+            val restartedOwner = repository(dao)
+            val restored = requireNotNull(restartedOwner.readQueueDescriptor())
+            assertEquals(ShuffleScope.ALL, restored.shuffleScope)
+            assertEquals(
+                listOf(2, 0, 1),
+                restartedOwner.readAllQueueItems(restored).map { it.canonicalPosition },
+            )
+            assertEquals(
+                1,
+                restartedOwner
+                    .readAllQueueItems(restored)[restored.currentLogicalPosition]
+                    .canonicalPosition,
+            )
+            assertEquals(6300L, restored.positionMs)
+            val unshuffled =
+                requireNotNull(
+                    restartedOwner.reorderQueue(shuffled, listOf(0, 1, 2), ShuffleScope.OFF)
+                )
+            assertNull(firstOwner.reorderQueue(initial, listOf(1, 2, 0), ShuffleScope.ALL))
+            assertEquals(ShuffleScope.OFF, restartedOwner.readQueueDescriptor()?.shuffleScope)
+            assertEquals(unshuffled.revision, restartedOwner.readQueueDescriptor()?.revision)
+        }
+
+    @Test
     fun `readQueueDescriptor rethrows cancellation`() {
         val repository = repository(ThrowingQueueDao { CancellationException("cancelled") })
         assertFailsWith<CancellationException> { runBlocking { repository.readQueueDescriptor() } }

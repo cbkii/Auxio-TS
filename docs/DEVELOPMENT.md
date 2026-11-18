@@ -52,6 +52,8 @@ bash scripts/ci-gradle.sh \
   :musikr:connectedDebugAndroidTest
 ```
 
+For the launcher/Auxio transition regression, build the actual debug app and Android test APK from the same selected source with `GITHUB_SHA` set to that source SHA. On a fresh, explicitly selected API29 emulator, the launcher's `scripts/ci/api29-actual-pair-smoke.sh` runs the opt-in `CrossUidTransitionSeedTest` and passes the real Auxio service/decoder/restore/Next callbacks to the real launcher engine. The seed refuses physical hardware, release peers, mismatched source identity and existing persisted queues. Ordinary connected tests skip that opt-in seed. Four observed source changes, no passive reprepare and the raw callback gap count are recorded separately from audible and TS18 qualification.
+
 Roborazzi tasks target the single debug app, for example `:app:recordRoborazziDebug`. Startup validation targets the single app through `:startup-benchmark:assembleBenchmarkBenchmark` and the managed-device tasks resolved by the Startup Benchmarks workflow.
 
 ## Repository contracts

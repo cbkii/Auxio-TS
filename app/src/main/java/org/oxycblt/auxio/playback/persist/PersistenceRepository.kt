@@ -56,6 +56,13 @@ data class FastResumeSnapshot(
  * @author Alexander Capehart (OxygenCobalt)
  */
 interface PersistenceRepository {
+    /** Commit only while the source-owned transport generation still owns the saved state. */
+    suspend fun commitIfCurrent(isCurrent: () -> Boolean, commit: suspend () -> Unit): Boolean {
+        if (!isCurrent()) return false
+        commit()
+        return isCurrent()
+    }
+
     /** Read primitive queue session metadata without requiring a loaded Musikr library. */
     suspend fun readQueueDescriptor(): QueueDescriptor?
 
@@ -140,6 +147,24 @@ constructor(
     private val queueDao: QueueDao,
     private val musicRepository: MusicRepository,
 ) : PersistenceRepository {
+    private class SupersededCommit : RuntimeException()
+
+    override suspend fun commitIfCurrent(
+        isCurrent: () -> Boolean,
+        commit: suspend () -> Unit,
+    ): Boolean =
+        try {
+            database.withTransaction {
+                if (!isCurrent()) return@withTransaction false
+                commit()
+                if (!isCurrent()) throw SupersededCommit()
+                true
+            }
+        } catch (stale: SupersededCommit) {
+            committedCanonicalQueue = null
+            false
+        }
+
     private val fastResumePrefs by lazy {
         context.getSharedPreferences(FAST_RESUME_PREFS, Context.MODE_PRIVATE)
     }
@@ -424,6 +449,10 @@ constructor(
         shuffleScope: ShuffleScope,
     ): QueueDescriptor? =
         mutateDescriptor("reorder primitive queue") { session ->
+            // The caller's queue lineage is a lease, not permission to reorder a replacement.
+            if (session.id != descriptor.sessionId || session.revision != descriptor.revision) {
+                return@mutateDescriptor null
+            }
             val rows = queueDao.getAllQueueItems(session.id)
             if (
                 rows.size != session.totalCount ||

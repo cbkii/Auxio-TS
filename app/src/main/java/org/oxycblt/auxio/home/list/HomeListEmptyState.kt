@@ -32,13 +32,14 @@ fun FragmentHomeListBinding.updateLibraryEmptyState(
     startupState: StartupReadinessState,
     @StringRes emptyMessage: Int,
     actionVisibleWhenNotEmpty: Boolean = false,
+    cachedPlaybackAvailable: Boolean = false,
 ) {
     val cachedStartupPending =
         empty && startupState.rank < StartupReadinessState.FastBrowseReady.rank
     val indexingPending = empty && indexingState is IndexingState.Indexing
     // Indexing has one authoritative live status surface in HomeFragment. Keeping a second,
     // anonymous spinner here made a cancelled/stalled scan look like two unrelated operations.
-    val showProgress = cachedStartupPending
+    val showProgress = cachedStartupPending && !cachedPlaybackAvailable
     val showEmptyPanel = empty || showProgress || actionVisibleWhenNotEmpty
     val canShowSourceAction =
         !showProgress && (indexingState == null || indexingState is IndexingState.Completed)
@@ -49,12 +50,14 @@ fun FragmentHomeListBinding.updateLibraryEmptyState(
     homeNoMusicPlaceholder.isVisible = showEmptyPanel && !showProgress
     homeNoMusicMsg.setText(
         when {
+            empty && cachedPlaybackAvailable -> R.string.lng_cached_playback_library_unavailable
             cachedStartupPending -> R.string.lng_loading_cached_music_library
             indexingPending -> R.string.lng_loading_music_library
             else -> emptyMessage
         }
     )
     homeNoMusicAction.isVisible =
-        if (actionVisibleWhenNotEmpty) true else empty && canShowSourceAction
+        if (actionVisibleWhenNotEmpty) true
+        else empty && canShowSourceAction && !cachedPlaybackAvailable
     homeNoMusicAction.isEnabled = homeNoMusicAction.isVisible
 }
