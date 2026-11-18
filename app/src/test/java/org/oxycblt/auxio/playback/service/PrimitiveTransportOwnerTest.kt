@@ -83,6 +83,7 @@ class PrimitiveTransportOwnerTest {
     private var library: Library? = null
     private var sourceOutcome: SourceScanOutcome? = null
     private var savedState: PlaybackStateManager.SavedState? = null
+    private val legacyStateReads = java.util.concurrent.atomic.AtomicInteger()
     private var rescans = 0
     private var shuffleEnabled = false
     private var rejectReorder = false
@@ -260,7 +261,10 @@ class PrimitiveTransportOwnerTest {
                         } else QueueWindow(args!![0] as QueueDescriptor, 0, rows)
                     }
                     "readQueueWindow" -> QueueWindow(args!![0] as QueueDescriptor, 0, rows)
-                    "readState" -> savedState
+                    "readState" -> {
+                        legacyStateReads.incrementAndGet()
+                        savedState
+                    }
                     else -> defaultValue(method)
                 }
             }
@@ -841,8 +845,12 @@ class PrimitiveTransportOwnerTest {
         playing = false
 
         assertTrue(holder.handleDeferred(DeferredPlayback.RestoreState(play = false)))
-        drainUntil { ReflectionHelpers.getField<Any?>(holder, "currentRestoreJob") == null }
+        drainUntil {
+            legacyStateReads.get() > 0 &&
+                ReflectionHelpers.getField<Any?>(holder, "currentRestoreJob") == null
+        }
 
+        assertEquals(1, legacyStateReads.get())
         assertTrue(items.isEmpty())
         assertFalse(playing)
         assertSame(songs[0], savedState!!.heap[0])

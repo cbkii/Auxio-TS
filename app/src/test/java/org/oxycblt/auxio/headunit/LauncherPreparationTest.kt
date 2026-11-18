@@ -38,7 +38,7 @@ class LauncherPreparationTest {
             Intent()
                 .putExtra(
                     LauncherPreparationActivity.EXTRA_UNTIL,
-                    SystemClock.elapsedRealtime() + 800L,
+                    SystemClock.elapsedRealtime() + 60_000L,
                 )
         val controller =
             Robolectric.buildActivity(LauncherPreparationActivity::class.java, intent).create()
